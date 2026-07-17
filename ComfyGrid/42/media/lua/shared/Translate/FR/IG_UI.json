@@ -1,0 +1,23 @@
+{
+    "IGUI_ComfyGrid_OptScale": "Échelle de l'interface",
+    "IGUI_ComfyGrid_OptScaleTip": "Multiplicateur de taille de l'interface en grille.",
+    "IGUI_ComfyGrid_OptSlotsPerCapacity": "Cases par capacité",
+    "IGUI_ComfyGrid_OptSlotsPerCapacityTip": "Cases de la grille accordées par point de capacité du conteneur.",
+    "IGUI_ComfyGrid_OptInstantTransfer": "Transferts instantanés",
+    "IGUI_ComfyGrid_OptInstantTransferTip": "Déplacer les objets instantanément, sans temps de transfert.",
+    "IGUI_ComfyGrid_IncompatibleTetris": "Comfy Grid : Inventory Tetris est activé. Les deux mods remplacent l'interface d'inventaire et ne peuvent pas fonctionner ensemble : désactivez-en un.",
+    "IGUI_ComfyGrid_SlotPrimary": "Main",
+    "IGUI_ComfyGrid_SlotSecondary": "Sec.",
+    "IGUI_ComfyGrid_SlotHead": "Tête",
+    "IGUI_ComfyGrid_SlotFace": "Visage",
+    "IGUI_ComfyGrid_SlotNeck": "Cou",
+    "IGUI_ComfyGrid_SlotTorso": "Torse",
+    "IGUI_ComfyGrid_SlotHands": "Gants",
+    "IGUI_ComfyGrid_SlotLegs": "Jambes",
+    "IGUI_ComfyGrid_SlotFeet": "Pieds",
+    "IGUI_ComfyGrid_SlotBack": "Dos",
+    "IGUI_ComfyGrid_SectionEquipment": "Équipement",
+    "IGUI_ComfyGrid_SectionInventory": "Inventaire",
+    "IGUI_ComfyGrid_SectionHotbar": "Barre rapide",
+    "IGUI_ComfyGrid_SectionPockets": "Poches"
+}

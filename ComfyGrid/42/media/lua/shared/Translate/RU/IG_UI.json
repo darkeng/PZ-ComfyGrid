@@ -1,0 +1,23 @@
+{
+    "IGUI_ComfyGrid_OptScale": "Масштаб интерфейса",
+    "IGUI_ComfyGrid_OptScaleTip": "Множитель размера интерфейса сетки.",
+    "IGUI_ComfyGrid_OptSlotsPerCapacity": "Ячеек на вместимость",
+    "IGUI_ComfyGrid_OptSlotsPerCapacityTip": "Ячеек сетки за каждую единицу вместимости контейнера.",
+    "IGUI_ComfyGrid_OptInstantTransfer": "Мгновенная передача",
+    "IGUI_ComfyGrid_OptInstantTransferTip": "Перемещать предметы мгновенно, без времени передачи.",
+    "IGUI_ComfyGrid_IncompatibleTetris": "Comfy Grid: включён Inventory Tetris. Оба мода заменяют интерфейс инвентаря и не могут работать вместе — отключите один из них.",
+    "IGUI_ComfyGrid_SlotPrimary": "Рука",
+    "IGUI_ComfyGrid_SlotSecondary": "2-я",
+    "IGUI_ComfyGrid_SlotHead": "Голова",
+    "IGUI_ComfyGrid_SlotFace": "Лицо",
+    "IGUI_ComfyGrid_SlotNeck": "Шея",
+    "IGUI_ComfyGrid_SlotTorso": "Торс",
+    "IGUI_ComfyGrid_SlotHands": "Перчатки",
+    "IGUI_ComfyGrid_SlotLegs": "Ноги",
+    "IGUI_ComfyGrid_SlotFeet": "Ступни",
+    "IGUI_ComfyGrid_SlotBack": "Спина",
+    "IGUI_ComfyGrid_SectionEquipment": "Экипировка",
+    "IGUI_ComfyGrid_SectionInventory": "Инвентарь",
+    "IGUI_ComfyGrid_SectionHotbar": "Хотбар",
+    "IGUI_ComfyGrid_SectionPockets": "Карманы"
+}

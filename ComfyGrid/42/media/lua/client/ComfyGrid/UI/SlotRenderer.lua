@@ -1,0 +1,95 @@
+--[[
+    Comfy Grid - Tile Inventory [B42]
+    Author:  Darkeng
+    Version: 1.0.0
+    GitHub:  https://github.com/darkeng
+    Steam:   https://steamcommunity.com/id/_darkeng_
+]]
+
+require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/UI/Style"
+ComfyGrid = ComfyGrid or {}
+ComfyGrid.UI = ComfyGrid.UI or {}
+local SlotRenderer = {}
+ComfyGrid.UI.SlotRenderer = SlotRenderer
+
+local Style = ComfyGrid.UI.Style
+
+local FALLBACK_CELL = { r = 0.16, g = 0.16, b = 0.16, a = 0.85 }
+local FALLBACK_HOVER = { r = 1, g = 1, b = 1, a = 0.25 }
+
+local DEFAULT_FILL_ALPHA = 0.725
+
+function SlotRenderer.drawCell(ctx, tint)
+    local cell = Style.CELL
+    local colors = Style.COLORS
+    local c = tint or (colors and colors.EMPTY_CELL) or FALLBACK_CELL
+    ctx.view:drawRect(ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
+        c.a or DEFAULT_FILL_ALPHA, c.r, c.g, c.b)
+end
+
+function SlotRenderer.drawHover(ctx)
+    local cell = Style.CELL
+    local colors = Style.COLORS
+    local c = (colors and colors.HOVER) or FALLBACK_HOVER
+    ctx.view:drawRect(ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
+        c.a or FALLBACK_HOVER.a, c.r, c.g, c.b)
+end
+
+local SOCKET_FILL = { r = 0.115, g = 0.11, b = 0.135, a = 1.0 }
+local SOCKET_EDGE = { r = 0.44, g = 0.39, b = 0.29, a = 0.8 }
+
+function SlotRenderer.drawSocket(ctx)
+    local cell = Style.CELL
+    local view = ctx.view
+    local x = ctx.x
+    local y = ctx.y
+    local f = SOCKET_FILL
+    view:drawRect(x + 1, y + 1, cell - 2, cell - 2, f.a, f.r, f.g, f.b)
+    local e = SOCKET_EDGE
+    local L = math.floor(cell * 0.16)
+    if L < 4 then L = 4 end
+    local t = math.floor(Style.SCALE + 0.5)
+    if t < 1 then t = 1 end
+    local x0 = x + 3
+    local y0 = y + 3
+    local x1 = x + cell - 3
+    local y1 = y + cell - 3
+    view:drawRect(x0, y0, L, t, e.a, e.r, e.g, e.b)
+    view:drawRect(x0, y0, t, L, e.a, e.r, e.g, e.b)
+    view:drawRect(x1 - L, y0, L, t, e.a, e.r, e.g, e.b)
+    view:drawRect(x1 - t, y0, t, L, e.a, e.r, e.g, e.b)
+    view:drawRect(x0, y1 - t, L, t, e.a, e.r, e.g, e.b)
+    view:drawRect(x0, y1 - L, t, L, e.a, e.r, e.g, e.b)
+    view:drawRect(x1 - L, y1 - t, L, t, e.a, e.r, e.g, e.b)
+    view:drawRect(x1 - t, y1 - L, t, L, e.a, e.r, e.g, e.b)
+end
+
+local GHOST_ALPHA = 0.30
+local GHOST_R, GHOST_G, GHOST_B = 0.72, 0.72, 0.78
+
+function SlotRenderer.drawGhost(view, tex, x, y)
+    local cell = Style.CELL
+    local texW = tex:getWidth()
+    local texH = tex:getHeight()
+    if not texW or not texH or texW <= 0 or texH <= 0 then return end
+    local largest = texW > texH and texW or texH
+    local sc = (cell * 0.62) / largest
+    local dw = texW * sc
+    local dh = texH * sc
+    view:drawTextureScaled(tex, x + (cell - dw) * 0.5, y + (cell - dh) * 0.5,
+        dw, dh, GHOST_ALPHA, GHOST_R, GHOST_G, GHOST_B)
+end
+
+function SlotRenderer.drawNameChip(view, info, x, y, font)
+    if info == nil or font == nil then return end
+    local cell = Style.CELL
+    local chipW = (info.width or 0) + 10
+    local chipH = 16
+    local cx = x + math.floor((cell - chipW) * 0.5)
+    local cy = y + math.floor((cell - chipH) * 0.5)
+    view:drawRect(cx, cy, chipW, chipH, 0.88, 0.05, 0.05, 0.06)
+    view:drawRectBorder(cx, cy, chipW, chipH, 0.6, 0.44, 0.39, 0.29)
+    view:drawTextCentre(info.label, x + cell * 0.5, cy + 1,
+        0.92, 0.92, 0.95, 1, font)
+end

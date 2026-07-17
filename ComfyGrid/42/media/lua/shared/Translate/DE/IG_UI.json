@@ -1,0 +1,23 @@
+{
+    "IGUI_ComfyGrid_OptScale": "Oberflächenskalierung",
+    "IGUI_ComfyGrid_OptScaleTip": "Größenfaktor für die Raster-Oberfläche.",
+    "IGUI_ComfyGrid_OptSlotsPerCapacity": "Felder pro Kapazität",
+    "IGUI_ComfyGrid_OptSlotsPerCapacityTip": "Rasterfelder pro Punkt Behälterkapazität.",
+    "IGUI_ComfyGrid_OptInstantTransfer": "Sofortige Transfers",
+    "IGUI_ComfyGrid_OptInstantTransferTip": "Gegenstände sofort bewegen, ohne Transferzeit.",
+    "IGUI_ComfyGrid_IncompatibleTetris": "Comfy Grid: Inventory Tetris ist aktiv. Beide Mods ersetzen die Inventar-Oberfläche und können nicht zusammen laufen – deaktiviere eines davon.",
+    "IGUI_ComfyGrid_SlotPrimary": "Hand",
+    "IGUI_ComfyGrid_SlotSecondary": "Nebenhand",
+    "IGUI_ComfyGrid_SlotHead": "Kopf",
+    "IGUI_ComfyGrid_SlotFace": "Gesicht",
+    "IGUI_ComfyGrid_SlotNeck": "Hals",
+    "IGUI_ComfyGrid_SlotTorso": "Torso",
+    "IGUI_ComfyGrid_SlotHands": "Handschuh",
+    "IGUI_ComfyGrid_SlotLegs": "Beine",
+    "IGUI_ComfyGrid_SlotFeet": "Füße",
+    "IGUI_ComfyGrid_SlotBack": "Rücken",
+    "IGUI_ComfyGrid_SectionEquipment": "Ausrüstung",
+    "IGUI_ComfyGrid_SectionInventory": "Inventar",
+    "IGUI_ComfyGrid_SectionHotbar": "Schnellzugriff",
+    "IGUI_ComfyGrid_SectionPockets": "Taschen"
+}

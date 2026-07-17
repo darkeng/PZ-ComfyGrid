@@ -1,0 +1,23 @@
+{
+    "IGUI_ComfyGrid_OptScale": "Interface scale",
+    "IGUI_ComfyGrid_OptScaleTip": "Size multiplier for the grid UI.",
+    "IGUI_ComfyGrid_OptSlotsPerCapacity": "Slots per capacity",
+    "IGUI_ComfyGrid_OptSlotsPerCapacityTip": "Grid slots granted per point of container capacity.",
+    "IGUI_ComfyGrid_OptInstantTransfer": "Instant transfers",
+    "IGUI_ComfyGrid_OptInstantTransferTip": "Move items instantly instead of taking transfer time.",
+    "IGUI_ComfyGrid_IncompatibleTetris": "Comfy Grid: Inventory Tetris is enabled. Both mods replace the inventory UI and cannot run together - disable one of them.",
+    "IGUI_ComfyGrid_SlotPrimary": "Hand",
+    "IGUI_ComfyGrid_SlotSecondary": "Off",
+    "IGUI_ComfyGrid_SlotHead": "Head",
+    "IGUI_ComfyGrid_SlotFace": "Face",
+    "IGUI_ComfyGrid_SlotNeck": "Neck",
+    "IGUI_ComfyGrid_SlotTorso": "Torso",
+    "IGUI_ComfyGrid_SlotHands": "Glove",
+    "IGUI_ComfyGrid_SlotLegs": "Legs",
+    "IGUI_ComfyGrid_SlotFeet": "Feet",
+    "IGUI_ComfyGrid_SlotBack": "Back",
+    "IGUI_ComfyGrid_SectionEquipment": "Equipment",
+    "IGUI_ComfyGrid_SectionInventory": "Inventory",
+    "IGUI_ComfyGrid_SectionHotbar": "Hotbar",
+    "IGUI_ComfyGrid_SectionPockets": "Pockets"
+}

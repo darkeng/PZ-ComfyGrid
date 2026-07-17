@@ -1,0 +1,23 @@
+{
+    "IGUI_ComfyGrid_OptScale": "Escala da interface",
+    "IGUI_ComfyGrid_OptScaleTip": "Multiplicador de tamanho da interface em grade.",
+    "IGUI_ComfyGrid_OptSlotsPerCapacity": "Espaços por capacidade",
+    "IGUI_ComfyGrid_OptSlotsPerCapacityTip": "Espaços da grade concedidos por ponto de capacidade do contêiner.",
+    "IGUI_ComfyGrid_OptInstantTransfer": "Transferências instantâneas",
+    "IGUI_ComfyGrid_OptInstantTransferTip": "Mover itens instantaneamente, sem tempo de transferência.",
+    "IGUI_ComfyGrid_IncompatibleTetris": "Comfy Grid: o Inventory Tetris está ativo. Os dois mods substituem a interface do inventário e não podem funcionar juntos: desative um deles.",
+    "IGUI_ComfyGrid_SlotPrimary": "Mão",
+    "IGUI_ComfyGrid_SlotSecondary": "Sec.",
+    "IGUI_ComfyGrid_SlotHead": "Cabeça",
+    "IGUI_ComfyGrid_SlotFace": "Rosto",
+    "IGUI_ComfyGrid_SlotNeck": "Pescoço",
+    "IGUI_ComfyGrid_SlotTorso": "Torso",
+    "IGUI_ComfyGrid_SlotHands": "Luvas",
+    "IGUI_ComfyGrid_SlotLegs": "Pernas",
+    "IGUI_ComfyGrid_SlotFeet": "Pés",
+    "IGUI_ComfyGrid_SlotBack": "Costas",
+    "IGUI_ComfyGrid_SectionEquipment": "Equipamento",
+    "IGUI_ComfyGrid_SectionInventory": "Inventário",
+    "IGUI_ComfyGrid_SectionHotbar": "Atalhos",
+    "IGUI_ComfyGrid_SectionPockets": "Bolsos"
+}
