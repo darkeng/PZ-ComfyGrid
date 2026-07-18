@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.0.0
+    Version: 1.1.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -521,6 +521,11 @@ function SlotGrid:_recomputeSlotCount()
     local slots = Capacity.slotsFor(self.inventory)
     local occupied = self:_highestOccupiedSlot() + 1
     if occupied > slots then slots = occupied end
+
+    local stacks = self.data.stacks
+    if #stacks >= slots then
+        slots = #stacks + 1
+    end
     self.slots = slots
 end
 

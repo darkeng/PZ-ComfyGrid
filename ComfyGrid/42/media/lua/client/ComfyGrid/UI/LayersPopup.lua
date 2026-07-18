@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.0.0
+    Version: 1.1.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -35,7 +35,6 @@ local MAX_COLS = 4
 local PAD_X = 4
 
 local DEFAULT_BG = { r = 0.07, g = 0.07, b = 0.09, a = 0.96 }
-local DEFAULT_LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.60 }
 local DEFAULT_TEXT = { r = 0.9, g = 0.9, b = 0.9, a = 1 }
 
 local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0 }
@@ -188,17 +187,17 @@ function LayersPopup:prerender()
     end
 end
 
+local CHROME = { r = 0.44, g = 0.39, b = 0.29, a = 0.8 }
+
 local function renderImpl(self)
     local w = self.width
     local h = self.height
     local colors = Style.COLORS
     local bg = colors and colors.BOARD_BG or DEFAULT_BG
-    local line = colors and colors.GRID_LINES or DEFAULT_LINE
     local text = colors and colors.COUNT_TEXT or DEFAULT_TEXT
     self:drawRect(0, 0, w, h, math.min(1, (bg.a or 1) + 0.12),
         bg.r or 0, bg.g or 0, bg.b or 0)
-    self:drawRectBorder(0, 0, w, h, line.a or 1,
-        line.r or 0, line.g or 0, line.b or 0)
+    self:drawRectBorder(0, 0, w, h, CHROME.a, CHROME.r, CHROME.g, CHROME.b)
 
     local font = Style.FONT
     if font ~= nil then
@@ -209,21 +208,14 @@ local function renderImpl(self)
         self:drawTextRight("X", w - 6, 3, text.r, text.g, text.b,
             text.a or 1, font)
     end
-    self:drawRect(0, self.titleH - 1, w, 1, line.a or 1,
-        line.r or 0, line.g or 0, line.b or 0)
+    self:drawRect(0, self.titleH - 1, w, 1, CHROME.a, CHROME.r, CHROME.g,
+        CHROME.b)
 
     local bx, by = boardOrigin(self)
     local cols = self.cols
     local bw, bh = Style.gridPixelSize(cols, self.rowsTotal)
-    local stride = Style.CELL_STRIDE
+
     self:drawRect(bx, by, bw, bh, bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
-    local la, lr, lg, lb = line.a or 1, line.r or 0, line.g or 0, line.b or 0
-    for i = 0, cols do
-        self:drawRect(bx + i * stride, by, 1, bh, la, lr, lg, lb)
-    end
-    for j = 0, self.rowsTotal do
-        self:drawRect(bx, by + j * stride, bw, 1, la, lr, lg, lb)
-    end
 
     local tiles = self.tiles
     local pixelForSlot = Style.pixelForSlot
@@ -242,6 +234,16 @@ local function renderImpl(self)
             ctx.y = by + ty
             StackRenderer.draw(ctx)
         end
+    end
+
+    for i = #tiles + 1, cols * self.rowsTotal do
+        local ex, ey = pixelForSlot(i - 1, cols)
+        ctx.stack = nil
+        ctx.item = nil
+        ctx.slot = i - 1
+        ctx.x = bx + ex
+        ctx.y = by + ey
+        SlotRenderer.drawCell(ctx, nil)
     end
 
     local hover = self.hoverTile

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.0.0
+    Version: 1.1.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -20,20 +20,67 @@ local FALLBACK_HOVER = { r = 1, g = 1, b = 1, a = 0.25 }
 
 local DEFAULT_FILL_ALPHA = 0.725
 
+local tileTex = nil
+local tileTexMissing = false
+local function tileTexture()
+    if tileTex == nil and not tileTexMissing then
+        tileTex = getTexture and getTexture("media/textures/comfy_tile.png") or nil
+        if tileTex == nil then tileTexMissing = true end
+    end
+    return tileTex
+end
+
+function SlotRenderer.getTileTexture()
+    return tileTexture()
+end
+
 function SlotRenderer.drawCell(ctx, tint)
     local cell = Style.CELL
     local colors = Style.COLORS
     local c = tint or (colors and colors.EMPTY_CELL) or FALLBACK_CELL
-    ctx.view:drawRect(ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
-        c.a or DEFAULT_FILL_ALPHA, c.r, c.g, c.b)
+    local tex = tileTexture()
+    if tex ~= nil then
+        ctx.view:drawTextureScaled(tex, ctx.x + 1, ctx.y + 1,
+            cell - 2, cell - 2, c.a or DEFAULT_FILL_ALPHA, c.r, c.g, c.b)
+    else
+        ctx.view:drawRect(ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
+            c.a or DEFAULT_FILL_ALPHA, c.r, c.g, c.b)
+    end
 end
 
 function SlotRenderer.drawHover(ctx)
     local cell = Style.CELL
     local colors = Style.COLORS
     local c = (colors and colors.HOVER) or FALLBACK_HOVER
-    ctx.view:drawRect(ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
-        c.a or FALLBACK_HOVER.a, c.r, c.g, c.b)
+    local tex = tileTexture()
+    if tex ~= nil then
+        ctx.view:drawTextureScaled(tex, ctx.x + 1, ctx.y + 1,
+            cell - 2, cell - 2, c.a or FALLBACK_HOVER.a, c.r, c.g, c.b)
+    else
+        ctx.view:drawRect(ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
+            c.a or FALLBACK_HOVER.a, c.r, c.g, c.b)
+    end
+end
+
+local FALLBACK_SELECTED = { r = 0.35, g = 0.75, b = 1.0, a = 0.9 }
+local SELECTION_WASH_ALPHA = 0.38
+
+function SlotRenderer.drawSelection(view, x, y)
+    local cell = Style.CELL
+    local colors = Style.COLORS
+    local c = (colors and colors.SELECTED) or FALLBACK_SELECTED
+    local tex = tileTexture()
+    if tex ~= nil then
+        view:drawTextureScaled(tex, x + 1, y + 1, cell - 2, cell - 2,
+            SELECTION_WASH_ALPHA, c.r, c.g, c.b)
+    else
+        local bw = cell - 2
+        local a = c.a or 0.9
+        view:drawRect(x + 1, y + 1, bw, 2, a, c.r, c.g, c.b)
+        view:drawRect(x + 1, y + cell - 3, bw, 2, a, c.r, c.g, c.b)
+        view:drawRect(x + 1, y + 3, 2, cell - 6, a, c.r, c.g, c.b)
+        view:drawRect(x + cell - 3, y + 3, 2, cell - 6, a, c.r, c.g, c.b)
+    end
 end
 
 local SOCKET_FILL = { r = 0.115, g = 0.11, b = 0.135, a = 1.0 }
@@ -45,7 +92,13 @@ function SlotRenderer.drawSocket(ctx)
     local x = ctx.x
     local y = ctx.y
     local f = SOCKET_FILL
-    view:drawRect(x + 1, y + 1, cell - 2, cell - 2, f.a, f.r, f.g, f.b)
+    local tex = tileTexture()
+    if tex ~= nil then
+        view:drawTextureScaled(tex, x + 1, y + 1, cell - 2, cell - 2,
+            f.a, f.r, f.g, f.b)
+    else
+        view:drawRect(x + 1, y + 1, cell - 2, cell - 2, f.a, f.r, f.g, f.b)
+    end
     local e = SOCKET_EDGE
     local L = math.floor(cell * 0.16)
     if L < 4 then L = 4 end

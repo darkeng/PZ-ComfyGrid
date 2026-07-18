@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.0.0
+    Version: 1.1.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -47,8 +47,9 @@ local MARQUEE_THRESHOLD = 6
 local DRAG_SOURCE_WASH_ALPHA = 0.6
 
 local DEFAULT_BG = { r = 0.07, g = 0.07, b = 0.09, a = 0.96 }
-local DEFAULT_LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.60 }
 local DEFAULT_TEXT = { r = 0.9, g = 0.9, b = 0.9, a = 1 }
+
+local CHROME = { r = 0.44, g = 0.39, b = 0.29, a = 0.8 }
 
 local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0 }
 
@@ -77,16 +78,6 @@ local function freshFracFor(item)
         end
     end
     return nil
-end
-
-local function barColor(frac)
-    local c = Style.COLORS
-    local low = c and c.BAR_LOW or { r = 0.8, g = 0.25, b = 0.2 }
-    local mid = c and c.BAR_MID or { r = 0.85, g = 0.75, b = 0.25 }
-    local high = c and c.BAR_HIGH or { r = 0.35, g = 0.75, b = 0.35 }
-    if frac >= 0.66 then return high end
-    if frac >= 0.33 then return mid end
-    return low
 end
 
 local function paneOf(gridView)
@@ -294,13 +285,11 @@ local function renderImpl(self)
     local h = self.height
     local colors = Style.COLORS
     local bg = colors and colors.BOARD_BG or DEFAULT_BG
-    local line = colors and colors.GRID_LINES or DEFAULT_LINE
     local text = colors and colors.COUNT_TEXT or DEFAULT_TEXT
 
     self:drawRect(0, 0, w, h, math.min(1, (bg.a or 1) + 0.12),
         bg.r or 0, bg.g or 0, bg.b or 0)
-    self:drawRectBorder(0, 0, w, h, line.a or 1,
-        line.r or 0, line.g or 0, line.b or 0)
+    self:drawRectBorder(0, 0, w, h, CHROME.a, CHROME.r, CHROME.g, CHROME.b)
 
     local stack = resolveStack(self)
     if stack == nil then return end
@@ -316,8 +305,8 @@ local function renderImpl(self)
         self:drawTextRight("X", w - 6, 3, text.r, text.g, text.b,
             text.a or 1, font)
     end
-    self:drawRect(0, self.titleH - 1, w, 1, line.a or 1,
-        line.r or 0, line.g or 0, line.b or 0)
+    self:drawRect(0, self.titleH - 1, w, 1, CHROME.a, CHROME.r, CHROME.g,
+        CHROME.b)
 
     local bx, by = boardOrigin(self)
     local cols = self.cols
@@ -329,16 +318,6 @@ local function renderImpl(self)
     local stride = Style.CELL_STRIDE
     local boardTop = by - self.yOffset
     self:drawRect(bx, boardTop, bw, fullH, bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
-    local la = line.a or 1
-    local lr = line.r or 0
-    local lg = line.g or 0
-    local lb = line.b or 0
-    for i = 0, cols do
-        self:drawRect(bx + i * stride, boardTop, 1, fullH, la, lr, lg, lb)
-    end
-    for j = 0, self.rowsTotal do
-        self:drawRect(bx, boardTop + j * stride, bw, 1, la, lr, lg, lb)
-    end
 
     local tiles = self.tiles
     local pixelForSlot = Style.pixelForSlot
@@ -355,7 +334,6 @@ local function renderImpl(self)
     end
     local draggingSel = draggedId ~= nil and isSelected(self, draggedId)
     local selC = colors and colors.SELECTED
-    local selA = selC and selC.a or 0.9
     local selR = selC and selC.r or 0.35
     local selG = selC and selC.g or 0.75
     local selB = selC and selC.b or 1.0
@@ -388,22 +366,39 @@ local function renderImpl(self)
 
             local frac = freshFracFor(item)
             if frac ~= nil then
-                local bc = barColor(frac)
-                self:drawRect(tx + 2, ty + cell - 4, cell - 4, 2,
-                    0.35, 0.2, 0.2, 0.2)
-                self:drawRect(tx + 2, ty + cell - 4,
-                    math.floor((cell - 4) * frac + 0.5), 2,
-                    0.95, bc.r, bc.g, bc.b)
+                local bc = StackRenderer.rampColor(frac)
+                local bx0 = tx + 5
+                local by0 = ty + cell - 8
+                local trackW = cell - 13
+                self:drawRect(bx0 + 1, by0, trackW - 2, 3,
+                    0.3, 0.05, 0.05, 0.05)
+                local fillW = math.floor(trackW * frac + 0.5)
+                if fillW < 2 and frac > 0 then fillW = 2 end
+                if fillW > 0 then
+                    self:drawRect(bx0, by0 + 1, 1, 1, 0.95, bc.r, bc.g, bc.b)
+                    if fillW > 2 then
+                        self:drawRect(bx0 + 1, by0, fillW - 2, 3,
+                            0.95, bc.r, bc.g, bc.b)
+                    end
+                    self:drawRect(bx0 + fillW - 1, by0 + 1, 1, 1,
+                        0.95, bc.r, bc.g, bc.b)
+                end
             end
 
             if isSelected(self, tile.id) then
-                local bwid = cell - 2
-                self:drawRect(tx + 1, ty + 1, bwid, 2, selA, selR, selG, selB)
-                self:drawRect(tx + 1, ty + cell - 3, bwid, 2, selA, selR, selG, selB)
-                self:drawRect(tx + 1, ty + 3, 2, cell - 6, selA, selR, selG, selB)
-                self:drawRect(tx + cell - 3, ty + 3, 2, cell - 6, selA, selR, selG, selB)
+                SlotRenderer.drawSelection(self, tx, ty)
             end
         end
+    end
+
+    for i = #tiles + 1, cols * self.rowsTotal do
+        local ex, ey = pixelForSlot(i - 1, cols)
+        ctx.stack = nil
+        ctx.item = nil
+        ctx.slot = i - 1
+        ctx.x = bx + ex
+        ctx.y = boardTop + ey
+        SlotRenderer.drawCell(ctx, nil)
     end
 
     if self.marqueeActive then

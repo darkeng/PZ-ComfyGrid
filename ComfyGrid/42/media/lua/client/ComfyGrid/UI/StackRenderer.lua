@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.0.0
+    Version: 1.1.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -26,6 +26,8 @@ local FALLBACK_COUNT_TEXT = { r = 1, g = 1, b = 1, a = 1 }
 local BROKEN_OVERLAY_ALPHA = 0.35
 
 local countStrings = {}
+
+local ammoStrings = {}
 
 local BAR_COLORS = {}
 do
@@ -64,6 +66,13 @@ local function typeDataFor(item, fullType)
     td.readable = td.isLiterature or td.isMap or td.hasMedia
     if td.isDrainable and item.getMaxUses then
         td.maxUses = item:getMaxUses()
+    end
+
+    if item.getMaxAmmo then
+        local ma = item:getMaxAmmo()
+        if type(ma) == "number" and ma > 0 then
+            td.maxAmmo = ma
+        end
     end
     typeData[fullType] = td
     return td
@@ -170,6 +179,24 @@ local function isReadDone(item, td, playerObj)
     return false
 end
 
+local function ammoTextFor(item, td)
+    if td.maxAmmo == nil or item.getCurrentAmmoCount == nil then return nil end
+    local cur = item:getCurrentAmmoCount() or 0
+    local chambered = item.isRoundChambered ~= nil
+        and item:isRoundChambered() or false
+    local akey = cur * 1000 + td.maxAmmo + (chambered and 500000 or 0)
+    local text = ammoStrings[akey]
+    if text == nil then
+        if chambered then
+            text = cur .. "+1/" .. td.maxAmmo
+        else
+            text = cur .. "/" .. td.maxAmmo
+        end
+        ammoStrings[akey] = text
+    end
+    return text
+end
+
 local tickTex = nil
 local tickTexMissing = false
 
@@ -199,6 +226,7 @@ function StackRenderer.draw(ctx)
     SlotRenderer.drawCell(ctx, tint)
 
     local tex = item and item:getTex() or nil
+    local bulky = false
     if tex then
         local texW = tex:getWidth()
         local texH = tex:getHeight()
@@ -208,6 +236,19 @@ function StackRenderer.draw(ctx)
             local correctiveScale = TEXTURE_SIZE / largest
             local drawW = texW * correctiveScale
             local drawH = texH * correctiveScale
+
+            local wmul = 0.92
+            local aw = item.getActualWeight and item:getActualWeight() or nil
+            if type(aw) == "number" then
+                if aw <= 0.4 then
+                    wmul = 0.72
+                elseif aw >= 3 then
+                    wmul = 1.05
+                    bulky = true
+                end
+            end
+            drawW = drawW * wmul
+            drawH = drawH * wmul
             if not nearestUnsupported then
 
                 if not pcall(applyNearest, tex) then
@@ -249,12 +290,18 @@ function StackRenderer.draw(ctx)
         local frac = statusBarFraction(item, td, playerObj)
         if frac then
             if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
-            local area = CELL - 2
+
+            local area = CELL - 10
             local barH = floor(area * frac + 0.5)
-            if barH < 1 and frac > 0 then barH = 1 end
+            if barH < 2 and frac > 0 then barH = 2 end
             local col = BAR_COLORS[floor(frac * 100 + 0.5)]
-            view:drawRect(x + CELL - 3, y + 1 + (area - barH), 2, barH,
-                1, col.r, col.g, col.b)
+            local bx = x + CELL - 7
+            local by = y + 5 + (area - barH)
+            view:drawRect(bx + 1, by, 1, 1, 1, col.r, col.g, col.b)
+            if barH > 2 then
+                view:drawRect(bx, by + 1, 3, barH - 2, 1, col.r, col.g, col.b)
+            end
+            view:drawRect(bx + 1, by + barH - 1, 1, 1, 1, col.r, col.g, col.b)
         end
 
         if playerObj ~= nil and isReadDone(item, td, playerObj) then
@@ -264,6 +311,32 @@ function StackRenderer.draw(ctx)
                 view:drawTextureScaled(tick, x + CELL - sz - 4, y + CELL - sz - 3,
                     sz, sz, 1, 1, 1, 1)
             end
+        end
+
+        local ammoText = ammoTextFor(item, td)
+        if ammoText ~= nil then
+            if smallFontHgt < 0 then
+                smallFontHgt = getTextManager():getFontHeight(UIFont.Small)
+            end
+            local colors2 = Style.COLORS
+            local ty = y + CELL - smallFontHgt - 1
+            local cs = colors2 and colors2.COUNT_SHADOW
+            if cs then
+                local off = floor(Style.SCALE + 0.5)
+                if off < 1 then off = 1 end
+                view:drawText(ammoText, x + 3 + off, ty + off,
+                    cs.r, cs.g, cs.b, cs.a or 1, UIFont.Small)
+            end
+            local ct = (colors2 and colors2.COUNT_TEXT) or FALLBACK_COUNT_TEXT
+            view:drawText(ammoText, x + 3, ty, ct.r, ct.g, ct.b, ct.a or 1,
+                UIFont.Small)
+        end
+
+        if bulky and ammoText == nil then
+            local mb = y + CELL - 3
+            view:drawRect(x + 3, mb - 2, 7, 2, 0.9, 0.82, 0.65, 0.38)
+            view:drawRect(x + 3, mb - 4, 5, 2, 0.9, 0.82, 0.65, 0.38)
+            view:drawRect(x + 3, mb - 6, 3, 2, 0.9, 0.82, 0.65, 0.38)
         end
     end
 
@@ -328,18 +401,38 @@ end
 function StackRenderer.drawJobOverlay(view, x, y, delta)
     if view == nil or delta == nil or delta >= 1 then return end
     local cell = Style.CELL
-    local coverH = cell - 2
+
+    local inner = cell - 4
+    local coverH = inner
     if delta > 0 then
-        coverH = floor((cell - 2) * (1 - delta) + 0.5)
+        coverH = floor(inner * (1 - delta) + 0.5)
     end
     if coverH <= 0 then return end
     local colors = Style.COLORS
     local ov = (colors and colors.TRANSFER_OVERLAY) or FALLBACK_OVERLAY
     local ed = (colors and colors.TRANSFER_EDGE) or FALLBACK_EDGE
-    view:drawRect(x + 1, y + 1, cell - 2, coverH,
+    view:drawRect(x + 2, y + 2, inner, coverH,
         ov.a or 0.72, ov.r or 0, ov.g or 0, ov.b or 0)
-    view:drawRect(x + 1, y + coverH - 1, cell - 2, 2,
+    view:drawRect(x + 2, y + coverH, inner, 2,
         ed.a or 0.9, ed.r or 0.95, ed.g or 0.80, ed.b or 0.25)
+end
+
+function StackRenderer.rampColor(frac)
+    if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
+    return BAR_COLORS[floor(frac * 100 + 0.5)]
+end
+
+function StackRenderer.overlayInfo(item)
+    if item == nil then return nil, nil, nil end
+    local td = typeDataFor(item,
+        (item.getFullType and item:getFullType()) or "?")
+    local frac = statusBarFraction(item, td, nil)
+    local col = nil
+    if frac ~= nil then
+        if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
+        col = BAR_COLORS[floor(frac * 100 + 0.5)]
+    end
+    return frac, col, ammoTextFor(item, td)
 end
 
 function StackRenderer.jobOverlayFor(stack, front, jobs, currentAction)

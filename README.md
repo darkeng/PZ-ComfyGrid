@@ -9,7 +9,9 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 - **Square-tile grid** — no more scrolling a text list; it reflows to your window width.
 - **Auto-stacking** — identical items merge into one tile, grouped by state (fresh/rotten, cooked, uses left, condition) and re-grouped on their own as they change. A colour bar shows each tile's status.
 - **Stack inspector** — click a stack to see every item's individual condition.
-- **Equipment & hotbar tiles** above your inventory — drag to equip or attach.
+- **Every container, one panel** — equipment, hotbar, pockets and every worn bag stack as sections; drag to equip or attach, no clicking through container tabs.
+- **Ammo counters** — guns and magazines show their rounds right on the tile, mirrored on the vanilla hotbar.
+- **Read indicator** — books, magazines and maps show reading progress and get a tick once fully read.
 - **Drag & drop** with positional swap, multi-select, quick-move and spring-loaded containers.
 - **Full multiplayer support**, plus configurable interface scale, grid density and instant transfers.
 - **8 languages** — English, Español, Español (AR), Français, Deutsch, Русский, 简体中文, Português (BR).

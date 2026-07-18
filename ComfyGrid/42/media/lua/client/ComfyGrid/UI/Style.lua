@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.0.0
+    Version: 1.1.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -92,9 +92,9 @@ end
 
 Style.COLORS = {
 
-    BOARD_BG   = { r = 0.07, g = 0.07, b = 0.08, a = 0.95 },
+    BOARD_BG   = { r = 0.082, g = 0.074, b = 0.062, a = 0.95 },
     GRID_LINES = { r = 0.30, g = 0.30, b = 0.33, a = 1.0 },
-    EMPTY_CELL = { r = 0.13, g = 0.13, b = 0.14, a = 1.0 },
+    EMPTY_CELL = { r = 0.148, g = 0.135, b = 0.116, a = 1.0 },
     HOVER      = { r = 1.0,  g = 1.0,  b = 1.0,  a = 0.12 },
 
     COUNT_TEXT   = { r = 1.0, g = 1.0, b = 1.0, a = 1.0 },

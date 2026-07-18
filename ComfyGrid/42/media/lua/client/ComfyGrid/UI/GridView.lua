@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.0.0
+    Version: 1.1.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -39,7 +39,6 @@ local GridView = ISUIElement:derive("ComfyGridView")
 ComfyGrid.UI.GridView = GridView
 
 local DEFAULT_BG = { r = 0.09, g = 0.09, b = 0.11, a = 0.85 }
-local DEFAULT_LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.50 }
 
 local DRAG_SOURCE_WASH_ALPHA = 0.6
 
@@ -254,26 +253,30 @@ function GridView:visibleBand()
     return top, top + host:getHeight()
 end
 
+local boardCtx = { view = false, x = 0, y = 0 }
+
 function GridView:renderBoard()
     local cols = self.cols
     local rows = self.rows
     local w, h = Style.gridPixelSize(cols, rows)
     local colors = Style.COLORS
     local bg = colors and colors.BOARD_BG or DEFAULT_BG
-    local line = colors and colors.GRID_LINES or DEFAULT_LINE
 
     self:drawRect(0, 0, w, h, bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
-    local la = line.a or 1
-    local lr = line.r or 0
-    local lg = line.g or 0
-    local lb = line.b or 0
 
-    local step = Style.CELL - 1
-    for i = 0, cols do
-        self:drawRect(i * step, 0, 1, h, la, lr, lg, lb)
-    end
-    for j = 0, rows do
-        self:drawRect(0, j * step, w, 1, la, lr, lg, lb)
+    local cullTop, cullBottom = self:visibleBand()
+    local stride = Style.CELL_STRIDE
+    local cell = Style.CELL
+    boardCtx.view = self
+    for row = 0, rows - 1 do
+        local y = row * stride
+        if cullTop == nil or (y + cell > cullTop and y < cullBottom) then
+            for col = 0, cols - 1 do
+                boardCtx.x = col * stride
+                boardCtx.y = y
+                SlotRenderer.drawCell(boardCtx, nil)
+            end
+        end
     end
 end
 
@@ -307,16 +310,6 @@ local function renderAll(self)
     end
 
     local selection = self.selection
-    local selA, selR, selG, selB = 0.9, 0.35, 0.75, 1.0
-    if selection ~= nil then
-        local sc = Style.COLORS and Style.COLORS.SELECTED
-        if sc ~= nil then
-            selA = sc.a or 0.9
-            selR = sc.r or 0.35
-            selG = sc.g or 0.75
-            selB = sc.b or 1.0
-        end
-    end
     local draggingSelection = draggedStack ~= nil and selection ~= nil
         and selection[draggedStack] == true
 
@@ -360,14 +353,7 @@ local function renderAll(self)
                 end
 
                 if selection ~= nil and selection[stack] then
-                    local bw = cell - 2
-                    self:drawRect(sx + 1, sy + 1, bw, 2, selA, selR, selG, selB)
-                    self:drawRect(sx + 1, sy + cell - 3, bw, 2,
-                        selA, selR, selG, selB)
-                    self:drawRect(sx + 1, sy + 3, 2, cell - 6,
-                        selA, selR, selG, selB)
-                    self:drawRect(sx + cell - 3, sy + 3, 2, cell - 6,
-                        selA, selR, selG, selB)
+                    SlotRenderer.drawSelection(self, sx, sy)
                 end
 
                 local hit, best = StackRenderer.jobOverlayFor(stack, front, jobs, currentAction)

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.0.0
+    Version: 1.1.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -33,7 +33,6 @@ ComfyGrid.UI.HotbarStrip = HotbarStrip
 local MIN_COLS = 2
 
 local DEFAULT_BG = { r = 0.09, g = 0.09, b = 0.11, a = 0.85 }
-local DEFAULT_LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.50 }
 local LABEL = { r = 0.62, g = 0.62, b = 0.68, a = 0.9 }
 
 local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0 }
@@ -272,16 +271,8 @@ local function renderImpl(self)
     local w, h = Style.gridPixelSize(cols, rows)
     local colors = Style.COLORS
     local bg = colors and colors.BOARD_BG or DEFAULT_BG
-    local line = colors and colors.GRID_LINES or DEFAULT_LINE
+
     self:drawRect(0, 0, w, h, bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
-    local stride = Style.CELL_STRIDE
-    local la, lr, lg, lb = line.a or 1, line.r or 0, line.g or 0, line.b or 0
-    for i = 0, cols do
-        self:drawRect(i * stride, 0, 1, h, la, lr, lg, lb)
-    end
-    for j = 0, rows do
-        self:drawRect(0, j * stride, w, 1, la, lr, lg, lb)
-    end
 
     local pixelForSlot = Style.pixelForSlot
     local font = Style.FONT

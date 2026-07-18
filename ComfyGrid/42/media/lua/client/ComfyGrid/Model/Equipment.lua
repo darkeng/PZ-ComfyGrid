@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.0.0
+    Version: 1.1.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -33,7 +33,7 @@ local LOCATION_GROUP = {
     FullSuitHeadSCBA = "Head",
 
     Mask = "Face", MaskEyes = "Face", MaskFull = "Face", Eyes = "Face",
-    LeftEye = "Face", RightEye = "Face", Nose = "Face", Scarf = "Face",
+    LeftEye = "Face", RightEye = "Face", Nose = "Face",
     Ears = "Face", EarTop = "Face",
     MakeUp_FullFace = "Face", MakeUpFullFace = "Face",
     MakeUp_Eyes = "Face", MakeUpEyes = "Face",
@@ -42,6 +42,7 @@ local LOCATION_GROUP = {
 
     Neck = "Neck", Necklace = "Neck", Necklace_Long = "Neck",
     NecklaceLong = "Neck", NeckTexture = "Neck", Gorget = "Neck",
+    Scarf = "Neck",
 
     Underwear = "Torso", UnderwearBottom = "Torso", UnderwearTop = "Torso",
     UnderwearExtra1 = "Torso", UnderwearExtra2 = "Torso",

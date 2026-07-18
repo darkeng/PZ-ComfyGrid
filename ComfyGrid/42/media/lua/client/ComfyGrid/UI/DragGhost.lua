@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.0.0
+    Version: 1.1.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,12 +9,14 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/UI/Style"
+require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
 local Log = ComfyGrid.Core.Log
 local Style = ComfyGrid.UI.Style
+local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
 
 local DragGhost = ISUIElement:derive("ComfyDragGhost")
@@ -78,12 +80,34 @@ local function renderImpl(self)
         end
     end
 
-    local size = Style.TEXTURE_SIZE
+    local size = floor(Style.TEXTURE_SIZE * 1.05)
 
     local mx = getMouseX()
     local my = getMouseY()
     local x = floor(mx - size * 0.5)
     local y = floor(my - size * 0.5)
+
+    local tileTex = SlotRenderer.getTileTexture ~= nil
+        and SlotRenderer.getTileTexture() or nil
+    if tileTex ~= nil then
+        local cell = floor((Style.CELL - 2) * 1.05)
+        local gx = floor(mx - cell * 0.5)
+        local gy = floor(my - cell * 0.5)
+        self:suspendStencil()
+
+        self:drawTextureScaled(tileTex, gx + 3, gy + 4, cell, cell,
+            0.35, 0, 0, 0)
+        local cat = front.getDisplayCategory and front:getDisplayCategory()
+            or nil
+        local tints = Style.COLORS and Style.COLORS.CATEGORY
+        local tint = (cat ~= nil and tints ~= nil and tints[cat])
+            or (tints ~= nil and tints.default) or nil
+        if tint ~= nil then
+            self:drawTextureScaled(tileTex, gx, gy, cell, cell,
+                0.85, tint.r, tint.g, tint.b)
+        end
+        self:resumeStencil()
+    end
 
     self:suspendStencil()
 

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.0.0
+    Version: 1.1.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -57,6 +57,8 @@ local function hoveredStack(pane)
     end
     return nil, nil
 end
+
+Tooltip.hoveredStackOf = hoveredStack
 
 local function stackWeight(pane, stack, inventory)
     if stack.count == nil or stack.count < 2 then return 0.0 end
