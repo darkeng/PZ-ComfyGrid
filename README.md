@@ -13,6 +13,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 - **Ammo counters** — guns and magazines show their rounds right on the tile, mirrored on the vanilla hotbar.
 - **Read indicator** — books, magazines and maps show reading progress and get a tick once fully read.
 - **Drag & drop** with positional swap, multi-select, quick-move and spring-loaded containers.
+- **Full controller support** — a cell cursor over every section, one button per action, button hints, controller stack splitting through the inspector. Steam Deck friendly.
 - **Full multiplayer support**, plus configurable interface scale, grid density and instant transfers.
 - **8 languages** — English, Español, Español (AR), Français, Deutsch, Русский, 简体中文, Português (BR).
 

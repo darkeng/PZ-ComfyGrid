@@ -19,5 +19,19 @@
     "IGUI_ComfyGrid_SectionEquipment": "装备",
     "IGUI_ComfyGrid_SectionInventory": "物品栏",
     "IGUI_ComfyGrid_SectionHotbar": "快捷栏",
-    "IGUI_ComfyGrid_SectionPockets": "口袋"
+    "IGUI_ComfyGrid_SectionPockets": "口袋",
+    "IGUI_ComfyGrid_PadTake": "拿取",
+    "IGUI_ComfyGrid_PadPlace": "放置",
+    "IGUI_ComfyGrid_PadQuickMove": "快速移动",
+    "IGUI_ComfyGrid_PadMenu": "菜单",
+    "IGUI_ComfyGrid_PadCancel": "取消",
+    "IGUI_ComfyGrid_PadClose": "关闭",
+    "IGUI_ComfyGrid_PadSection": "分区",
+    "IGUI_ComfyGrid_PadContainer": "容器",
+    "IGUI_ComfyGrid_PadEquip": "装备",
+    "IGUI_ComfyGrid_PadUnequip": "卸下",
+    "IGUI_ComfyGrid_PadSelect": "选择",
+    "IGUI_ComfyGrid_PadInspect": "查看",
+    "IGUI_ComfyGrid_PadInventory": "物品栏",
+    "IGUI_ComfyGrid_PadLoot": "战利品"
 }

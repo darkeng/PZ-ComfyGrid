@@ -19,5 +19,19 @@
     "IGUI_ComfyGrid_SectionEquipment": "Équipement",
     "IGUI_ComfyGrid_SectionInventory": "Inventaire",
     "IGUI_ComfyGrid_SectionHotbar": "Barre rapide",
-    "IGUI_ComfyGrid_SectionPockets": "Poches"
+    "IGUI_ComfyGrid_SectionPockets": "Poches",
+    "IGUI_ComfyGrid_PadTake": "Prendre",
+    "IGUI_ComfyGrid_PadPlace": "Poser",
+    "IGUI_ComfyGrid_PadQuickMove": "Déplacement rapide",
+    "IGUI_ComfyGrid_PadMenu": "Menu",
+    "IGUI_ComfyGrid_PadCancel": "Annuler",
+    "IGUI_ComfyGrid_PadClose": "Fermer",
+    "IGUI_ComfyGrid_PadSection": "Section",
+    "IGUI_ComfyGrid_PadContainer": "Conteneur",
+    "IGUI_ComfyGrid_PadEquip": "Équiper",
+    "IGUI_ComfyGrid_PadUnequip": "Retirer",
+    "IGUI_ComfyGrid_PadSelect": "Sélectionner",
+    "IGUI_ComfyGrid_PadInspect": "Inspecter",
+    "IGUI_ComfyGrid_PadInventory": "Inventaire",
+    "IGUI_ComfyGrid_PadLoot": "Butin"
 }

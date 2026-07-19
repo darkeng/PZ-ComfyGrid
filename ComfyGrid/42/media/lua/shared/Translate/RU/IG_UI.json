@@ -19,5 +19,19 @@
     "IGUI_ComfyGrid_SectionEquipment": "Экипировка",
     "IGUI_ComfyGrid_SectionInventory": "Инвентарь",
     "IGUI_ComfyGrid_SectionHotbar": "Хотбар",
-    "IGUI_ComfyGrid_SectionPockets": "Карманы"
+    "IGUI_ComfyGrid_SectionPockets": "Карманы",
+    "IGUI_ComfyGrid_PadTake": "Взять",
+    "IGUI_ComfyGrid_PadPlace": "Положить",
+    "IGUI_ComfyGrid_PadQuickMove": "Быстрое перемещение",
+    "IGUI_ComfyGrid_PadMenu": "Меню",
+    "IGUI_ComfyGrid_PadCancel": "Отмена",
+    "IGUI_ComfyGrid_PadClose": "Закрыть",
+    "IGUI_ComfyGrid_PadSection": "Секция",
+    "IGUI_ComfyGrid_PadContainer": "Контейнер",
+    "IGUI_ComfyGrid_PadEquip": "Экипировать",
+    "IGUI_ComfyGrid_PadUnequip": "Снять",
+    "IGUI_ComfyGrid_PadSelect": "Выбрать",
+    "IGUI_ComfyGrid_PadInspect": "Осмотреть",
+    "IGUI_ComfyGrid_PadInventory": "Инвентарь",
+    "IGUI_ComfyGrid_PadLoot": "Добыча"
 }

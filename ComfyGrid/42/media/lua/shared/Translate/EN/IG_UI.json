@@ -19,5 +19,19 @@
     "IGUI_ComfyGrid_SectionEquipment": "Equipment",
     "IGUI_ComfyGrid_SectionInventory": "Inventory",
     "IGUI_ComfyGrid_SectionHotbar": "Hotbar",
-    "IGUI_ComfyGrid_SectionPockets": "Pockets"
+    "IGUI_ComfyGrid_SectionPockets": "Pockets",
+    "IGUI_ComfyGrid_PadTake": "Take",
+    "IGUI_ComfyGrid_PadPlace": "Place",
+    "IGUI_ComfyGrid_PadQuickMove": "Quick move",
+    "IGUI_ComfyGrid_PadMenu": "Menu",
+    "IGUI_ComfyGrid_PadCancel": "Cancel",
+    "IGUI_ComfyGrid_PadClose": "Close",
+    "IGUI_ComfyGrid_PadSection": "Section",
+    "IGUI_ComfyGrid_PadContainer": "Container",
+    "IGUI_ComfyGrid_PadEquip": "Equip",
+    "IGUI_ComfyGrid_PadUnequip": "Unequip",
+    "IGUI_ComfyGrid_PadSelect": "Select",
+    "IGUI_ComfyGrid_PadInspect": "Inspect",
+    "IGUI_ComfyGrid_PadInventory": "Inventory",
+    "IGUI_ComfyGrid_PadLoot": "Loot"
 }

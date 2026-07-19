@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.1.0
+    Version: 1.2.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -106,7 +106,42 @@ local function updateImpl(pane)
 
     local item = nil
     local weightOfStack = 0.0
-    if not isDragActive() then
+
+    local padAnchorX, padAnchorY = nil, nil
+    local padFocused = false
+    if pane.doController then
+
+        local page = pane.inventoryPage
+        padFocused = page ~= nil and getFocusForPlayer(pane.player) == page
+    end
+    if padFocused and not isDragActive() then
+        local PadFocus = ComfyGrid.Interact.PadFocus
+        if PadFocus ~= nil and PadFocus.peek ~= nil then
+            local kind, el, slot, occupant = PadFocus.peek(pane.inventoryPage)
+            if occupant ~= nil then
+                if kind == "grid" or kind == "pocket" then
+                    local inventory = el.model ~= nil and el.model.inventory
+                        or nil
+                    if inventory ~= nil then
+                        item = ItemStack.frontItem(occupant, inventory)
+                        if item ~= nil then
+                            weightOfStack = stackWeight(pane, occupant,
+                                inventory)
+                        end
+                    end
+                else
+                    item = occupant
+                end
+                if item ~= nil then
+                    local Style = ComfyGrid.UI.Style
+                    local cell = Style ~= nil and Style.CELL or 45
+                    local px, py = Style.pixelForSlot(slot, el.cols or 1)
+                    padAnchorX = el:getAbsoluteX() + px + cell + 6
+                    padAnchorY = el:getAbsoluteY() + py - 2
+                end
+            end
+        end
+    elseif not isDragActive() then
         local stack, inventory = hoveredStack(pane)
         if stack ~= nil and inventory ~= nil then
 
@@ -149,14 +184,36 @@ local function updateImpl(pane)
             p = layersPopup ~= nil and layersPopup.current ~= nil
                 and layersPopup.current() or nil
         end
-        if p ~= nil and p.hostPane == pane and p.isMouseOver ~= nil
-                and p:isMouseOver() then
-            item = p.hoveredItem ~= nil and p:hoveredItem() or nil
-            weightOfStack = 0.0
+        if p ~= nil and p.hostPane == pane then
+
+            local PadPopup = ComfyGrid.Interact.PadPopup
+            local padIdx = PadPopup ~= nil and PadPopup.cursorFor ~= nil
+                and PadPopup.cursorFor(p) or nil
+            if padIdx ~= nil and p.padTileItem ~= nil then
+                item = p:padTileItem(padIdx)
+                weightOfStack = 0.0
+                if item ~= nil then
+                    local Style = ComfyGrid.UI.Style
+                    local cell = Style ~= nil and Style.CELL or 45
+                    local px, py = Style.pixelForSlot(padIdx, p.cols or 1)
+                    padAnchorX = p:getAbsoluteX() + 4 + px + cell + 6
+                    padAnchorY = p:getAbsoluteY() + (p.titleH or 18) + py
+                        - (p.yOffset or 0) - 2
+                end
+            elseif p.isMouseOver ~= nil and p:isMouseOver() then
+                item = p.hoveredItem ~= nil and p:hoveredItem() or nil
+                weightOfStack = 0.0
+            end
         end
     end
 
     local toolRender = pane.toolRender
+    if padAnchorX ~= nil and toolRender ~= nil
+            and toolRender.anchorBottomLeft ~= nil then
+        toolRender.anchorBottomLeft.x = padAnchorX
+        toolRender.anchorBottomLeft.y = padAnchorY
+    end
+
     if item ~= nil and toolRender ~= nil and item == toolRender.item
             and weightOfStack == toolRender.tooltip:getWeightOfStack()
             and toolRender:isVisible() then

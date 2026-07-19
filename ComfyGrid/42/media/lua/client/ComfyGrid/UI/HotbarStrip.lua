@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.1.0
+    Version: 1.2.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -333,6 +333,28 @@ local function renderImpl(self)
                 hx, hy, font)
         end
     end
+
+    local Pad = ComfyGrid.Interact and ComfyGrid.Interact.PadFocus
+    local padIdx = Pad ~= nil and Pad.cursorFor ~= nil and Pad.cursorFor(self)
+        or nil
+    if padIdx ~= nil and padIdx < self.entryCount then
+        local px, py = pixelForSlot(padIdx, cols)
+        SlotRenderer.drawSelection(self, px, py)
+        ctx.stack = nil
+        ctx.item = nil
+        ctx.slot = padIdx
+        ctx.x = px
+        ctx.y = py
+        SlotRenderer.drawHover(ctx)
+        if attached[padIdx + 1] == nil then
+            SlotRenderer.drawNameChip(self, hoverLabelFor(slots[padIdx + 1]),
+                px, py, font)
+        end
+        local Carry = ComfyGrid.Interact.PadCarry
+        if Carry ~= nil and Carry.renderAt ~= nil then
+            Carry.renderAt(self, px, py)
+        end
+    end
 end
 
 function HotbarStrip:render()
@@ -454,6 +476,18 @@ local function resolveReslotDrop(self, fromIdx, toIdx)
             fromSlot.def.attachments[other:getAttachmentType()],
             fromIdx + 1, fromSlot.def, false)
     end
+end
+
+function HotbarStrip:resolvePadDrop(idx)
+    resolveAttachDrop(self, idx)
+end
+
+function HotbarStrip:resolvePadReslot(fromIdx, toIdx, itemId)
+    local prev = self.pressedId
+    self.pressedId = itemId
+    local ok, err = pcall(resolveReslotDrop, self, fromIdx, toIdx)
+    self.pressedId = prev
+    if not ok then reportMouseError(err) end
 end
 
 local function mouseUpImpl(self, x, y)

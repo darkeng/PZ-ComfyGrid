@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.1.0
+    Version: 1.2.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -14,6 +14,7 @@ require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
+require "ComfyGrid/Interact/Pad/PadPopup"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -24,6 +25,7 @@ local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local StackRenderer = ComfyGrid.UI.StackRenderer
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
+local PadPopup = ComfyGrid.Interact.PadPopup
 
 local LayersPopup = ISPanel:derive("ComfyLayersPopup")
 ComfyGrid.UI.LayersPopup = LayersPopup
@@ -256,6 +258,18 @@ local function renderImpl(self)
         ctx.y = by + hy
         SlotRenderer.drawHover(ctx)
     end
+
+    local padIdx = PadPopup.cursorFor(self)
+    if padIdx ~= nil and padIdx < #tiles then
+        local px, py = pixelForSlot(padIdx, cols)
+        SlotRenderer.drawSelection(self, bx + px, by + py)
+        ctx.stack = tiles[padIdx + 1].synth
+        ctx.item = nil
+        ctx.slot = padIdx
+        ctx.x = bx + px
+        ctx.y = by + py
+        SlotRenderer.drawHover(ctx)
+    end
 end
 
 function LayersPopup:render()
@@ -282,6 +296,10 @@ end
 function LayersPopup:hoveredItem()
     local idx = self.hoverTile
     if idx == nil or not self:isMouseOver() then return nil end
+    return liveTileItem(self, idx)
+end
+
+function LayersPopup:padTileItem(idx)
     return liveTileItem(self, idx)
 end
 
@@ -405,6 +423,8 @@ function LayersPopup:onRightMouseUp(x, y)
 end
 
 function LayersPopup:close()
+
+    PadPopup.releaseFocus(self)
     if DragAndDrop.isDragOwner(self) and not DragAndDrop.isDragging() then
         DragAndDrop.endDrag()
     end
@@ -447,3 +467,5 @@ end
 function LayersPopup.current()
     return instance
 end
+
+PadPopup.attach(LayersPopup)

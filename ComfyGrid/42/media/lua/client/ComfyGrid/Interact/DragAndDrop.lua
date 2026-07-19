@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.1.0
+    Version: 1.2.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -73,6 +73,20 @@ function DragAndDrop.startDrag(owner)
 
         ensureGhost()
     end
+end
+
+function DragAndDrop.beginDirectDrag(owner, vanillaStacks)
+    if owner == nil or vanillaStacks == nil or #vanillaStacks == 0 then
+        return false
+    end
+    clearPendingCancel()
+    ISMouseDrag.dragOwner = owner
+    ISMouseDrag.itemsToDrag = nil
+    ISMouseDrag.localXStart = 0
+    ISMouseDrag.localYStart = 0
+    ISMouseDrag.dragging = vanillaStacks
+    ISMouseDrag.draggingFocus = owner
+    return true
 end
 
 function DragAndDrop.isDragging()

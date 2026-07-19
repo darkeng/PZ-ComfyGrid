@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.1.0
+    Version: 1.2.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -19,6 +19,8 @@ require "ComfyGrid/Interact/TransferJobs"
 require "ComfyGrid/Interact/DropHandler"
 require "ComfyGrid/Interact/QuickMove"
 require "ComfyGrid/Interact/ContextMenu"
+require "ComfyGrid/Interact/Pad/PadFocus"
+require "ComfyGrid/Interact/Pad/PadCarry"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -34,6 +36,8 @@ local TransferJobs = ComfyGrid.Interact.TransferJobs
 local DropHandler = ComfyGrid.Interact.DropHandler
 local QuickMove = ComfyGrid.Interact.QuickMove
 local ContextMenu = ComfyGrid.Interact.ContextMenu
+local PadFocus = ComfyGrid.Interact.PadFocus
+local PadCarry = ComfyGrid.Interact.PadCarry
 
 local GridView = ISUIElement:derive("ComfyGridView")
 ComfyGrid.UI.GridView = GridView
@@ -309,6 +313,15 @@ local function renderAll(self)
         washB = bg.b or 0
     end
 
+    local padCarried = PadCarry.carriedStackOn(self)
+    if padCarried ~= nil and draggedStack == nil then
+        local colors = Style.COLORS
+        local bg = colors and colors.BOARD_BG or DEFAULT_BG
+        washR = bg.r or 0
+        washG = bg.g or 0
+        washB = bg.b or 0
+    end
+
     local selection = self.selection
     local draggingSelection = draggedStack ~= nil and selection ~= nil
         and selection[draggedStack] == true
@@ -346,7 +359,7 @@ local function renderAll(self)
                 ctx.y = sy
                 drawStack(ctx)
 
-                if stack == draggedStack
+                if stack == draggedStack or stack == padCarried
                         or (draggingSelection and selection[stack]) then
                     self:drawRect(sx + 1, sy + 1, cell - 2, cell - 2,
                         DRAG_SOURCE_WASH_ALPHA, washR, washG, washB)
@@ -374,6 +387,20 @@ local function renderAll(self)
         ctx.x = hx
         ctx.y = hy
         SlotRenderer.drawHover(ctx)
+    end
+
+    local padSlot = PadFocus.cursorFor(self)
+    if padSlot ~= nil and padSlot < cols * rows then
+        local px, py = pixelForSlot(padSlot, cols)
+        SlotRenderer.drawSelection(self, px, py)
+        ctx.stack = grid:stackAt(padSlot)
+        ctx.item = nil
+        ctx.slot = padSlot
+        ctx.x = px
+        ctx.y = py
+        SlotRenderer.drawHover(ctx)
+
+        PadCarry.renderAt(self, px, py)
     end
 
     if self.marqueeActive then
@@ -446,6 +473,49 @@ local function payloadFor(self, stack)
     end
     local ordered = {}
     for s in pairs(self.selection) do
+        ordered[#ordered + 1] = s
+    end
+    table.sort(ordered, function(a, b)
+        return (a.slot or 0) < (b.slot or 0)
+    end)
+    local out = {}
+    for i = 1, #ordered do
+        local p = buildPayload(self, ordered[i])
+        if p ~= nil then
+            out[#out + 1] = p[1]
+        end
+    end
+    if #out == 0 then return nil end
+    return out
+end
+
+function GridView:dragPayloadFor(stack)
+    return payloadFor(self, stack)
+end
+
+function GridView:padToggleSelect(stack)
+    if stack == nil then return end
+    syncSelection(self)
+    toggleSelected(self, stack)
+end
+
+function GridView:padClearSelection()
+    if self.selectionCount <= 0 then return false end
+    clearSelection(self)
+    return true
+end
+
+function GridView:padIsSelected(stack)
+    syncSelection(self)
+    return isSelected(self, stack)
+end
+
+function GridView:padSelectionPayload()
+    syncSelection(self)
+    local sel = self.selection
+    if sel == nil or self.selectionCount < 1 then return nil end
+    local ordered = {}
+    for s in pairs(sel) do
         ordered[#ordered + 1] = s
     end
     table.sort(ordered, function(a, b)

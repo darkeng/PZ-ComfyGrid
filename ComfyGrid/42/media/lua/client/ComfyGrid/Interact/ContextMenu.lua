@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.1.0
+    Version: 1.2.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -30,9 +30,9 @@ local function paneOf(gridView)
     return nil
 end
 
-function ContextMenu.open(playerNum, stacks, gridView)
+function ContextMenu.open(playerNum, stacks, gridView, absX, absY)
 
-    if playerNum ~= 0 then return false end
+    if absX == nil and playerNum ~= 0 then return false end
     local playerObj = getSpecificPlayer(playerNum)
     if playerObj == nil then return false end
     local model = gridView ~= nil and gridView.model or nil
@@ -50,7 +50,8 @@ function ContextMenu.open(playerNum, stacks, gridView)
     local isInPlayerInventory = inventory:isInCharacterInventory(playerObj)
 
     local menu = ISInventoryPaneContextMenu.createMenu(
-        playerNum, isInPlayerInventory, stackList, getMouseX(), getMouseY())
+        playerNum, isInPlayerInventory, stackList,
+        absX or getMouseX(), absY or getMouseY())
 
     if menu ~= nil and menu.numOptions ~= nil and menu.numOptions > 1
             and JoypadState.players[playerNum + 1] then
@@ -63,6 +64,21 @@ function ContextMenu.open(playerNum, stacks, gridView)
 
         Log.info("ContextMenu: createMenu returned nil (paused or suppressed)")
         return false
+    end
+    return true
+end
+
+function ContextMenu.openForItems(playerNum, items, absX, absY, origin)
+    if items == nil or #items == 0 then return false end
+    if getSpecificPlayer(playerNum) == nil then return false end
+    local menu = ISInventoryPaneContextMenu.createMenu(
+        playerNum, true, items, absX or getMouseX(), absY or getMouseY())
+    if menu == nil then return false end
+    if menu.numOptions ~= nil and menu.numOptions > 1
+            and JoypadState.players[playerNum + 1] then
+        menu.origin = origin
+        menu.mouseOver = 1
+        setJoypadFocus(playerNum, menu)
     end
     return true
 end

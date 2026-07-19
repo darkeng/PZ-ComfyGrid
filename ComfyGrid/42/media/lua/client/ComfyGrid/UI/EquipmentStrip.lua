@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.1.0
+    Version: 1.2.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -279,6 +279,29 @@ local function renderImpl(self)
             SlotRenderer.drawNameChip(self, hoverLabelFor(entry.key), hx, hy, font)
         end
     end
+
+    local Pad = ComfyGrid.Interact and ComfyGrid.Interact.PadFocus
+    local padIdx = Pad ~= nil and Pad.cursorFor ~= nil and Pad.cursorFor(self)
+        or nil
+    if padIdx ~= nil and padIdx < self.entryCount then
+        local px, py = pixelForSlot(padIdx, cols)
+        SlotRenderer.drawSelection(self, px, py)
+        ctx.stack = nil
+        ctx.item = nil
+        ctx.slot = padIdx
+        ctx.x = px
+        ctx.y = py
+        SlotRenderer.drawHover(ctx)
+        local entry = entries[padIdx + 1]
+        if entry ~= nil and entry.items[1] == nil then
+            SlotRenderer.drawNameChip(self, hoverLabelFor(entry.key), px, py,
+                font)
+        end
+        local Carry = ComfyGrid.Interact.PadCarry
+        if Carry ~= nil and Carry.renderAt ~= nil then
+            Carry.renderAt(self, px, py)
+        end
+    end
 end
 
 function EquipmentStrip:render()
@@ -352,6 +375,10 @@ local function resolveEquipDrop(self, idx)
             end
         end
     end
+end
+
+function EquipmentStrip:resolvePadDrop(idx)
+    resolveEquipDrop(self, idx)
 end
 
 local function mouseDownImpl(self, x, y)

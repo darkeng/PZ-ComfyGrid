@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.1.0
+    Version: 1.2.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -18,6 +18,7 @@ require "ComfyGrid/Interact/Transfer"
 require "ComfyGrid/Interact/TransferJobs"
 require "ComfyGrid/Interact/QuickMove"
 require "ComfyGrid/Interact/ContextMenu"
+require "ComfyGrid/Interact/Pad/PadPopup"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -32,6 +33,7 @@ local Transfer = ComfyGrid.Interact.Transfer
 local TransferJobs = ComfyGrid.Interact.TransferJobs
 local QuickMove = ComfyGrid.Interact.QuickMove
 local ContextMenu = ComfyGrid.Interact.ContextMenu
+local PadPopup = ComfyGrid.Interact.PadPopup
 
 local StackPopup = ISPanel:derive("ComfyStackPopup")
 ComfyGrid.UI.StackPopup = StackPopup
@@ -423,6 +425,18 @@ local function renderImpl(self)
         SlotRenderer.drawHover(ctx)
     end
 
+    local padIdx = PadPopup.cursorFor(self)
+    if padIdx ~= nil and padIdx < #tiles then
+        local px, py = pixelForSlot(padIdx, cols)
+        SlotRenderer.drawSelection(self, bx + px, boardTop + py)
+        ctx.stack = tiles[padIdx + 1].synth
+        ctx.item = nil
+        ctx.slot = padIdx
+        ctx.x = bx + px
+        ctx.y = boardTop + py
+        SlotRenderer.drawHover(ctx)
+    end
+
     self:clearStencilRect()
 end
 
@@ -443,6 +457,10 @@ end
 function StackPopup:hoveredItem()
     local idx = self.hoverTile
     if idx == nil or not self:isMouseOver() then return nil end
+    return liveTileItem(self, idx)
+end
+
+function StackPopup:padTileItem(idx)
     return liveTileItem(self, idx)
 end
 
@@ -532,6 +550,43 @@ local function dragIdSet(self, id)
         for sid in pairs(self.selection) do set[sid] = true end
     end
     return set
+end
+
+function StackPopup:padToggleSelect(idx)
+    local tile = self.tiles[idx + 1]
+    if tile ~= nil then toggleSelected(self, tile.id) end
+end
+
+function StackPopup:padDragPayloadFor(idx)
+    local tile = self.tiles[idx + 1]
+    if tile == nil then return nil end
+    return payloadFor(self, tile.id)
+end
+
+function StackPopup:padClearSelection()
+    if self.selectionCount <= 0 then return false end
+    clearSelection(self)
+    return true
+end
+
+function StackPopup:padIsSelected(idx)
+    local tile = self.tiles[idx + 1]
+    return tile ~= nil and isSelected(self, tile.id)
+end
+
+function StackPopup:padSelectionPayload()
+    if self.selection == nil or self.selectionCount < 1 then return nil end
+    local out = {}
+    local tiles = self.tiles
+    for i = 1, #tiles do
+        local id = tiles[i].id
+        if isSelected(self, id) then
+            local p = buildPayload(self, id)
+            if p ~= nil then out[#out + 1] = p end
+        end
+    end
+    if #out == 0 then return nil end
+    return out
 end
 
 local function mouseDownImpl(self, x, y)
@@ -768,6 +823,8 @@ function StackPopup:onMouseWheel(del)
 end
 
 function StackPopup:close()
+
+    PadPopup.releaseFocus(self)
     if DragAndDrop.isDragOwner(self) and not DragAndDrop.isDragging() then
         DragAndDrop.endDrag()
     end
@@ -805,3 +862,5 @@ end
 function StackPopup.current()
     return instance
 end
+
+PadPopup.attach(StackPopup)
