@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.0
+    Version: 1.2.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -96,8 +96,6 @@ local function applyNearest(tex)
 end
 
 local nearestUnsupported = false
-
-local smallFontHgt = -1
 
 local function statusBarFraction(item, td, playerObj)
     if td.isDrainable then
@@ -266,12 +264,9 @@ function StackRenderer.draw(ctx)
         end
     end
     if not tex then
-        if smallFontHgt < 0 then
-            smallFontHgt = getTextManager():getFontHeight(UIFont.Small)
-        end
 
-        view:drawTextCentre("?", x + CELL * 0.5, y + (CELL - smallFontHgt) * 0.5,
-            1, 1, 1, 1, UIFont.Small)
+        view:drawTextCentre("?", x + CELL * 0.5,
+            y + (CELL - Style.FONT_H) * 0.5, 1, 1, 1, 1, UIFont.Small)
     end
 
     if item then
@@ -315,11 +310,8 @@ function StackRenderer.draw(ctx)
 
         local ammoText = ammoTextFor(item, td)
         if ammoText ~= nil then
-            if smallFontHgt < 0 then
-                smallFontHgt = getTextManager():getFontHeight(UIFont.Small)
-            end
             local colors2 = Style.COLORS
-            local ty = y + CELL - smallFontHgt - 1
+            local ty = y + CELL - Style.FONT_H - 1
             local cs = colors2 and colors2.COUNT_SHADOW
             if cs then
                 local off = floor(Style.SCALE + 0.5)

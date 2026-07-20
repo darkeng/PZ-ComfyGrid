@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.0
+    Version: 1.2.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -27,8 +27,6 @@ local floor = math.floor
 local GHOST_ALPHA = 0.7
 
 local countStrings = {}
-
-local smallFontHgt = -1
 
 local lastRenderError = nil
 
@@ -133,10 +131,7 @@ local function renderImpl(self)
     end
     if not drew then
 
-        if smallFontHgt < 0 then
-            smallFontHgt = getTextManager():getFontHeight(UIFont.Small)
-        end
-        self:drawTextCentre("?", mx, floor(y + (size - smallFontHgt) * 0.5),
+        self:drawTextCentre("?", mx, floor(y + (size - Style.FONT_H) * 0.5),
             1, 1, 1, GHOST_ALPHA, UIFont.Small)
     end
 

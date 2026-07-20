@@ -1,18 +1,17 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.0
+    Version: 1.2.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/StackRenderer"
 
 local lastOverlayError = nil
-
-local smallFontHgt = -1
 
 local function overlay(self)
 
@@ -27,9 +26,9 @@ local function overlay(self)
 
     local sr = ComfyGrid.UI and ComfyGrid.UI.StackRenderer
     if sr == nil or sr.overlayInfo == nil then return end
-    if smallFontHgt < 0 then
-        smallFontHgt = getTextManager():getFontHeight(UIFont.Small)
-    end
+
+    local style = ComfyGrid.UI.Style
+    local fontHgt = style ~= nil and style.FONT_H or 16
     local slotY = self.margins + 1
     local slotH = self.slotHeight
     local slotW = self.slotWidth
@@ -54,7 +53,7 @@ local function overlay(self)
                     col.r, col.g, col.b)
             end
             if ammoText ~= nil then
-                local ty = slotY + slotH - smallFontHgt - 1
+                local ty = slotY + slotH - fontHgt - 1
                 self:drawText(ammoText, slotX + 4, ty + 1, 0, 0, 0, 1,
                     UIFont.Small)
                 self:drawText(ammoText, slotX + 3, ty, 1, 1, 1, 1,

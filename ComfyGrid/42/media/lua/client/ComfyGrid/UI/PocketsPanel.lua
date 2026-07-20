@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.0
+    Version: 1.2.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -23,7 +23,6 @@ local ContainerModel = ComfyGrid.Model.ContainerModel
 local Style = ComfyGrid.UI.Style
 local GridView = ComfyGrid.UI.GridView
 
-local SECTION_H = 15
 local SECTION_PAD = 4
 local SECTION_TEXT = { r = 0.66, g = 0.66, b = 0.72, a = 0.95 }
 local SECTION_LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.55 }
@@ -31,8 +30,13 @@ local SECTION_LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.55 }
 local GAP_X = 6
 local GAP_Y = 6
 local ACCENT_H = 2
-local LABEL_H = 13
 local LABEL_COLOR = { r = 0.62, g = 0.62, b = 0.68, a = 0.9 }
+
+local function labelHeight()
+    local h = Style.FONT_H - 3
+    if h < 10 then h = 10 end
+    return h
+end
 
 local ACCENTS = {
     { r = 0.82, g = 0.65, b = 0.38, a = 0.9 },
@@ -62,11 +66,17 @@ local function sectionInfo()
     return titleInfo
 end
 
+local metricsGen = 0
+Style.onScaleChanged(function()
+    metricsGen = metricsGen + 1
+    titleInfo = nil
+end)
+
 local lastPrerenderError = nil
 local lastRenderError = nil
 
 function PocketsPanel:new(x, y, playerNum)
-    local o = ISPanel:new(x, y, 1, SECTION_H + 1)
+    local o = ISPanel:new(x, y, 1, Style.FONT_H + 1)
     setmetatable(o, self)
     self.__index = self
     o.playerNum = playerNum
@@ -138,8 +148,10 @@ local function prerenderImpl(self)
 
     local w = self.width
     local stride = Style.CELL_STRIDE
+    local sectionH = Style.FONT_H
+    local labelH = labelHeight()
     local x = 0
-    local y = SECTION_H
+    local y = sectionH
     local lineH = 0
     for i = 1, #islands do
         local gv = islands[i].gv
@@ -155,15 +167,15 @@ local function prerenderImpl(self)
             lineH = 0
         end
 
-        local boardY = y + LABEL_H + ACCENT_H + 1
+        local boardY = y + labelH + ACCENT_H + 1
         if gv.x ~= x then gv:setX(x) end
         if gv.y ~= boardY then gv:setY(boardY) end
         x = x + gw + GAP_X
-        local hh = LABEL_H + ACCENT_H + 1 + gh
+        local hh = labelH + ACCENT_H + 1 + gh
         if hh > lineH then lineH = hh end
     end
     local h = y + lineH
-    if h < SECTION_H + 1 then h = SECTION_H + 1 end
+    if h < sectionH + 1 then h = sectionH + 1 end
     if self.height ~= h then self:setHeight(h) end
 
     local info = sectionInfo()
@@ -173,7 +185,7 @@ local function prerenderImpl(self)
     local lineX = SECTION_PAD + info.width + 6
     local lineW = self.width - SECTION_PAD - lineX
     if lineW > 0 then
-        self:drawRect(lineX, math.floor(SECTION_H / 2), lineW, 1,
+        self:drawRect(lineX, math.floor(sectionH / 2), lineW, 1,
             SECTION_LINE.a, SECTION_LINE.r, SECTION_LINE.g, SECTION_LINE.b)
     end
 end
@@ -189,13 +201,14 @@ end
 local function renderImpl(self)
     local islands = self.islands
     local font = Style.FONT
+    local labelH = labelHeight()
     local tm = getTextManager and getTextManager() or nil
     for i = 1, #islands do
         local isl = islands[i]
         local gv = isl.gv
         local gw = gv.width
         local accentY = gv.y - ACCENT_H - 1
-        local capY = accentY - LABEL_H
+        local capY = accentY - labelH
         local a = ACCENTS[(i - 1) % #ACCENTS + 1]
         self:drawRect(gv.x, accentY, gw, ACCENT_H, a.a, a.r, a.g, a.b)
         if font ~= nil then
@@ -206,8 +219,9 @@ local function renderImpl(self)
             local okM, m = pcall(isl.inv.getCapacity, isl.inv)
             if okM and type(m) == "number" then max = m end
             local key = math.floor(cur * 10 + 0.5) * 1000 + max
-            if isl.wtKey ~= key then
+            if isl.wtKey ~= key or isl.gen ~= metricsGen then
                 isl.wtKey = key
+                isl.gen = metricsGen
                 isl.wtText = fmtWeight(cur, max)
                 isl.wtW = 0
                 if tm ~= nil then

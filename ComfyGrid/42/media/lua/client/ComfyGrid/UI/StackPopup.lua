@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.0
+    Version: 1.2.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -127,7 +127,7 @@ function StackPopup:new(x, y, gridView, stack)
     o.marqueeX1, o.marqueeY1 = 0, 0
     o.marqueePressId = nil
     o.marqueeBase = nil
-    o.titleH = math.max(18, math.floor(Style.CELL / 2))
+    o.titleH = math.max(18, Style.FONT_H + 4, math.floor(Style.CELL / 2))
     return o
 end
 

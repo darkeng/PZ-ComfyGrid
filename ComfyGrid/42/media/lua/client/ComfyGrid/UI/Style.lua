@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.0
+    Version: 1.2.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -25,11 +25,17 @@ local floor = math.floor
 local MIN_SCALE = 0.5
 local MAX_SCALE = 4
 
+local MAX_EFFECTIVE = 8
+
 Style.SCALE = 1
+Style.USER_SCALE = 1
+Style.FONT_SCALE = 1
 Style.TEXTURE_SIZE = 40
 Style.PAD = 2
 Style.CELL = 45
 Style.CELL_STRIDE = 44
+
+Style.FONT_H = 16
 
 local scaleListeners = {}
 
@@ -37,30 +43,61 @@ function Style.onScaleChanged(fn)
     scaleListeners[#scaleListeners + 1] = fn
 end
 
-function Style.applyScale(s)
-    if type(s) ~= "number" then
-        s = Settings.defaults.SCALE
-    end
-    s = Util.clamp(s, MIN_SCALE, MAX_SCALE)
+local function recompute(force)
+    local eff = Util.clamp(Style.USER_SCALE * Style.FONT_SCALE,
+        MIN_SCALE, MAX_EFFECTIVE)
     local oldScale = Style.SCALE
-    local textureSize = floor(40 * s)
-    local pad = floor(2 * s)
+    local textureSize = floor(40 * eff)
+    local pad = floor(2 * eff)
     local cell = textureSize + 2 * pad + 1
 
-    if s == oldScale and cell == Style.CELL then
+    if not force and eff == oldScale and cell == Style.CELL then
         return
     end
-    Style.SCALE = s
+    Style.SCALE = eff
     Style.TEXTURE_SIZE = textureSize
     Style.PAD = pad
     Style.CELL = cell
     Style.CELL_STRIDE = cell - 1
     for i = 1, #scaleListeners do
 
-        local ok, err = pcall(scaleListeners[i], s, oldScale)
+        local ok, err = pcall(scaleListeners[i], eff, oldScale)
         if not ok then
             Log.warn("Style scale listener failed: " .. tostring(err))
         end
+    end
+end
+
+function Style.applyScale(s)
+    if type(s) ~= "number" then
+        s = Settings.defaults.SCALE
+    end
+    Style.USER_SCALE = Util.clamp(s, MIN_SCALE, MAX_SCALE)
+    recompute(false)
+end
+
+function Style.refreshFont()
+    if UIFont == nil then return end
+    local changed = false
+    local core = type(getCore) == "function" and getCore() or nil
+    if core ~= nil and core.getOptionFontSizeReal ~= nil then
+        local real = core:getOptionFontSizeReal()
+        if type(real) == "number" and real > 0
+                and real ~= Style.FONT_SCALE then
+            Style.FONT_SCALE = real
+            changed = true
+        end
+    end
+    local tm = type(getTextManager) == "function" and getTextManager() or nil
+    if tm ~= nil then
+        local h = tm:getFontHeight(UIFont.Small)
+        if type(h) == "number" and h > 0 and h ~= Style.FONT_H then
+            Style.FONT_H = h
+            changed = true
+        end
+    end
+    if changed then
+        recompute(true)
     end
 end
 
@@ -135,3 +172,14 @@ Style.applyScale(Settings.get("SCALE"))
 Settings.onChanged("SCALE", function(newValue)
     Style.applyScale(newValue)
 end)
+
+if Events ~= nil and Events.OnRenderTick ~= nil
+        and not ComfyGrid._styleFontTickHooked then
+    ComfyGrid._styleFontTickHooked = true
+    Events.OnRenderTick.Add(function()
+        local S = ComfyGrid.UI ~= nil and ComfyGrid.UI.Style or nil
+        if S ~= nil and S.refreshFont ~= nil then
+            S.refreshFont()
+        end
+    end)
+end

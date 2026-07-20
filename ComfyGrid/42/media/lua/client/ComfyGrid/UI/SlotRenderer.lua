@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.0
+    Version: 1.2.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -138,7 +138,7 @@ function SlotRenderer.drawNameChip(view, info, x, y, font)
     if info == nil or font == nil then return end
     local cell = Style.CELL
     local chipW = (info.width or 0) + 10
-    local chipH = 16
+    local chipH = Style.FONT_H + 2
     local cx = x + math.floor((cell - chipW) * 0.5)
     local cy = y + math.floor((cell - chipH) * 0.5)
     view:drawRect(cx, cy, chipW, chipH, 0.88, 0.05, 0.05, 0.06)

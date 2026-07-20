@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.0
+    Version: 1.2.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -27,7 +27,6 @@ local PocketsPanel = ComfyGrid.UI.PocketsPanel
 
 local STRIP_GAP = 2
 
-local SECTION_H = 15
 local SECTION_PAD = 4
 local SECTION_TEXT = { r = 0.66, g = 0.66, b = 0.72, a = 0.95 }
 local SECTION_LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.55 }
@@ -51,6 +50,12 @@ local function sectionInfo(key, fallback)
     return info
 end
 
+local metricsGen = 0
+Style.onScaleChanged(function()
+    metricsGen = metricsGen + 1
+    for k in pairs(sectionCache) do sectionCache[k] = nil end
+end)
+
 local function drawSection(self, info, y, rightText, rightW)
     self:drawText(info.label, SECTION_PAD, y + 1,
         SECTION_TEXT.r, SECTION_TEXT.g, SECTION_TEXT.b, SECTION_TEXT.a,
@@ -65,7 +70,7 @@ local function drawSection(self, info, y, rightText, rightW)
     local lineX = SECTION_PAD + info.width + 6
     local lineW = self.width - SECTION_PAD - lineX - rightPad
     if lineW > 0 then
-        self:drawRect(lineX, y + math.floor(SECTION_H / 2), lineW, 1,
+        self:drawRect(lineX, y + math.floor(Style.FONT_H / 2), lineW, 1,
             SECTION_LINE.a, SECTION_LINE.r, SECTION_LINE.g, SECTION_LINE.b)
     end
 end
@@ -80,7 +85,7 @@ local function fmtWeight(cur, max)
 end
 
 local function headerHeight()
-    return math.max(18, math.floor(Style.CELL / 2))
+    return math.max(18, Style.FONT_H + 4, math.floor(Style.CELL / 2))
 end
 
 local function resolveDisplayName(inventory, playerNum)
@@ -217,11 +222,12 @@ function ContainerPanel:prerender()
     local strip = self.equipStrip
     local hotbar = self.hotbarStrip
     local headerH = strip and 0 or headerHeight()
+    local sectionH = Style.FONT_H
 
     local gridTop = headerH
     local hotbarTitleY = nil
     if strip then
-        local stripY = headerH + SECTION_H
+        local stripY = headerH + sectionH
         strip:setAvailableWidth(self.width)
         if strip.x ~= 0 then strip:setX(0) end
         if strip.y ~= stripY then strip:setY(stripY) end
@@ -232,7 +238,7 @@ function ContainerPanel:prerender()
             if hotbar.x ~= 0 then hotbar:setX(0) end
             if hotbar.entryCount > 0 then
                 hotbarTitleY = gridTop
-                local hotbarY = hotbarTitleY + SECTION_H
+                local hotbarY = hotbarTitleY + sectionH
                 if hotbar.y ~= hotbarY then hotbar:setY(hotbarY) end
                 gridTop = hotbarY + hotbar.height + STRIP_GAP
             end
@@ -247,7 +253,7 @@ function ContainerPanel:prerender()
             if pocketsPanel.y ~= gridTop then pocketsPanel:setY(gridTop) end
             gridTop = gridTop + pocketsPanel.height + STRIP_GAP
         end
-        gridTop = gridTop + SECTION_H
+        gridTop = gridTop + sectionH
     end
     self._hotbarTitleY = hotbarTitleY
     local gv = self.gridView
@@ -278,8 +284,9 @@ function ContainerPanel:prerender()
         end
         if cur ~= nil and cmax ~= nil then
             local key = math.floor(cur * 10 + 0.5) * 1000 + cmax
-            if self._wtKey ~= key then
+            if self._wtKey ~= key or self._wtGen ~= metricsGen then
                 self._wtKey = key
+                self._wtGen = metricsGen
                 self._wtText = fmtWeight(cur, cmax)
                 local okW, wpx = pcall(tm.MeasureStringX, tm, UIFont.Small,
                     self._wtText)
@@ -303,8 +310,9 @@ function ContainerPanel:prerender()
         if self.headerName then
             local wtW = wtText ~= nil and ((self._wtW or 0) + 6) or 0
             local fitKey = self.width * 10000 + wtW
-            if self._nameFitKey ~= fitKey then
+            if self._nameFitKey ~= fitKey or self._nameFitGen ~= metricsGen then
                 self._nameFitKey = fitKey
+                self._nameFitGen = metricsGen
                 self._nameFit = Text.fitEllipsis(self.headerName, UIFont.Small,
                     self.width - HEADER_PAD * 2 - wtW, 60)
             end
@@ -321,7 +329,7 @@ function ContainerPanel:prerender()
         end
         if gridTop then
             drawSection(self, sectionInfo("IGUI_ComfyGrid_SectionInventory",
-                "Inventory"), gridTop - SECTION_H, wtText, self._wtW)
+                "Inventory"), gridTop - sectionH, wtText, self._wtW)
         end
     end
 end

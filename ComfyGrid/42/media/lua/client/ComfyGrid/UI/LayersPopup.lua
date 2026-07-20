@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.0
+    Version: 1.2.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -88,7 +88,7 @@ function LayersPopup:new(x, y, strip, groupKey)
         end
         node = node.parent
     end
-    o.titleH = math.max(18, math.floor(Style.CELL / 2))
+    o.titleH = math.max(18, Style.FONT_H + 4, math.floor(Style.CELL / 2))
     return o
 end
 

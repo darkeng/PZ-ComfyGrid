@@ -14,7 +14,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 - **Read indicator** — books, magazines and maps show reading progress and get a tick once fully read.
 - **Drag & drop** with positional swap, multi-select, quick-move and spring-loaded containers.
 - **Full controller support** — a cell cursor over every section, one button per action, button hints, controller stack splitting through the inspector. Steam Deck friendly.
-- **Full multiplayer support**, plus configurable interface scale, grid density and instant transfers.
+- **Full multiplayer support**, plus configurable interface scale (it also follows the game's font-size setting), grid density and instant transfers.
 - **8 languages** — English, Español, Español (AR), Français, Deutsch, Русский, 简体中文, Português (BR).
 
 Heads up: it replaces the vanilla inventory windows, so enable only one inventory-UI mod at a time (incompatible with Inventory Tetris).
