@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.1
+    Version: 1.2.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -43,6 +43,10 @@ Events.OnGameBoot.Add(function()
             if self.backpacks[i].inventory == prevInv then
                 pane.inventory = prevInv
                 pane.lastinventory = prevInv
+
+                if self.backpackChoice ~= nil then
+                    self.backpackChoice = i
+                end
 
                 og_refreshBackpacks(self)
                 return
