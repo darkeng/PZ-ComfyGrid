@@ -11,6 +11,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 - **Stack inspector** — click a stack to see every item's individual condition.
 - **Every container, one panel** — equipment, hotbar, pockets and every worn bag stack as sections; drag to equip or attach, no clicking through container tabs.
 - **Ammo counters** — guns and magazines show their rounds right on the tile, mirrored on the vanilla hotbar.
+- **Weight at a glance** — a scale-weight icon on every tile fades from faint green to blood red with the item's weight; stacks show the weight of the whole pile.
 - **Read indicator** — books, magazines and maps show reading progress and get a tick once fully read.
 - **Drag & drop** with positional swap, multi-select, quick-move and spring-loaded containers.
 - **Full controller support** — a cell cursor over every section, one button per action, button hints, controller stack splitting through the inspector. Steam Deck friendly.

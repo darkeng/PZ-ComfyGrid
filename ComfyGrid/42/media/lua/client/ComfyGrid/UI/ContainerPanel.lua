@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.2
+    Version: 1.3.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -28,8 +28,14 @@ local PocketsPanel = ComfyGrid.UI.PocketsPanel
 local STRIP_GAP = 2
 
 local SECTION_PAD = 4
-local SECTION_TEXT = { r = 0.66, g = 0.66, b = 0.72, a = 0.95 }
-local SECTION_LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.55 }
+
+local _surf = Style.COLORS and Style.COLORS.SURFACE
+local SECTION_TEXT = _surf
+    and { r = _surf.accent.r, g = _surf.accent.g, b = _surf.accent.b, a = 0.92 }
+    or { r = 0.66, g = 0.66, b = 0.72, a = 0.95 }
+local SECTION_LINE = _surf
+    and { r = _surf.line.r, g = _surf.line.g, b = _surf.line.b, a = 0.60 }
+    or { r = 0.45, g = 0.45, b = 0.50, a = 0.55 }
 
 local Text = ComfyGrid.Core.Text
 
@@ -75,7 +81,6 @@ local function drawSection(self, info, y, rightText, rightW)
     end
 end
 
-local HEADER_BG_R, HEADER_BG_G, HEADER_BG_B, HEADER_BG_A = 0.09, 0.09, 0.11, 0.85
 local HEADER_PAD = 4
 
 local function fmtWeight(cur, max)
@@ -298,15 +303,14 @@ function ContainerPanel:prerender()
     end
     if not strip then
 
-        self:drawRect(0, 0, self.width, headerH, HEADER_BG_A, HEADER_BG_R,
-            HEADER_BG_G, HEADER_BG_B)
-
         local fontHgt = tm:getFontHeight(UIFont.Small)
         local textY = math.floor((headerH - fontHgt) / 2)
         if wtText ~= nil then
             self:drawTextRight(wtText, self.width - HEADER_PAD, textY,
-                1, 1, 1, 1, UIFont.Small)
+                SECTION_TEXT.r, SECTION_TEXT.g, SECTION_TEXT.b,
+                SECTION_TEXT.a, UIFont.Small)
         end
+        local nameW = 0
         if self.headerName then
             local wtW = wtText ~= nil and ((self._wtW or 0) + 6) or 0
             local fitKey = self.width * 10000 + wtW
@@ -315,9 +319,22 @@ function ContainerPanel:prerender()
                 self._nameFitGen = metricsGen
                 self._nameFit = Text.fitEllipsis(self.headerName, UIFont.Small,
                     self.width - HEADER_PAD * 2 - wtW, 60)
+                local okW, npx = pcall(tm.MeasureStringX, tm, UIFont.Small,
+                    self._nameFit)
+                self._nameFitW = okW and npx or 0
             end
             self:drawText(self._nameFit, HEADER_PAD, textY,
-                1, 1, 1, 1, UIFont.Small)
+                SECTION_TEXT.r, SECTION_TEXT.g, SECTION_TEXT.b,
+                SECTION_TEXT.a, UIFont.Small)
+            nameW = self._nameFitW or 0
+        end
+        local lineX = HEADER_PAD + nameW + 6
+        local lineW = self.width - HEADER_PAD - lineX
+            - (wtText ~= nil and ((self._wtW or 0) + 6) or 0)
+        if lineW > 0 then
+            self:drawRect(lineX, textY + math.floor(fontHgt / 2), lineW, 1,
+                SECTION_LINE.a, SECTION_LINE.r, SECTION_LINE.g,
+                SECTION_LINE.b)
         end
     else
 

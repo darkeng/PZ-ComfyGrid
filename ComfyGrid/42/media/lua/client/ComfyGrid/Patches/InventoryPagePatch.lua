@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.2
+    Version: 1.3.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -52,6 +52,34 @@ Events.OnGameBoot.Add(function()
                 return
             end
         end
+    end
+
+    local og_pagePrerender = ISInventoryPage.prerender
+    function ISInventoryPage:prerender()
+        local pane = self.inventoryPane
+        if pane ~= nil and pane.mode == "comfy" then
+            local UI = ComfyGrid.UI
+            local Draw = UI ~= nil and UI.Draw or nil
+            local colors = UI ~= nil and UI.Style ~= nil
+                and UI.Style.COLORS or nil
+            local sf = colors ~= nil and colors.SURFACE or nil
+            if Draw ~= nil and sf ~= nil then
+                if not self._comfyChrome then
+                    self._comfyChrome = true
+                    local ba = self.backgroundColor
+                        and self.backgroundColor.a or 0.8
+                    local bo = self.borderColor and self.borderColor.a or 0.85
+                    self.backgroundColor =
+                        { r = sf.bg.r, g = sf.bg.g, b = sf.bg.b, a = ba }
+                    self.borderColor =
+                        { r = sf.line.r, g = sf.line.g, b = sf.line.b, a = bo }
+                end
+                if not self.isCollapsed then
+                    Draw.shadow(self, 0, 0, self.width, self.height, 12, 0.45)
+                end
+            end
+        end
+        og_pagePrerender(self)
     end
 
     local function padModule(page, name)

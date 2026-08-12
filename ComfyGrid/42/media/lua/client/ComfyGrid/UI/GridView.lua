@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.2
+    Version: 1.3.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -46,7 +46,7 @@ local DEFAULT_BG = { r = 0.09, g = 0.09, b = 0.11, a = 0.85 }
 
 local DRAG_SOURCE_WASH_ALPHA = 0.6
 
-local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0 }
+local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0, inventory = false }
 
 local lastPrerenderError = nil
 local lastRenderError = nil
@@ -300,6 +300,7 @@ local function renderAll(self)
     local stacks = grid.data.stacks
     ctx.view = self
     ctx.playerNum = self.playerNum
+    ctx.inventory = inventory
 
     local draggedStack = nil
     local washR, washG, washB = 0, 0, 0
@@ -378,8 +379,38 @@ local function renderAll(self)
     end
 
     local hoverSlot = self.hoverSlot
-    if hoverSlot ~= nil and hoverSlot >= 0 and hoverSlot < cols * rows
-            and self:isMouseOver() then
+    if hoverSlot ~= nil and (hoverSlot < 0 or hoverSlot >= cols * rows
+            or not self:isMouseOver()) then
+        hoverSlot = nil
+    end
+    local Draw = ComfyGrid.UI.Draw
+    if Draw ~= nil then
+        local ht = self.hoverT
+        if ht == nil then
+            ht = {}
+            self.hoverT = ht
+        end
+        if hoverSlot ~= nil and ht[hoverSlot] == nil then
+            ht[hoverSlot] = 0
+        end
+        for slot, heat in pairs(ht) do
+            heat = Draw.glide(heat, slot == hoverSlot and 1 or 0, 0.45)
+            if heat <= 0 then
+                ht[slot] = nil
+            else
+                ht[slot] = heat
+                if slot < cols * rows then
+                    local hx, hy = pixelForSlot(slot, cols)
+                    ctx.stack = grid:stackAt(slot)
+                    ctx.item = nil
+                    ctx.slot = slot
+                    ctx.x = hx
+                    ctx.y = hy
+                    SlotRenderer.drawHover(ctx, heat)
+                end
+            end
+        end
+    elseif hoverSlot ~= nil then
         local hx, hy = pixelForSlot(hoverSlot, cols)
         ctx.stack = grid:stackAt(hoverSlot)
         ctx.item = nil

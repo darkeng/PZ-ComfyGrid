@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.2
+    Version: 1.3.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -48,17 +48,18 @@ function SlotRenderer.drawCell(ctx, tint)
     end
 end
 
-function SlotRenderer.drawHover(ctx)
+function SlotRenderer.drawHover(ctx, alphaMul)
     local cell = Style.CELL
     local colors = Style.COLORS
     local c = (colors and colors.HOVER) or FALLBACK_HOVER
+    local a = (c.a or FALLBACK_HOVER.a) * (alphaMul or 1)
     local tex = tileTexture()
     if tex ~= nil then
         ctx.view:drawTextureScaled(tex, ctx.x + 1, ctx.y + 1,
-            cell - 2, cell - 2, c.a or FALLBACK_HOVER.a, c.r, c.g, c.b)
+            cell - 2, cell - 2, a, c.r, c.g, c.b)
     else
         ctx.view:drawRect(ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
-            c.a or FALLBACK_HOVER.a, c.r, c.g, c.b)
+            a, c.r, c.g, c.b)
     end
 end
 

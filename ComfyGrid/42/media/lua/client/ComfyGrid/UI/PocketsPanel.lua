@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.2
+    Version: 1.3.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -24,8 +24,14 @@ local Style = ComfyGrid.UI.Style
 local GridView = ComfyGrid.UI.GridView
 
 local SECTION_PAD = 4
-local SECTION_TEXT = { r = 0.66, g = 0.66, b = 0.72, a = 0.95 }
-local SECTION_LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.55 }
+
+local _surf = Style.COLORS and Style.COLORS.SURFACE
+local SECTION_TEXT = _surf
+    and { r = _surf.accent.r, g = _surf.accent.g, b = _surf.accent.b, a = 0.92 }
+    or { r = 0.66, g = 0.66, b = 0.72, a = 0.95 }
+local SECTION_LINE = _surf
+    and { r = _surf.line.r, g = _surf.line.g, b = _surf.line.b, a = 0.60 }
+    or { r = 0.45, g = 0.45, b = 0.50, a = 0.55 }
 
 local GAP_X = 6
 local GAP_Y = 6
@@ -177,6 +183,21 @@ local function prerenderImpl(self)
     local h = y + lineH
     if h < sectionH + 1 then h = sectionH + 1 end
     if self.height ~= h then self:setHeight(h) end
+
+    local Draw = ComfyGrid.UI.Draw
+    local surf = Style.COLORS and Style.COLORS.SURFACE
+    if Draw ~= nil and surf ~= nil then
+        local labelHp = labelHeight()
+        for i = 1, #islands do
+            local gv = islands[i].gv
+            local px = gv.x - 3
+            local py = gv.y - ACCENT_H - 1 - labelHp - 2
+            local pw = gv.width + 6
+            local ph = labelHp + ACCENT_H + 1 + gv.height + 5
+            Draw.roundFrame(self, px, py, pw, ph, 6, 0.45, surf.line,
+                surf.panel, 0.55)
+        end
+    end
 
     local info = sectionInfo()
     self:drawText(info.label, SECTION_PAD, 1,

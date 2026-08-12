@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.2
+    Version: 1.3.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -49,6 +49,128 @@ do
             b = a.b + (b.b - a.b) * f,
         }
     end
+end
+
+local WEIGHT_MIN_ALPHA = 0.08
+
+local WEIGHT_RED_AT = 40.0
+local WEIGHT_CARRY_MAX = 7.0
+local WEIGHT_KNEE_FRAC = 0.78
+local WEIGHT_LOG_K = 0.6
+local WEIGHT_LOG_DEN = math.log(1 + WEIGHT_CARRY_MAX * WEIGHT_LOG_K)
+
+local WEIGHT_COLORS = {}
+do
+    local colors = Style.COLORS
+    local low = (colors and colors.WEIGHT_LOW) or { r = 0.45, g = 0.80, b = 0.40 }
+    local mid = (colors and colors.WEIGHT_MID) or { r = 0.90, g = 0.72, b = 0.30 }
+    local deep = (colors and colors.WEIGHT_DEEP) or { r = 0.64, g = 0.10, b = 0.09 }
+    local high = (colors and colors.WEIGHT_HIGH) or { r = 1.00, g = 0.17, b = 0.12 }
+    local surf = colors and colors.SURFACE
+    local dark = (surf and surf.card) or { r = 0.148, g = 0.135, b = 0.116 }
+    for i = 0, 100 do
+        local t = i / 100
+        local a, b, f
+        if t <= 0.5 then
+            a, b, f = low, mid, t * 2
+        elseif t <= WEIGHT_KNEE_FRAC then
+            a, b, f = mid, deep, (t - 0.5) / (WEIGHT_KNEE_FRAC - 0.5)
+        else
+            a, b, f = deep, high, (t - WEIGHT_KNEE_FRAC) / (1 - WEIGHT_KNEE_FRAC)
+        end
+        local cr = a.r + (b.r - a.r) * f
+        local cg = a.g + (b.g - a.g) * f
+        local cb = a.b + (b.b - a.b) * f
+
+        local pt = t * 1.6
+        if pt > 1 then pt = 1 end
+        local pres = WEIGHT_MIN_ALPHA + (1 - WEIGHT_MIN_ALPHA) * pt
+        local lp = 0.65 * pres
+        WEIGHT_COLORS[i] = {
+            r = dark.r + (cr - dark.r) * pres,
+            g = dark.g + (cg - dark.g) * pres,
+            b = dark.b + (cb - dark.b) * pres,
+            lr = dark.r + (1 - dark.r) * lp,
+            lg = dark.g + (1 - dark.g) * lp,
+            lb = dark.b + (1 - dark.b) * lp,
+        }
+    end
+end
+
+local weightTex = nil
+local weightTexMissing = false
+local function weightTexture()
+    if weightTex == nil and not weightTexMissing then
+        weightTex = getTexture and getTexture("media/textures/comfy_weight.png") or nil
+        if weightTex == nil then weightTexMissing = true end
+    end
+    return weightTex
+end
+
+local weightLineTex = nil
+local weightLineTexMissing = false
+local function weightLineTexture()
+    if weightLineTex == nil and not weightLineTexMissing then
+        weightLineTex = getTexture and getTexture("media/textures/comfy_weight_line.png") or nil
+        if weightLineTex == nil then weightLineTexMissing = true end
+    end
+    return weightLineTex
+end
+
+local ammoWidths = {}
+
+local stackWeights = {}
+local stackWeightEntries = 0
+local MAX_WEIGHT_ENTRIES = 512
+
+local function totalStackWeight(stack, inventory)
+    local entry = stackWeights[stack]
+    if entry ~= nil and entry.count == stack.count then
+        return entry.total
+    end
+    local total = 0
+    for id in pairs(stack.itemIDs) do
+        local item = inventory:getItemWithID(id)
+
+        if item ~= nil then
+
+            total = total + item:getUnequippedWeight()
+        end
+    end
+    if entry == nil then
+        if stackWeightEntries >= MAX_WEIGHT_ENTRIES then
+            stackWeights = {}
+            stackWeightEntries = 0
+        end
+        entry = {}
+        stackWeights[stack] = entry
+        stackWeightEntries = stackWeightEntries + 1
+    end
+    entry.count = stack.count
+    entry.total = total
+    return total
+end
+
+function StackRenderer.weightColor(weight)
+    if weight < 0 then weight = 0 end
+    local frac
+    if weight <= WEIGHT_CARRY_MAX then
+        frac = WEIGHT_KNEE_FRAC
+            * math.log(1 + weight * WEIGHT_LOG_K) / WEIGHT_LOG_DEN
+    else
+        frac = WEIGHT_KNEE_FRAC + (1 - WEIGHT_KNEE_FRAC)
+            * (weight - WEIGHT_CARRY_MAX) / (WEIGHT_RED_AT - WEIGHT_CARRY_MAX)
+        if frac > 1 then frac = 1 end
+    end
+    return WEIGHT_COLORS[floor(frac * 100 + 0.5)]
+end
+
+function StackRenderer.weightTexture()
+    return weightTexture()
+end
+
+function StackRenderer.weightLineTexture()
+    return weightLineTexture()
 end
 
 local typeData = {}
@@ -225,6 +347,8 @@ function StackRenderer.draw(ctx)
 
     local tex = item and item:getTex() or nil
     local bulky = false
+
+    local aw = nil
     if tex then
         local texW = tex:getWidth()
         local texH = tex:getHeight()
@@ -236,7 +360,7 @@ function StackRenderer.draw(ctx)
             local drawH = texH * correctiveScale
 
             local wmul = 0.92
-            local aw = item.getActualWeight and item:getActualWeight() or nil
+            aw = item.getActualWeight and item:getActualWeight() or nil
             if type(aw) == "number" then
                 if aw <= 0.4 then
                     wmul = 0.72
@@ -308,23 +432,72 @@ function StackRenderer.draw(ctx)
             end
         end
 
-        local ammoText = ammoTextFor(item, td)
-        if ammoText ~= nil then
-            local colors2 = Style.COLORS
-            local ty = y + CELL - Style.FONT_H - 1
-            local cs = colors2 and colors2.COUNT_SHADOW
-            if cs then
-                local off = floor(Style.SCALE + 0.5)
-                if off < 1 then off = 1 end
-                view:drawText(ammoText, x + 3 + off, ty + off,
-                    cs.r, cs.g, cs.b, cs.a or 1, UIFont.Small)
-            end
-            local ct = (colors2 and colors2.COUNT_TEXT) or FALLBACK_COUNT_TEXT
-            view:drawText(ammoText, x + 3, ty, ct.r, ct.g, ct.b, ct.a or 1,
-                UIFont.Small)
+        local weightIcon = nil
+        if not ctx.skipWeightMark then
+            weightIcon = weightTexture()
         end
 
-        if bulky and ammoText == nil then
+        local markRight = x + 2
+        if weightIcon ~= nil then
+            local total
+
+            if stack.count and stack.count > 1 and ctx.inventory
+                    and stack.itemIDs ~= nil then
+                total = totalStackWeight(stack, ctx.inventory)
+            else
+                if aw == nil and item.getActualWeight then
+                    aw = item:getActualWeight()
+                end
+                total = aw
+            end
+            if type(total) == "number" then
+                local wc = StackRenderer.weightColor(total)
+
+                local wsz = floor(8 * Style.SCALE + 0.5)
+                local wx, wy = x + 3, y + CELL - wsz - 3
+                local line = weightLineTexture()
+                if line ~= nil then
+                    view:drawTextureScaled(line, wx, wy, wsz, wsz, 1,
+                        wc.lr, wc.lg, wc.lb)
+                end
+                view:drawTextureScaled(weightIcon, wx, wy, wsz, wsz, 1,
+                    wc.r, wc.g, wc.b)
+                markRight = wx + wsz + 2
+            end
+        end
+
+        local ammoText = ammoTextFor(item, td)
+        if ammoText ~= nil then
+            local fh = Style.FONT_H
+            local byFont = ammoWidths[fh]
+            if byFont == nil then
+                byFont = {}
+                ammoWidths[fh] = byFont
+            end
+            local tw = byFont[ammoText]
+            if tw == nil then
+                tw = getTextManager():MeasureStringX(UIFont.Small, ammoText)
+                byFont[ammoText] = tw
+            end
+            local ax = x + CELL - 9 - tw
+
+            if ax >= markRight then
+                local colors2 = Style.COLORS
+                local ty = y + CELL - fh - 1
+                local cs = colors2 and colors2.COUNT_SHADOW
+                if cs then
+                    local off = floor(Style.SCALE + 0.5)
+                    if off < 1 then off = 1 end
+                    view:drawText(ammoText, ax + off, ty + off,
+                        cs.r, cs.g, cs.b, cs.a or 1, UIFont.Small)
+                end
+                local ct = (colors2 and colors2.COUNT_TEXT) or FALLBACK_COUNT_TEXT
+                view:drawText(ammoText, ax, ty, ct.r, ct.g, ct.b, ct.a or 1,
+                    UIFont.Small)
+            end
+        end
+
+        if bulky and weightIcon == nil and not ctx.skipWeightMark then
             local mb = y + CELL - 3
             view:drawRect(x + 3, mb - 2, 7, 2, 0.9, 0.82, 0.65, 0.38)
             view:drawRect(x + 3, mb - 4, 5, 2, 0.9, 0.82, 0.65, 0.38)

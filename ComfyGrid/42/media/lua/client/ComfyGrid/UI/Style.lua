@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.2
+    Version: 1.3.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -129,6 +129,16 @@ end
 
 Style.COLORS = {
 
+    SURFACE = {
+        dark   = { r = 0.055, g = 0.050, b = 0.042 },
+        bg     = { r = 0.082, g = 0.074, b = 0.062 },
+        panel  = { r = 0.110, g = 0.100, b = 0.085 },
+        card   = { r = 0.148, g = 0.135, b = 0.116 },
+        cardHi = { r = 0.190, g = 0.174, b = 0.150 },
+        line   = { r = 0.44,  g = 0.39,  b = 0.29 },
+        accent = { r = 0.85,  g = 0.74,  b = 0.51 },
+    },
+
     BOARD_BG   = { r = 0.082, g = 0.074, b = 0.062, a = 0.95 },
     GRID_LINES = { r = 0.30, g = 0.30, b = 0.33, a = 1.0 },
     EMPTY_CELL = { r = 0.148, g = 0.135, b = 0.116, a = 1.0 },
@@ -141,6 +151,11 @@ Style.COLORS = {
     BAR_LOW  = { r = 0.80, g = 0.18, b = 0.12, a = 1.0 },
     BAR_MID  = { r = 0.85, g = 0.75, b = 0.10, a = 1.0 },
     BAR_HIGH = { r = 0.20, g = 0.80, b = 0.75, a = 1.0 },
+
+    WEIGHT_LOW  = { r = 0.45, g = 0.80, b = 0.40, a = 1.0 },
+    WEIGHT_MID  = { r = 0.93, g = 0.56, b = 0.20, a = 1.0 },
+    WEIGHT_DEEP = { r = 0.64, g = 0.10, b = 0.09, a = 1.0 },
+    WEIGHT_HIGH = { r = 1.00, g = 0.17, b = 0.12, a = 1.0 },
 
     DROP_OK  = { r = 0.20, g = 0.75, b = 0.25, a = 0.35 },
     DROP_BAD = { r = 0.80, g = 0.15, b = 0.15, a = 0.35 },

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.2
+    Version: 1.3.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -53,7 +53,7 @@ local DEFAULT_TEXT = { r = 0.9, g = 0.9, b = 0.9, a = 1 }
 
 local CHROME = { r = 0.44, g = 0.39, b = 0.29, a = 0.8 }
 
-local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0 }
+local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0, skipWeightMark = true }
 
 local lastPrerenderError = nil
 local lastRenderError = nil
@@ -258,6 +258,20 @@ local function prerenderImpl(self)
         self:close()
         return
     end
+
+    local Draw = ComfyGrid.UI.Draw
+    if Draw ~= nil then
+        local rem = self._comfySlide
+        if rem == nil then
+            rem = math.floor(10 * Style.SCALE + 0.5)
+            self._comfySlide = rem
+            self:setY(self:getY() + rem)
+        elseif rem > 0 then
+            local nr = Draw.glide(rem, 0, 0.35)
+            self:setY(self:getY() - (rem - nr))
+            self._comfySlide = nr
+        end
+    end
     syncSelection(self, stack)
 
     local cc = self.model.grid.changeCount
@@ -289,9 +303,17 @@ local function renderImpl(self)
     local bg = colors and colors.BOARD_BG or DEFAULT_BG
     local text = colors and colors.COUNT_TEXT or DEFAULT_TEXT
 
-    self:drawRect(0, 0, w, h, math.min(1, (bg.a or 1) + 0.12),
-        bg.r or 0, bg.g or 0, bg.b or 0)
-    self:drawRectBorder(0, 0, w, h, CHROME.a, CHROME.r, CHROME.g, CHROME.b)
+    local Draw = ComfyGrid.UI.Draw
+    local sf = colors and colors.SURFACE
+    local bgA = math.min(1, (bg.a or 1) + 0.12)
+    if Draw ~= nil and sf ~= nil then
+        local r = math.max(4, math.floor(8 * Style.SCALE + 0.5))
+        Draw.shadow(self, 0, 0, w, h, math.floor(10 * Style.SCALE + 0.5), 0.5)
+        Draw.roundFrame(self, 0, 0, w, h, r, CHROME.a, sf.line, bg, bgA)
+    else
+        self:drawRect(0, 0, w, h, bgA, bg.r or 0, bg.g or 0, bg.b or 0)
+        self:drawRectBorder(0, 0, w, h, CHROME.a, CHROME.r, CHROME.g, CHROME.b)
+    end
 
     local stack = resolveStack(self)
     if stack == nil then return end
@@ -302,13 +324,37 @@ local function renderImpl(self)
     local title = (front ~= nil and front:getName() or self.itemType)
         .. " x" .. tostring(stack.count)
     if font ~= nil then
-        self:drawText(title, PAD_X + 2, 3, text.r, text.g, text.b,
+
+        local titleY = math.floor((self.titleH - 1 - Style.FONT_H) * 0.5)
+        if titleY < 2 then titleY = 2 end
+        self:drawText(title, PAD_X + 2, titleY, text.r, text.g, text.b,
             text.a or 1, font)
-        self:drawTextRight("X", w - 6, 3, text.r, text.g, text.b,
-            text.a or 1, font)
+
+        local closeTex = Draw ~= nil and Draw.closeTexture ~= nil
+            and Draw.closeTexture() or nil
+        if closeTex ~= nil and sf ~= nil then
+            local chip = math.max(14, math.floor(Style.FONT_H * 0.9 + 0.5))
+            local cxr = w - 6 - chip
+            local cyr = math.floor((self.titleH - 1 - chip) * 0.5)
+            Draw.disc(self, cxr, cyr, chip, 1, sf.line)
+            Draw.disc(self, cxr + 1, cyr + 1, chip - 2, 1, sf.card)
+            local csz = math.floor(chip * 0.55 + 0.5)
+            local coff = math.floor((chip - csz) * 0.5)
+            self:drawTextureScaled(closeTex, cxr + coff, cyr + coff,
+                csz, csz, 0.9, text.r, text.g, text.b)
+        else
+            self:drawTextRight("X", w - 8, titleY, text.r, text.g, text.b,
+                text.a or 1, font)
+        end
     end
-    self:drawRect(0, self.titleH - 1, w, 1, CHROME.a, CHROME.r, CHROME.g,
-        CHROME.b)
+    if Draw ~= nil and sf ~= nil then
+
+        Draw.headerLine(self, 1, self.titleH - 1, w - 2,
+            math.floor(10 * Style.SCALE + 0.5), colors)
+    else
+        self:drawRect(0, self.titleH - 1, w, 1, CHROME.a, CHROME.r, CHROME.g,
+            CHROME.b)
+    end
 
     local bx, by = boardOrigin(self)
     local cols = self.cols
@@ -665,7 +711,9 @@ local function mouseUpImpl(self, x, y)
         end
 
         if not self.dragDidStart and y < self.titleH
-                and x > self.width - 20 then
+                and x > self.width
+                    - (math.max(14, math.floor(Style.FONT_H * 0.9 + 0.5))
+                        + 12) then
             self:close()
         end
     end

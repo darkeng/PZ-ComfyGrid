@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.2.2
+    Version: 1.3.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -12,6 +12,8 @@ require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/StackRenderer"
 
 local lastOverlayError = nil
+
+local ammoWidths = {}
 
 local function overlay(self)
 
@@ -52,12 +54,30 @@ local function overlay(self)
                 self:drawRect(bx + 1, by + barH - 1, 1, 1, 1,
                     col.r, col.g, col.b)
             end
+
+            local markRight = slotX + 2
+
             if ammoText ~= nil then
-                local ty = slotY + slotH - fontHgt - 1
-                self:drawText(ammoText, slotX + 4, ty + 1, 0, 0, 0, 1,
-                    UIFont.Small)
-                self:drawText(ammoText, slotX + 3, ty, 1, 1, 1, 1,
-                    UIFont.Small)
+                local byFont = ammoWidths[fontHgt]
+                if byFont == nil then
+                    byFont = {}
+                    ammoWidths[fontHgt] = byFont
+                end
+                local tw = byFont[ammoText]
+                if tw == nil then
+                    tw = getTextManager():MeasureStringX(UIFont.Small,
+                        ammoText)
+                    byFont[ammoText] = tw
+                end
+                local ax = slotX + slotW - 9 - tw
+
+                if ax >= markRight then
+                    local ty = slotY + slotH - fontHgt - 1
+                    self:drawText(ammoText, ax + 1, ty + 1, 0, 0, 0, 1,
+                        UIFont.Small)
+                    self:drawText(ammoText, ax, ty, 1, 1, 1, 1,
+                        UIFont.Small)
+                end
             end
         end
         slotX = slotX + slotW + self.slotPad
