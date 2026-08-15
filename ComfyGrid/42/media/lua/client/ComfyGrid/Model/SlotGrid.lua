@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.0
+    Version: 1.3.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -46,8 +46,14 @@ local function getHotbar(playerNum)
     return nil
 end
 
-local function isItemExcluded(item, hotbar)
-    if item:isEquipped() or item:isHidden() then
+local function isItemExcluded(item, hotbar, excludeEquipped)
+    if item:isHidden() then
+        return true
+    end
+    if not excludeEquipped then
+        return false
+    end
+    if item:isEquipped() then
         return true
     end
     if hotbar then
@@ -57,6 +63,13 @@ local function isItemExcluded(item, hotbar)
         end
     end
     return false
+end
+
+local function isOwnMainInventory(self)
+    if self.playerNum == nil then return false end
+    local ok, player = pcall(getSpecificPlayer, self.playerNum)
+    if not ok or player == nil then return false end
+    return player:getInventory() == self.inventory
 end
 
 function SlotGrid:new(inventory, persistentGridData, playerNum)
@@ -327,7 +340,9 @@ end
 function SlotGrid:validate()
     local stacks = self.data.stacks
     local inventory = self.inventory
-    local hotbar = getHotbar(self.playerNum)
+
+    local excludeEquipped = isOwnMainInventory(self)
+    local hotbar = excludeEquipped and getHotbar(self.playerNum) or nil
     local seen = scratchSeen
     local migrated = scratchMigrated
     wipe(seen)
@@ -352,7 +367,8 @@ function SlotGrid:validate()
                     drop = true
                 else
                     local item = inventory:getItemWithID(id)
-                    if item == nil or isItemExcluded(item, hotbar) then
+                    if item == nil
+                            or isItemExcluded(item, hotbar, excludeEquipped) then
                         drop = true
                     elseif StackRules.bucketOf(item) ~= stack.bucket then
                         drop = true
@@ -426,7 +442,8 @@ function SlotGrid:reconcile()
         end
     end
 
-    local hotbar = getHotbar(self.playerNum)
+    local excludeEquipped = isOwnMainInventory(self)
+    local hotbar = excludeEquipped and getHotbar(self.playerNum) or nil
     local inserted = 0
     local failed = 0
     local nowMs = claims ~= nil and getTimestampMs() or 0
@@ -447,7 +464,7 @@ function SlotGrid:reconcile()
 
         if item ~= nil and instanceof(item, "InventoryItem")
                 and not positioned[item:getID()]
-                and not isItemExcluded(item, hotbar) then
+                and not isItemExcluded(item, hotbar, excludeEquipped) then
             if inserted >= MAX_RECONCILE_INSERTS then
                 self.needsMoreReconcile = true
                 break

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.0
+    Version: 1.3.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -54,7 +54,9 @@ function Transfer.moveItems(items, destInventory, playerObj, destSlot)
                 and not (item:isFavorite()
                     and not destInventory:isInCharacterInventory(playerObj)) then
 
-            releaseFromCharacter(item, playerObj, playerNum)
+            if src:isInCharacterInventory(playerObj) then
+                releaseFromCharacter(item, playerObj, playerNum)
+            end
             local group = groups[src]
             if group == nil then
                 group = {}
@@ -156,7 +158,9 @@ function Transfer.moveStacksOrdered(stacks, destInventory, playerObj, slots, src
             if src ~= nil and src ~= destInventory
                     and not destInventory:isInside(item)
                     and not (item:isFavorite()
-                        and not destInventory:isInCharacterInventory(playerObj)) then
+                        and not destInventory:isInCharacterInventory(playerObj))
+
+                    and src:isInCharacterInventory(playerObj) then
                 releaseFromCharacter(item, playerObj, playerNum)
             end
         end
