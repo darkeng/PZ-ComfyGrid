@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -32,7 +32,7 @@ local function releaseFromCharacter(item, playerObj, playerNum)
     end
 end
 
-function Transfer.moveItems(items, destInventory, playerObj, destSlot)
+function Transfer.moveItems(items, destInventory, playerObj, destSlot, skipRelease)
     if not items or #items == 0 or not destInventory or not playerObj then
         return 0
     end
@@ -54,7 +54,7 @@ function Transfer.moveItems(items, destInventory, playerObj, destSlot)
                 and not (item:isFavorite()
                     and not destInventory:isInCharacterInventory(playerObj)) then
 
-            if src:isInCharacterInventory(playerObj) then
+            if not skipRelease and src:isInCharacterInventory(playerObj) then
                 releaseFromCharacter(item, playerObj, playerNum)
             end
             local group = groups[src]

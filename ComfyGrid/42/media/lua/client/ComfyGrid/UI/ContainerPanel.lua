@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -201,6 +201,7 @@ end
 function ContainerPanel:_buildGridView()
     if not self.model then return end
     local gv = GridView:new(0, headerHeight(), self.model, self.playerNum)
+    gv.compactEligible = true
     gv:initialise()
     self:addChild(gv)
     self.gridView = gv

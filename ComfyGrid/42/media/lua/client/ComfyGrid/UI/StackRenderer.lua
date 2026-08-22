@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -353,11 +353,6 @@ function StackRenderer.draw(ctx)
         local texW = tex:getWidth()
         local texH = tex:getHeight()
         if texW and texH and texW > 0 and texH > 0 then
-            local largest = texW
-            if texH > texW then largest = texH end
-            local correctiveScale = TEXTURE_SIZE / largest
-            local drawW = texW * correctiveScale
-            local drawH = texH * correctiveScale
 
             local wmul = 0.92
             aw = item.getActualWeight and item:getActualWeight() or nil
@@ -369,8 +364,7 @@ function StackRenderer.draw(ctx)
                     bulky = true
                 end
             end
-            drawW = drawW * wmul
-            drawH = drawH * wmul
+            local box = TEXTURE_SIZE * wmul
             if not nearestUnsupported then
 
                 if not pcall(applyNearest, tex) then
@@ -379,10 +373,10 @@ function StackRenderer.draw(ctx)
                 end
             end
 
-            view:drawTextureScaled(tex,
-                x + 1 + PAD + (TEXTURE_SIZE - drawW) * 0.5,
-                y + 1 + PAD + (TEXTURE_SIZE - drawH) * 0.5,
-                drawW, drawH, 1, 1, 1, 1)
+            view:drawItemIcon(item,
+                x + 1 + PAD + (TEXTURE_SIZE - box) * 0.5,
+                y + 1 + PAD + (TEXTURE_SIZE - box) * 0.5,
+                1, box, box)
         else
             tex = nil
         end

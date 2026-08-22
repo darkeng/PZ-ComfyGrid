@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -162,8 +162,8 @@ function PadCarry.renderAt(view, px, py)
     local tex = o.renderItem:getTex()
     if tex == nil then return end
     local cell = Style.CELL or 45
-    view:drawTextureScaledAspect(tex, px + 3, py + 3, cell - 6, cell - 6,
-        0.85, 1, 1, 1)
+
+    view:drawItemIcon(o.renderItem, px + 3, py + 3, 0.85, cell - 6, cell - 6)
 end
 
 return PadCarry

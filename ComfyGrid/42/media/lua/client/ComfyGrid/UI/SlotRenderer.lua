@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -82,6 +82,47 @@ function SlotRenderer.drawSelection(view, x, y)
         view:drawRect(x + 1, y + 3, 2, cell - 6, a, c.r, c.g, c.b)
         view:drawRect(x + cell - 3, y + 3, 2, cell - 6, a, c.r, c.g, c.b)
     end
+end
+
+local FALLBACK_APPLY = { r = 0.42, g = 0.92, b = 0.50, a = 0.90 }
+local APPLY_RING = 2
+local APPLY_CLIP = 3
+
+function SlotRenderer.drawApplyHint(ctx, pulse)
+    local cell = Style.CELL
+    local colors = Style.COLORS
+    local c = (colors and colors.APPLY) or FALLBACK_APPLY
+    local view = ctx.view
+    local x, y = ctx.x, ctx.y
+    local p = pulse or 1
+    local tex = tileTexture()
+    local wash = 0.14 + 0.16 * p
+    if tex ~= nil then
+        view:drawTextureScaled(tex, x + 1, y + 1, cell - 2, cell - 2,
+            wash, c.r, c.g, c.b)
+    else
+        view:drawRect(x + 1, y + 1, cell - 2, cell - 2, wash, c.r, c.g, c.b)
+    end
+    local a = 0.55 + 0.40 * p
+    local t = APPLY_RING
+    local k = APPLY_CLIP
+    local span = cell - 2 - 2 * k
+    if span <= 0 then return end
+    view:drawRect(x + 1 + k, y + 1, span, t, a, c.r, c.g, c.b)
+    view:drawRect(x + 1 + k, y + cell - 1 - t, span, t, a, c.r, c.g, c.b)
+    view:drawRect(x + 1, y + 1 + k, t, span, a, c.r, c.g, c.b)
+    view:drawRect(x + cell - 1 - t, y + 1 + k, t, span, a, c.r, c.g, c.b)
+end
+
+local pulseUnsupported = false
+function SlotRenderer.applyPulse()
+    if pulseUnsupported then return 1 end
+    local ok, ms = pcall(getTimestampMs)
+    if not ok or type(ms) ~= "number" then
+        pulseUnsupported = true
+        return 1
+    end
+    return 0.5 + 0.5 * math.sin(ms * 0.0052)
 end
 
 local SOCKET_FILL = { r = 0.115, g = 0.11, b = 0.135, a = 1.0 }

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -272,6 +272,24 @@ function DropHandler.resolve(gridView, localX, localY)
 
     local model = gridView.model
     local inventory = model.inventory
+
+    local ItemApply = ComfyGrid.Interact.ItemApply
+    if ItemApply ~= nil and #normalized == 1 then
+        local occupant = model.grid:stackAt(targetSlot)
+        local oneKind = occupant ~= nil and ItemApply.sameTypeList(liveItems)
+        if oneKind ~= nil and oneKind ~= false then
+            local dst = ItemStack.frontItem(occupant, inventory)
+            local playerObj = getSpecificPlayer(gridView.playerNum
+                or model.playerNum or 0)
+            if dst ~= nil and playerObj ~= nil
+                    and not ItemStack.containsId(occupant, oneKind[1]:getID())
+                    and ItemApply.tryApply(oneKind, dst, playerObj) then
+                finishDrag(gridView, DragAndDrop)
+                return true
+            end
+        end
+    end
+
     local sameContainer = true
     for i = 1, #liveItems do
         if liveItems[i]:getContainer() ~= inventory then

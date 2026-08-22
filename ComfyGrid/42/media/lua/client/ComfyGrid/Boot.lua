@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -19,6 +19,7 @@ require "ComfyGrid/Patches/HotbarOverlayPatch"
 require "ComfyGrid/Patches/ButtonPromptPatch"
 require "ComfyGrid/Patches/EscapeMenuPatch"
 require "ComfyGrid/Interact/QuickEquip"
+require "ComfyGrid/Interact/ItemApply"
 
 local Log = ComfyGrid.Core.Log
 

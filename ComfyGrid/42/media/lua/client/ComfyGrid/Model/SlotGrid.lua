@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -100,6 +100,10 @@ function SlotGrid:slotCount()
     return self.slots
 end
 
+function SlotGrid:contentSlots()
+    return self:_highestOccupiedSlot() + 1
+end
+
 function SlotGrid:stackAt(slot)
     return self.slotMap[slot]
 end
@@ -119,13 +123,24 @@ function SlotGrid:findStackFor(item)
     return nil
 end
 
-function SlotGrid:firstFreeSlot()
+function SlotGrid:firstFreeSlot(forId)
     local total = Capacity.slotsFor(self.inventory)
     local highest = self:_highestOccupiedSlot()
     if highest + 1 > total then total = highest + 1 end
     local map = self.slotMap
+    local reserved = nil
+    local claims = self.pendingClaims
+    if claims ~= nil then
+        local now = getTimestampMs()
+        for id, claim in pairs(claims) do
+            if id ~= forId and now - claim.ms <= PENDING_CLAIM_TTL_MS then
+                reserved = reserved or {}
+                reserved[claim.slot] = true
+            end
+        end
+    end
     for slot = 0, total - 1 do
-        if map[slot] == nil then
+        if map[slot] == nil and (reserved == nil or not reserved[slot]) then
             return slot
         end
     end
@@ -149,7 +164,7 @@ function SlotGrid:insertItem(item, slot)
             noteMutation(self)
             return true
         end
-        slot = self:firstFreeSlot()
+        slot = self:firstFreeSlot(item:getID())
     elseif slot < 0 then
         return false
     end

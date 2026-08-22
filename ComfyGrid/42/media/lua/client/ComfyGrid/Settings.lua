@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -20,10 +20,12 @@ Settings.defaults = {
     SCALE = 1,
     SLOTS_PER_CAPACITY = 2,
     INSTANT_TRANSFER = false,
+    LOOT_SECTIONS = false,
+    COMPACT_ROWS = false,
 }
 
 local OPTION_DEFS = {
-    { key = "SCALE",              kind = "slider", min = 0.5, max = 4,  step = 0.5,
+    { key = "SCALE",              kind = "slider", min = 0.3, max = 4,  step = 0.1,
       nameKey = "IGUI_ComfyGrid_OptScale",
       tipKey = "IGUI_ComfyGrid_OptScaleTip",
       tooltip = "Size multiplier for the grid UI." },
@@ -35,6 +37,14 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptInstantTransfer",
       tipKey = "IGUI_ComfyGrid_OptInstantTransferTip",
       tooltip = "Move items instantly instead of taking transfer time." },
+    { key = "LOOT_SECTIONS",      kind = "tickbox",
+      nameKey = "IGUI_ComfyGrid_OptLootSections",
+      tipKey = "IGUI_ComfyGrid_OptLootSectionsTip",
+      tooltip = "Loot window: show every container within reach as stacked sections." },
+    { key = "COMPACT_ROWS",       kind = "tickbox",
+      nameKey = "IGUI_ComfyGrid_OptCompactRows",
+      tipKey = "IGUI_ComfyGrid_OptCompactRowsTip",
+      tooltip = "Boards show their items plus one free row instead of the whole capacity." },
 }
 
 local values = {}

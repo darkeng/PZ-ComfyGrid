@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,6 +10,8 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Model/ItemStack"
+require "ComfyGrid/Model/Capacity"
+require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
@@ -27,6 +29,8 @@ ComfyGrid.UI = ComfyGrid.UI or {}
 local Log = ComfyGrid.Core.Log
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local ItemStack = ComfyGrid.Model.ItemStack
+local Capacity = ComfyGrid.Model.Capacity
+local Settings = ComfyGrid.Settings
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local StackRenderer = ComfyGrid.UI.StackRenderer
@@ -68,8 +72,17 @@ local function computeDims(self)
         if cols < MIN_COLS then cols = MIN_COLS end
         if cols > MAX_COLS then cols = MAX_COLS end
     end
-    local slots = self.model.grid:slotCount()
-    local rows = math.ceil(slots / cols)
+    local grid = self.model.grid
+    local rows
+    if self.compactEligible and Settings.get("COMPACT_ROWS") then
+
+        rows = math.ceil(grid:contentSlots() / cols)
+        if not Capacity.isFull(self.model.inventory, self.playerNum) then
+            rows = rows + 1
+        end
+    else
+        rows = math.ceil(grid:slotCount() / cols)
+    end
     if rows < 1 then rows = 1 end
     return cols, rows
 end
@@ -84,6 +97,8 @@ function GridView:new(x, y, model, playerNum)
     o.model = model
 
     o.playerNum = playerNum or model.playerNum
+
+    o.compactEligible = false
 
     o.availWidth = nil
     o.cols, o.rows = computeDims(o)
@@ -329,6 +344,16 @@ local function renderAll(self)
 
     local jobs = TransferJobs.itemsFor(inventory)
     local currentAction = StackRenderer.currentActionOf(self.playerNum)
+
+    local ItemApply = ComfyGrid.Interact.ItemApply
+    local applySrc = ItemApply ~= nil and ItemApply.dragSource() or nil
+    local applyPlayer = nil
+    local applyPulse = 1
+    if applySrc ~= nil then
+        applyPlayer = getSpecificPlayer(self.playerNum)
+        if applyPlayer == nil then applySrc = nil end
+        applyPulse = SlotRenderer.applyPulse()
+    end
     for i = 1, #stacks do
         local stack = stacks[i]
         local sx, sy = pixelForSlot(stack.slot, cols)
@@ -359,6 +384,10 @@ local function renderAll(self)
                 ctx.x = sx
                 ctx.y = sy
                 drawStack(ctx)
+                if applySrc ~= nil
+                        and ItemApply.hintFor(applySrc, front, applyPlayer) then
+                    SlotRenderer.drawApplyHint(ctx, applyPulse)
+                end
 
                 if stack == draggedStack or stack == padCarried
                         or (draggingSelection and selection[stack]) then

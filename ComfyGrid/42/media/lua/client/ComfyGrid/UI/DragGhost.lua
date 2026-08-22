@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -116,16 +116,7 @@ local function renderImpl(self)
         local texH = tex:getHeight()
         if texW and texH and texW > 0 and texH > 0 then
 
-            local largest = texW
-            if texH > texW then largest = texH end
-            local corrective = size / largest
-            local drawW = texW * corrective
-            local drawH = texH * corrective
-
-            self:drawTextureScaled(tex,
-                floor(x + (size - drawW) * 0.5),
-                floor(y + (size - drawH) * 0.5),
-                drawW, drawH, GHOST_ALPHA, 1, 1, 1)
+            self:drawItemIcon(front, floor(x), floor(y), GHOST_ALPHA, size, size)
             drew = true
         end
     end

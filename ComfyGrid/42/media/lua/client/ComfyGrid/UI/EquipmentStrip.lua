@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -227,6 +227,16 @@ local function renderImpl(self)
     local cell = Style.CELL
 
     local currentAction = StackRenderer.currentActionOf(self.playerNum)
+
+    local ItemApply = ComfyGrid.Interact.ItemApply
+    local applySrc = ItemApply ~= nil and ItemApply.dragSource() or nil
+    local applyPlayer = nil
+    local applyPulse = 1
+    if applySrc ~= nil then
+        applyPlayer = getSpecificPlayer(self.playerNum)
+        if applyPlayer == nil then applySrc = nil end
+        applyPulse = SlotRenderer.applyPulse()
+    end
     ctx.view = self
     ctx.playerNum = self.playerNum
     for i = 1, self.entryCount do
@@ -245,6 +255,10 @@ local function renderImpl(self)
             ctx.x = tx
             ctx.y = ty
             StackRenderer.draw(ctx)
+            if applySrc ~= nil
+                    and ItemApply.hintFor(applySrc, top, applyPlayer) then
+                SlotRenderer.drawApplyHint(ctx, applyPulse)
+            end
 
             local jd = StackRenderer.jobDeltaOf(top, currentAction)
             if jd ~= nil then
@@ -343,6 +357,15 @@ local function resolveEquipDrop(self, idx)
     if dragged == nil then return end
     local playerObj = getSpecificPlayer(self.playerNum)
     if playerObj == nil then return end
+
+    local ItemApply = ComfyGrid.Interact.ItemApply
+    local top = entry.items[1]
+    if ItemApply ~= nil and top ~= nil then
+        local srcItems = ItemApply.liveItemsOf(dragged)
+        if srcItems ~= nil and ItemApply.tryApply(srcItems, top, playerObj) then
+            return
+        end
+    end
     for i = 1, #dragged do
         local items = dragged[i].items
         if type(items) == "table" then

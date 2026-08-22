@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -22,7 +22,7 @@ local Settings = ComfyGrid.Settings
 
 local floor = math.floor
 
-local MIN_SCALE = 0.5
+local MIN_SCALE = 0.3
 local MAX_SCALE = 4
 
 local MAX_EFFECTIVE = 8
@@ -164,6 +164,8 @@ Style.COLORS = {
     TRANSFER_EDGE    = { r = 0.95, g = 0.80, b = 0.25, a = 0.90 },
 
     SELECTED = { r = 0.35, g = 0.75, b = 1.0, a = 0.90 },
+
+    APPLY = { r = 0.42, g = 0.92, b = 0.50, a = 0.90 },
 }
 
 Style.COLORS.CATEGORY = {

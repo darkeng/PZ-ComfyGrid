@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.1
+    Version: 1.3.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,6 +11,7 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Util"
 require "ComfyGrid/Model/ContainerModel"
 require "ComfyGrid/Model/Capacity"
+require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/ContainerPanel"
 ComfyGrid = ComfyGrid or {}
@@ -22,6 +23,7 @@ local Log = ComfyGrid.Core.Log
 local Util = ComfyGrid.Core.Util
 local ContainerModel = ComfyGrid.Model.ContainerModel
 local Capacity = ComfyGrid.Model.Capacity
+local Settings = ComfyGrid.Settings
 local Style = ComfyGrid.UI.Style
 local ContainerPanel = ComfyGrid.UI.ContainerPanel
 
@@ -30,6 +32,19 @@ local SCROLLBAR_ALLOWANCE = 17
 local SECTION_GAP = 6
 
 local POCKET_MAX_SLOTS = 6
+
+local function lootSectionAllowed(page, inv, playerObj)
+    local okP, parent = pcall(inv.getParent, inv)
+    if okP and parent ~= nil and instanceof(parent, "IsoThumpable")
+            and parent.isLockedToCharacter ~= nil then
+        local okL, locked = pcall(parent.isLockedToCharacter, parent, playerObj)
+        if okL and locked then return false end
+    end
+    if page.checkExplored ~= nil then
+        pcall(page.checkExplored, page, inv, playerObj)
+    end
+    return true
+end
 
 function PaneHost:new(pane)
     local w = math.max(1, (pane.width or 1) - SCROLLBAR_ALLOWANCE)
@@ -70,12 +85,16 @@ local function layout(self)
 
     local page = pane.inventoryPage
     local sectioned = page ~= nil and page.onCharacter == true
+    local lootSectioned = page ~= nil and page.onCharacter == false
+        and Settings.get("LOOT_SECTIONS") == true
+    local lootPlayer = lootSectioned and getSpecificPlayer(pane.player) or nil
     local invs = self._invList
     for i = #invs, 1, -1 do invs[i] = nil end
-    if sectioned and type(page.backpacks) == "table" then
+    if (sectioned or lootSectioned) and type(page.backpacks) == "table" then
         for i = 1, #page.backpacks do
             local inv = page.backpacks[i].inventory
-            if inv ~= nil then
+            if inv ~= nil and (not lootSectioned
+                    or lootSectionAllowed(page, inv, lootPlayer)) then
                 local dup = false
                 for j = 1, #invs do
                     if invs[j] == inv then
@@ -173,7 +192,7 @@ local function layout(self)
 
     if pane.inventory ~= self.shownInventory then
         self.shownInventory = pane.inventory
-        if not sectioned then
+        if not (sectioned or lootSectioned) then
             self.yOffset = 0
         else
             local y = 0
