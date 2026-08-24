@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.3
+    Version: 1.3.4
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -59,6 +59,35 @@ local function hoveredStack(pane)
 end
 
 Tooltip.hoveredStackOf = hoveredStack
+
+function Tooltip.isOverBoard(pane)
+    if pane == nil then return false end
+    local host = pane.comfyHost
+    if host == nil or not host.panelShown then return false end
+    local panels = host.panels
+    local single = panels == nil and host.containerPanel or nil
+    local count = panels ~= nil and #panels or (single ~= nil and 1 or 0)
+    local function over(el)
+        return el ~= nil and el.isMouseOver ~= nil and el:isMouseOver() == true
+    end
+    for i = 1, count do
+        local panel = panels ~= nil and panels[i] or single
+        if panel ~= nil then
+            if over(panel.gridView) or over(panel.equipStrip)
+                    or over(panel.hotbarStrip) then
+                return true
+            end
+            local pocketsPanel = panel.pocketsPanel
+            local islandGrids = pocketsPanel ~= nil and pocketsPanel.gridViews or nil
+            if islandGrids ~= nil then
+                for j = 1, #islandGrids do
+                    if over(islandGrids[j]) then return true end
+                end
+            end
+        end
+    end
+    return false
+end
 
 local function stackWeight(pane, stack, inventory)
     if stack.count == nil or stack.count < 2 then return 0.0 end

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.3
+    Version: 1.3.4
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -84,6 +84,66 @@ local function equipHovered()
     end
 end
 
+local SHIELD_MAX_MS = 1500
+
+local shieldBox = nil
+local shieldKey = nil
+local shieldSinceMs = 0
+
+QuickEquip._rawKeyDown = function(key)
+    return GameKeyboard ~= nil and GameKeyboard.isKeyDownRaw ~= nil
+        and GameKeyboard.isKeyDownRaw(key) == true
+end
+
+local function shieldUp(key)
+    if shieldBox == nil then
+        if ISTextEntryBox == nil then return false end
+
+        local box = ISTextEntryBox:new("", -10, -10, 1, 1)
+        box:initialise()
+        box:instantiate()
+        if box.setEditable ~= nil then box:setEditable(false) end
+        if box.setVisible ~= nil then box:setVisible(false) end
+        shieldBox = box
+    end
+    shieldBox:focus()
+    shieldKey = key
+    shieldSinceMs = getTimestampMs()
+    return true
+end
+
+local function shieldDown()
+    if shieldBox ~= nil and shieldBox.isFocused ~= nil and shieldBox:isFocused() then
+        shieldBox:unfocus()
+    end
+    shieldKey = nil
+end
+
+function QuickEquip.isShielding()
+    return shieldKey ~= nil
+end
+
+function QuickEquip._onTick()
+    if shieldKey == nil then return end
+    local held = QuickEquip._rawKeyDown(shieldKey)
+    if not held or getTimestampMs() - shieldSinceMs > SHIELD_MAX_MS then
+        shieldDown()
+    end
+end
+
+local function overAnyBoard()
+    local Tooltip = ComfyGrid.Interact.Tooltip
+    if Tooltip == nil or Tooltip.isOverBoard == nil then return false end
+    for _, getter in ipairs({ getPlayerInventory, getPlayerLoot }) do
+        local ok, page = pcall(getter, 0)
+        local pane = ok and page ~= nil and page.inventoryPane or nil
+        if pane ~= nil and pane.mode == "comfy" and Tooltip.isOverBoard(pane) then
+            return true
+        end
+    end
+    return false
+end
+
 function QuickEquip._onKey(key)
     local target = nil
     local core = getCore and getCore() or nil
@@ -93,6 +153,15 @@ function QuickEquip._onKey(key)
     end
     if target == nil and Keyboard ~= nil then target = Keyboard.KEY_E end
     if key ~= target then return end
+
+    local okB, over = pcall(overAnyBoard)
+    if okB and over then
+        local okS, err = pcall(shieldUp, key)
+        if not okS and err ~= lastError then
+            lastError = err
+            Log.error("QuickEquip shield failed: " .. tostring(err))
+        end
+    end
     local ok, err = pcall(equipHovered)
     if not ok and err ~= lastError then
         lastError = err
@@ -106,6 +175,12 @@ if not ComfyGrid._quickEquipHooked then
         local qe = ComfyGrid.Interact and ComfyGrid.Interact.QuickEquip
         if qe ~= nil and qe._onKey ~= nil then
             qe._onKey(key)
+        end
+    end)
+    Events.OnTick.Add(function()
+        local qe = ComfyGrid.Interact and ComfyGrid.Interact.QuickEquip
+        if qe ~= nil and qe._onTick ~= nil then
+            qe._onTick()
         end
     end)
 end
