@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.2
+    Version: 1.3.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -592,22 +592,12 @@ function GridView:padSelectionPayload()
     return out
 end
 
-local function mouseOverAnyUI()
-    local mx = getMouseX()
-    local my = getMouseY()
-    local uis = UIManager.getUI()
-    for i = 0, uis:size() - 1 do
-        if uis:get(i):isPointOver(mx, my) then return true end
-    end
-    return false
-end
-
 local function dragCancelImpl(owner)
     local payload = DragAndDrop.getDraggedStacks()
     owner.pressedStack = nil
     owner.pressedSlot = nil
     if payload == nil then return end
-    if mouseOverAnyUI() then return end
+    if not DragAndDrop.releaseDropsToFloor(owner.playerNum) then return end
     local model = owner.model
     local inventory = model ~= nil and model.inventory or nil
     if inventory == nil then return end

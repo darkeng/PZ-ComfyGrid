@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.2
+    Version: 1.3.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -155,6 +155,32 @@ function DragAndDrop.endDrag()
     ISMouseDrag.itemsToDrag = nil
     clearPendingCancel()
     clearNormalized()
+end
+
+function DragAndDrop.releaseDropsToFloor(playerNum)
+    local mx = getMouseX()
+    local my = getMouseY()
+    local uis = UIManager.getUI()
+    local overAny = false
+    for i = 0, uis:size() - 1 do
+        if uis:get(i):isPointOver(mx, my) then
+            overAny = true
+            break
+        end
+    end
+    if not overAny then return true end
+    if playerNum == nil then return false end
+    local okI, page = pcall(getPlayerInventory, playerNum)
+    if okI and page ~= nil and page.isPointOver ~= nil
+            and page:isPointOver(mx, my) then
+        return true
+    end
+    local okL, loot = pcall(getPlayerLoot, playerNum)
+    if okL and loot ~= nil and loot.isPointOver ~= nil
+            and loot:isPointOver(mx, my) then
+        return true
+    end
+    return false
 end
 
 function DragAndDrop.cancelDrag(owner, cb)
