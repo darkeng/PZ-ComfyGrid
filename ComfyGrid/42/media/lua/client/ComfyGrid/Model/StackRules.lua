@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.5
+    Version: 1.3.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -120,6 +120,10 @@ function StackRules.bucketOf(item)
     return concat(parts, "|", 1, n)
 end
 
+StackRules.HEAVY_WEIGHT = 5
+
+StackRules.MATERIAL_WEAPON_CATEGORY = "MaterialWeapon"
+
 StackRules.NEVER_STACK_TYPES = {
     ["Base.44Clip"] = true,
     ["Base.45Clip"] = true,
@@ -142,8 +146,17 @@ function StackRules.isStackable(item)
         return false
     end
 
-    if instanceof(item, "HandWeapon") and item.isRanged and item:isRanged() then
-        return false
+    if instanceof(item, "HandWeapon") then
+        local cat = item.getDisplayCategory ~= nil and item:getDisplayCategory()
+            or nil
+        if cat ~= StackRules.MATERIAL_WEAPON_CATEGORY then return false end
+    end
+
+    if item.getWeight ~= nil then
+        local ok, w = pcall(item.getWeight, item)
+        if ok and type(w) == "number" and w >= StackRules.HEAVY_WEIGHT then
+            return false
+        end
     end
 
     if item.getFullType and StackRules.NEVER_STACK_TYPES[item:getFullType()] then

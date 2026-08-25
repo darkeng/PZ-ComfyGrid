@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.5
+    Version: 1.3.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -396,6 +396,11 @@ function SlotGrid:validate()
                     if item == nil
                             or isItemExcluded(item, hotbar, excludeEquipped) then
                         drop = true
+                    elseif kept >= StackRules.maxStackOf(item) then
+
+                        drop = true
+                        seen[id] = true
+                        migrated[#migrated + 1] = item
                     elseif StackRules.bucketOf(item) ~= stack.bucket then
                         drop = true
 
