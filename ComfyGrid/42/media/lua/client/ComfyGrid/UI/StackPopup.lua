@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.6
+    Version: 1.3.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -259,6 +259,11 @@ local function prerenderImpl(self)
         return
     end
 
+    if (stack.count or 0) < 2 then
+        self:close()
+        return
+    end
+
     local Draw = ComfyGrid.UI.Draw
     if Draw ~= nil then
         local rem = self._comfySlide
@@ -278,7 +283,8 @@ local function prerenderImpl(self)
     if cc ~= self.lastChangeCount then
         self.lastChangeCount = cc
         rebuildTiles(self, stack)
-        if #self.tiles == 0 then
+
+        if #self.tiles < 2 then
             self:close()
             return
         end

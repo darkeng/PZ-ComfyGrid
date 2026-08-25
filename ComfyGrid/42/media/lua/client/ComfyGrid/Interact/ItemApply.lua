@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.6
+    Version: 1.3.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -71,14 +71,7 @@ end
 function ItemApply.classify(src, dst, playerObj, insideStack)
     if src == nil or dst == nil or src == dst then return nil end
     if playerObj == nil then return nil end
-
     local srcType = src:getFullType()
-    if srcType == dst:getFullType()
-            and src.canConsolidate ~= nil and src:canConsolidate()
-            and src.getCurrentUsesFloat ~= nil and dst.getCurrentUsesFloat ~= nil
-            and src:getCurrentUsesFloat() > 0 and dst:getCurrentUsesFloat() < 1 then
-        return ItemApply.KIND_DRAINABLE
-    end
 
     if not insideStack and srcType == dst:getFullType() then
         local StackRules = ComfyGrid.Model.StackRules
@@ -86,6 +79,13 @@ function ItemApply.classify(src, dst, playerObj, insideStack)
                 or StackRules.bucketOf(src) == StackRules.bucketOf(dst) then
             return nil
         end
+    end
+
+    if srcType == dst:getFullType()
+            and src.canConsolidate ~= nil and src:canConsolidate()
+            and src.getCurrentUsesFloat ~= nil and dst.getCurrentUsesFloat ~= nil
+            and src:getCurrentUsesFloat() > 0 and dst:getCurrentUsesFloat() < 1 then
+        return ItemApply.KIND_DRAINABLE
     end
 
     if instanceof(dst, "HandWeapon") then
