@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.4
+    Version: 1.3.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -388,6 +388,16 @@ local function renderImpl(self)
     local firstVis = math.floor(self.yOffset / stride) * cols
     local lastVis = math.min(#tiles,
         firstVis + (math.ceil(bh / stride) + 1) * cols)
+
+    local ItemApply = ComfyGrid.Interact.ItemApply
+    local applySrc = ItemApply ~= nil and ItemApply.dragSource() or nil
+    local applyPlayer = nil
+    local applyPulse = 1
+    if applySrc ~= nil then
+        applyPlayer = getSpecificPlayer(self.playerNum)
+        if applyPlayer == nil then applySrc = nil end
+        applyPulse = SlotRenderer.applyPulse()
+    end
     for i = firstVis + 1, lastVis do
         local tile = tiles[i]
         local item = tile.item
@@ -403,6 +413,10 @@ local function renderImpl(self)
             ctx.x = tx
             ctx.y = ty
             StackRenderer.draw(ctx)
+            if applySrc ~= nil
+                    and ItemApply.hintFor(applySrc, item, applyPlayer, true) then
+                SlotRenderer.drawApplyHint(ctx, applyPulse)
+            end
 
             if tile.id == draggedId or (draggingSel and isSelected(self, tile.id)) then
                 self:drawRect(tx + 1, ty + 1, cell - 2, cell - 2,
@@ -699,6 +713,24 @@ local function mouseUpImpl(self, x, y)
     if DragAndDrop.isDragging() then
         if DragAndDrop.isDragOwner(self) then
 
+            local idx = tileAt(self, x, y)
+            local target = idx ~= nil and liveTileItem(self, idx) or nil
+            local ItemApply = ComfyGrid.Interact.ItemApply
+            if target ~= nil and ItemApply ~= nil then
+
+                local srcItems = ItemApply.liveItemsOf(DragAndDrop.getDraggedStacks(), true)
+                local playerObj = getSpecificPlayer(self.playerNum)
+                local ownTarget = false
+                if srcItems ~= nil then
+                    for i = 1, #srcItems do
+                        if srcItems[i] == target then ownTarget = true end
+                    end
+                end
+                if srcItems ~= nil and not ownTarget and playerObj ~= nil then
+                    local ok, err = pcall(ItemApply.tryApply, srcItems, target, playerObj, true)
+                    if not ok then reportMouseError(err) end
+                end
+            end
             DragAndDrop.endDrag()
         end
 

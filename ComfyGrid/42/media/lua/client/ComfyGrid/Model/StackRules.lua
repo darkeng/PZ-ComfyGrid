@@ -1,18 +1,21 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.4
+    Version: 1.3.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/Settings"
 
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Model = ComfyGrid.Model or {}
 
 local StackRules = {}
 ComfyGrid.Model.StackRules = StackRules
+
+local Settings = ComfyGrid.Settings
 
 local floor = math.floor
 local concat = table.concat
@@ -21,6 +24,21 @@ local parts = {}
 
 function StackRules.bucketOf(item)
     local n = 0
+    if Settings.get("STACK_BY_TYPE") == true then
+        if item.isFavorite and item:isFavorite() then
+            n = n + 1; parts[n] = "fav"
+        end
+        if item.getFluidContainer then
+            local fc = item:getFluidContainer()
+            if fc and not (fc.isEmpty and fc:isEmpty()) then
+                local fluid = fc.getPrimaryFluid and fc:getPrimaryFluid()
+                n = n + 1; parts[n] = "fl:" .. tostring(fluid)
+            end
+        end
+        if n == 0 then return "" end
+        if n == 1 then return parts[1] end
+        return concat(parts, "|", 1, n)
+    end
 
     if item.IsFood and item:IsFood() then
         if item.isRotten and item:isRotten() then

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.4
+    Version: 1.3.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -132,6 +132,12 @@ function SlotGrid:firstFreeSlot(forId)
     local claims = self.pendingClaims
     if claims ~= nil then
         local now = getTimestampMs()
+
+        local own = forId ~= nil and claims[forId] or nil
+        if own ~= nil and now - own.ms <= PENDING_CLAIM_TTL_MS
+                and map[own.slot] == nil then
+            return own.slot
+        end
         for id, claim in pairs(claims) do
             if id ~= forId and now - claim.ms <= PENDING_CLAIM_TTL_MS then
                 reserved = reserved or {}
@@ -350,6 +356,11 @@ function SlotGrid:claimSlotForItem(id, slot)
         self.pendingClaims = claims
     end
     claims[id] = { slot = slot, ms = getTimestampMs() }
+end
+
+function SlotGrid:releaseClaim(id)
+    local claims = self.pendingClaims
+    if claims ~= nil and id ~= nil then claims[id] = nil end
 end
 
 function SlotGrid:validate()

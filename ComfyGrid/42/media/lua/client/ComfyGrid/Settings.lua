@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.4
+    Version: 1.3.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -22,6 +22,7 @@ Settings.defaults = {
     INSTANT_TRANSFER = false,
     LOOT_SECTIONS = false,
     COMPACT_ROWS = false,
+    STACK_BY_TYPE = true,
 }
 
 local OPTION_DEFS = {
@@ -45,6 +46,10 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptCompactRows",
       tipKey = "IGUI_ComfyGrid_OptCompactRowsTip",
       tooltip = "Boards show their items plus one free row instead of the whole capacity." },
+    { key = "STACK_BY_TYPE",      kind = "tickbox",
+      nameKey = "IGUI_ComfyGrid_OptStackByType",
+      tipKey = "IGUI_ComfyGrid_OptStackByTypeTip",
+      tooltip = "Identical items stack together regardless of their state." },
 }
 
 local values = {}

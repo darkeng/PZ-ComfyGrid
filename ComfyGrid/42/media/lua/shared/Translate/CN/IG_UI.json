@@ -9,6 +9,8 @@
     "IGUI_ComfyGrid_OptLootSectionsTip": "拾取窗口：像背包窗口一样，把可触及的所有容器显示为上下堆叠的分区。",
     "IGUI_ComfyGrid_OptCompactRows": "裁剪空行",
     "IGUI_ComfyGrid_OptCompactRowsTip": "每个格子板只显示已有物品外加一行空格（容器装满后不再显示），而不是整个容量。",
+    "IGUI_ComfyGrid_OptStackByType": "仅按类型堆叠",
+    "IGUI_ComfyGrid_OptStackByTypeTip": "相同物品无论状态、新鲜度、使用次数或装量都会堆叠；堆叠查看器仍逐个显示。关闭：只有状态也相同时才堆叠。",
     "IGUI_ComfyGrid_IncompatibleTetris": "Comfy Grid：已启用 Inventory Tetris。两个模组都会替换库存界面，无法同时运行——请禁用其中一个。",
     "IGUI_ComfyGrid_SlotPrimary": "主手",
     "IGUI_ComfyGrid_SlotSecondary": "副手",

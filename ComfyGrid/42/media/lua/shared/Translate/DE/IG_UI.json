@@ -9,6 +9,8 @@
     "IGUI_ComfyGrid_OptLootSectionsTip": "Beutefenster: zeigt alle erreichbaren Behälter als gestapelte Abschnitte, wie das Inventarfenster.",
     "IGUI_ComfyGrid_OptCompactRows": "Leere Zeilen kürzen",
     "IGUI_ComfyGrid_OptCompactRowsTip": "Jedes Raster zeigt seine Gegenstände plus eine freie Zeile (keine, wenn der Behälter voll ist) statt seiner ganzen Kapazität.",
+    "IGUI_ComfyGrid_OptStackByType": "Nur nach Typ stapeln",
+    "IGUI_ComfyGrid_OptStackByTypeTip": "Gleiche Gegenstände stapeln sich unabhängig von Zustand, Frische, Verbrauch oder Füllstand; der Stapel-Inspektor zeigt weiterhin jeden einzeln. Aus: nur stapeln, wenn auch der Zustand übereinstimmt.",
     "IGUI_ComfyGrid_IncompatibleTetris": "Comfy Grid: Inventory Tetris ist aktiv. Beide Mods ersetzen die Inventar-Oberfläche und können nicht zusammen laufen – deaktiviere eines davon.",
     "IGUI_ComfyGrid_SlotPrimary": "Hand",
     "IGUI_ComfyGrid_SlotSecondary": "Nebenhand",

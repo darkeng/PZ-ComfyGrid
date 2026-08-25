@@ -9,6 +9,8 @@
     "IGUI_ComfyGrid_OptLootSectionsTip": "Janela de saque: mostra todos os contêineres ao alcance como seções empilhadas, como a janela do inventário.",
     "IGUI_ComfyGrid_OptCompactRows": "Cortar linhas vazias",
     "IGUI_ComfyGrid_OptCompactRowsTip": "Cada grade mostra seus itens mais uma linha livre (nenhuma quando o contêiner está cheio) em vez de toda a capacidade.",
+    "IGUI_ComfyGrid_OptStackByType": "Empilhar só por tipo",
+    "IGUI_ComfyGrid_OptStackByTypeTip": "Itens iguais empilham independentemente de condição, frescor, usos ou nível; o inspetor da pilha continua mostrando cada um. Desligado: só empilham se o estado também coincidir.",
     "IGUI_ComfyGrid_IncompatibleTetris": "Comfy Grid: o Inventory Tetris está ativo. Os dois mods substituem a interface do inventário e não podem funcionar juntos: desative um deles.",
     "IGUI_ComfyGrid_SlotPrimary": "Mão",
     "IGUI_ComfyGrid_SlotSecondary": "Sec.",

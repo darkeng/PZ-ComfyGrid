@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.4
+    Version: 1.3.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -27,6 +27,7 @@ ItemApply.KIND_AMMO_MAG = "ammoMag"
 ItemApply.KIND_AMMO_GUN = "ammoGun"
 ItemApply.KIND_MAG_GUN = "magGun"
 ItemApply.KIND_PART_GUN = "partGun"
+ItemApply.KIND_DRAINABLE = "drainable"
 
 local function fluidOf(item)
     if item.getFluidContainer == nil then return nil end
@@ -67,12 +68,19 @@ local function partFits(part, weapon, playerObj)
     return okP and mounted == nil
 end
 
-function ItemApply.classify(src, dst, playerObj)
+function ItemApply.classify(src, dst, playerObj, insideStack)
     if src == nil or dst == nil or src == dst then return nil end
     if playerObj == nil then return nil end
 
     local srcType = src:getFullType()
-    if srcType == dst:getFullType() then
+    if srcType == dst:getFullType()
+            and src.canConsolidate ~= nil and src:canConsolidate()
+            and src.getCurrentUsesFloat ~= nil and dst.getCurrentUsesFloat ~= nil
+            and src:getCurrentUsesFloat() > 0 and dst:getCurrentUsesFloat() < 1 then
+        return ItemApply.KIND_DRAINABLE
+    end
+
+    if not insideStack and srcType == dst:getFullType() then
         local StackRules = ComfyGrid.Model.StackRules
         if StackRules == nil
                 or StackRules.bucketOf(src) == StackRules.bucketOf(dst) then
@@ -245,17 +253,39 @@ local function pendingRestores(playerObj)
 end
 
 local function claimHome(t, playerObj)
-    if t.slot == nil then return end
-    local mainInv = playerObj:getInventory()
-    if t.inventory ~= mainInv then return end
-    local ok, model = pcall(ContainerModel.getOrCreate, mainInv, playerObj:getPlayerNum())
+    if t.slot == nil or t.inventory == nil then return end
+    local ok, model = pcall(ContainerModel.getOrCreate, t.inventory, playerObj:getPlayerNum())
     if ok and model ~= nil and model.grid ~= nil
             and model.grid.claimSlotForItem ~= nil then
         model.grid:claimSlotForItem(t.id, t.slot)
     end
 end
 
-local function snapshot(kind, dst, playerObj)
+local function releaseHome(t, playerObj)
+    if t.inventory == nil then return end
+    local ok, model = pcall(ContainerModel.getOrCreate, t.inventory, playerObj:getPlayerNum())
+    if ok and model ~= nil and model.grid ~= nil
+            and model.grid.releaseClaim ~= nil then
+        model.grid:releaseClaim(t.id)
+    end
+end
+
+local function adoptedOrigin(item, pending)
+    if pending == nil then return nil end
+    local id = item:getID()
+    for i = 1, #pending do
+        local targets = pending[i].comfyPlan.targets
+        for j = 1, #targets do
+            if targets[j].id == id then
+                local o = table.remove(targets, j)
+                return o
+            end
+        end
+    end
+    return nil
+end
+
+local function snapshot(kind, dst, playerObj, extraItems)
     local playerNum = playerObj:getPlayerNum()
     local p, s = playerObj:getPrimaryHandItem(), playerObj:getSecondaryHandItem()
     local plan = {
@@ -270,9 +300,18 @@ local function snapshot(kind, dst, playerObj)
         plan.primaryId = first.primaryId
         plan.secondaryId = first.secondaryId
     end
-    if not playerObj:isEquipped(dst) then
-        local o = originOf(dst, playerNum)
+    local function track(item)
+        if item == nil or playerObj:isEquipped(item) then return end
+        local o = adoptedOrigin(item, pending) or originOf(item, playerNum)
         if o ~= nil then plan.targets[#plan.targets + 1] = o end
+    end
+    track(dst)
+
+    if extraItems ~= nil then
+        for i = 1, #extraItems do
+            local it = extraItems[i]
+            if it ~= dst then track(it) end
+        end
     end
     if kind == ItemApply.KIND_PART_GUN then
         local inv = playerObj:getInventory()
@@ -349,7 +388,12 @@ local function restore(plan)
     end
 
     for i = 1, #plan.targets do
-        claimHome(plan.targets[i], playerObj)
+        local t = plan.targets[i]
+        if alive(resolveItem(t.id, playerObj, t.inventory)) then
+            claimHome(t, playerObj)
+        else
+            releaseHome(t, playerObj)
+        end
     end
 
     if p1 ~= nil and not wasInHand(p1) and alive(p1) then
@@ -382,6 +426,103 @@ local function restore(plan)
             end
         end
     end
+end
+
+local ConsolidateOne = nil
+local function consolidateOneClass()
+    if ConsolidateOne ~= nil then return ConsolidateOne end
+    if ISConsolidateDrainable == nil or ISConsolidateDrainable.derive == nil then
+        return nil
+    end
+    ConsolidateOne = ISConsolidateDrainable:derive("ComfyConsolidateOne")
+    function ConsolidateOne:isValid()
+        local inv = self.character:getInventory()
+        if self.intoItem == nil then return false end
+        if isClient() then return inv:containsID(self.intoItem:getID()) end
+        return inv:contains(self.intoItem)
+    end
+    function ConsolidateOne:perform()
+        self.intoItem:setJobDelta(0.0)
+        if self.drainable ~= nil then self.drainable:setJobDelta(0.0) end
+        ISBaseTimedAction.perform(self)
+    end
+    function ConsolidateOne:new(character, drainable, intoItem)
+        local o = ISConsolidateDrainable.new(self, character, drainable, intoItem, nil)
+        return o
+    end
+    return ConsolidateOne
+end
+
+local PourAction = nil
+local function pourActionClass()
+    if PourAction ~= nil then return PourAction end
+    if ISBaseTimedAction == nil or ISBaseTimedAction.derive == nil then
+        return nil
+    end
+    PourAction = ISBaseTimedAction:derive("ComfyPourAction")
+    PourAction.isValid = function() return true end
+    PourAction.waitToStart = function() return false end
+    function PourAction:update() self:forceStop() end
+    function PourAction:stop() ISBaseTimedAction.stop(self) end
+    function PourAction:perform() ISBaseTimedAction.perform(self) end
+    function PourAction:new(character, plan)
+        local o = ISBaseTimedAction.new(self, character)
+        o.comfyPour = plan
+        o.maxTime = -1
+        o.stopOnWalk = false
+        o.stopOnRun = false
+        o.stopOnAim = false
+        return o
+    end
+    function PourAction:start()
+        self:beginAddingActions()
+        local ok, err = pcall(function()
+            local playerObj = self.character
+            local pour = self.comfyPour
+            local mainInv = playerObj:getInventory()
+            local dst = resolveItem(pour.dstId, playerObj, pour.dstInv)
+            if not alive(dst) then return end
+            local function bringAndRetry(item)
+                ISTimedActionQueue.add(ISInventoryTransferUtil.newInventoryTransferAction(
+                    playerObj, item, item:getContainer(), mainInv))
+                ISTimedActionQueue.add(PourAction:new(playerObj, pour))
+            end
+            if dst:getContainer() ~= mainInv then
+                bringAndRetry(dst)
+                return
+            end
+            if dst:getCurrentUsesFloat() >= 1 then return end
+
+            local src = nil
+            while src == nil and #pour.srcIds > 0 do
+                local id = table.remove(pour.srcIds, 1)
+                local it = resolveItem(id, playerObj, pour.srcInv[id])
+                if alive(it) and it ~= dst and it.getCurrentUsesFloat ~= nil
+                        and it:getCurrentUsesFloat() > 0 then
+                    src = it
+                    if src:getContainer() ~= mainInv then
+
+                        table.insert(pour.srcIds, 1, id)
+                        bringAndRetry(src)
+                        return
+                    end
+                end
+            end
+            if src == nil then return end
+            local cls = consolidateOneClass()
+            if cls == nil then return end
+            ISTimedActionQueue.add(cls:new(playerObj, src, dst))
+            if #pour.srcIds > 0 then
+                ISTimedActionQueue.add(PourAction:new(playerObj, pour))
+            end
+        end)
+        if not ok then
+            Log.warn("ItemApply: pour scheduling failed: " .. tostring(err))
+        end
+        self:endAddingActions()
+        self:forceComplete()
+    end
+    return PourAction
 end
 
 local RestoreAction = nil
@@ -437,9 +578,53 @@ function ItemApply.perform(kind, srcItems, dst, playerObj)
     if kind == ItemApply.KIND_FLUID then
         return performFluid(src, dst, playerObj)
     end
-    local plan = snapshot(kind, dst, playerObj)
+    local plan = snapshot(kind, dst, playerObj,
+        kind == ItemApply.KIND_DRAINABLE and srcItems or nil)
     local queued = false
-    if kind == ItemApply.KIND_AMMO_MAG then
+    if kind == ItemApply.KIND_DRAINABLE then
+
+        if ISConsolidateDrainable == nil or pourActionClass() == nil
+                or consolidateOneClass() == nil then
+            return false
+        end
+        local mainInv = playerObj:getInventory()
+        local playerNum = playerObj:getPlayerNum()
+        local containers, seen = {}, {}
+        local function note(item)
+            local c = item ~= nil and item:getContainer() or nil
+            if c ~= nil and c ~= mainInv and not seen[c] then
+                seen[c] = true
+                containers[#containers + 1] = c
+            end
+        end
+        note(dst)
+        for i = 1, #srcItems do note(srcItems[i]) end
+        local farCount = 0
+        for i = 1, #containers do
+            if not reachableNow(containers[i], playerObj) then
+                farCount = farCount + 1
+            end
+        end
+        if farCount > 1 then return false end
+        for i = 1, #containers do
+            if not luautils.walkToContainer(containers[i], playerNum) then
+                return false
+            end
+        end
+        local pour = { dstId = dst:getID(), dstInv = dst:getContainer(),
+            srcIds = {}, srcInv = {} }
+        for i = 1, #srcItems do
+            local it = srcItems[i]
+            if it ~= nil and it ~= dst and it:getContainer() ~= nil then
+                local id = it:getID()
+                pour.srcIds[#pour.srcIds + 1] = id
+                pour.srcInv[id] = it:getContainer()
+            end
+        end
+        if #pour.srcIds == 0 then return false end
+        ISTimedActionQueue.add(PourAction:new(playerObj, pour))
+        queued = true
+    elseif kind == ItemApply.KIND_AMMO_MAG then
         local room = dst:getMaxAmmo() - dst:getCurrentAmmoCount()
         if room <= 0 then return false end
         local _, fromOutside = bringRounds(playerObj, srcItems, room)
@@ -471,10 +656,10 @@ function ItemApply.perform(kind, srcItems, dst, playerObj)
     return queued
 end
 
-function ItemApply.tryApply(srcItems, dst, playerObj)
+function ItemApply.tryApply(srcItems, dst, playerObj, insideStack)
     if srcItems == nil or #srcItems == 0 or dst == nil then return false end
     local src = srcItems[1]
-    local okC, kind = pcall(ItemApply.classify, src, dst, playerObj)
+    local okC, kind = pcall(ItemApply.classify, src, dst, playerObj, insideStack)
     if not okC then
         Log.warn("ItemApply: classify failed: " .. tostring(kind))
         return false
@@ -499,8 +684,8 @@ local function sameTypeList(liveItems)
 end
 ItemApply.sameTypeList = sameTypeList
 
-function ItemApply.liveItemsOf(dragged)
-    if dragged == nil or #dragged ~= 1 then return nil end
+function ItemApply.liveItemsOf(dragged, allowMany)
+    if dragged == nil or (#dragged ~= 1 and not allowMany) then return nil end
     local list = {}
     for i = 1, #dragged do
         local entry = dragged[i]
@@ -520,15 +705,93 @@ function ItemApply.liveItemsOf(dragged)
     return sameTypeList(list)
 end
 
+local function collectPourable(inv, src, out, seen, skip)
+    if inv == nil then return end
+    local ok, list = pcall(inv.getItemsFromType, inv, src:getType(), true)
+    if not ok or list == nil then return end
+    local srcType = src:getFullType()
+    for i = 0, list:size() - 1 do
+        local it = list:get(i)
+        if it ~= nil and it ~= src and not seen[it]
+                and it:getFullType() == srcType
+                and it:getContainer() ~= nil
+                and it.getCurrentUsesFloat ~= nil
+                and it:getCurrentUsesFloat() < 1 then
+            local skipped = false
+            if skip ~= nil then
+                for j = 1, #skip do
+                    if skip[j] == it then skipped = true break end
+                end
+            end
+            if not skipped then
+                seen[it] = true
+                out[#out + 1] = it
+            end
+        end
+    end
+end
+
+function ItemApply.pourCandidates(src, playerObj, skip)
+    local out = {}
+    if src == nil or playerObj == nil then return out end
+    if src.canConsolidate == nil or not src:canConsolidate() then return out end
+    if src.getCurrentUsesFloat == nil or src:getCurrentUsesFloat() <= 0 then
+        return out
+    end
+    local seen = {}
+    collectPourable(playerObj:getInventory(), src, out, seen, skip)
+    local okL, loot = pcall(getPlayerLoot, playerObj:getPlayerNum())
+    if okL and loot ~= nil and type(loot.backpacks) == "table" then
+        for i = 1, #loot.backpacks do
+            local inv = loot.backpacks[i].inventory
+
+            local okT, invType = pcall(inv.getType, inv)
+            if not okT or invType ~= "floor" then
+                collectPourable(inv, src, out, seen, skip)
+            end
+        end
+    end
+
+    table.sort(out, function(a, b)
+        return a:getCurrentUsesFloat() > b:getCurrentUsesFloat()
+    end)
+    return out
+end
+
+function ItemApply.pickTarget(stack, inventory, srcItems, front)
+    if stack == nil or inventory == nil or srcItems == nil or #srcItems == 0 then
+        return front
+    end
+    if stack.count == nil or stack.count < 2 then return front end
+    local src = srcItems[1]
+    if src == nil or src.canConsolidate == nil or not src:canConsolidate() then
+        return front
+    end
+    if front ~= nil and front:getFullType() ~= src:getFullType() then return front end
+    local payload = {}
+    for i = 1, #srcItems do payload[srcItems[i]:getID()] = true end
+    local members = ItemStack.getItems(stack, inventory)
+    for i = 1, #members do
+        local m = members[i]
+        if not payload[m:getID()] and m.getCurrentUsesFloat ~= nil
+                and m:getCurrentUsesFloat() < 1 then
+            return m
+        end
+    end
+    return front
+end
+
 local hintList = nil
 local hintSrc = nil
 local hintMemo = {}
+local hintMemoInside = {}
 
 local function resetHints()
     hintList = nil
     hintSrc = nil
 
     hintMemo = {}
+    hintMemoInside = {}
 end
 
 function ItemApply.dragSource()
@@ -545,23 +808,26 @@ function ItemApply.dragSource()
     if list ~= hintList then
         resetHints()
         hintList = list
-        local items = ItemApply.liveItemsOf(list)
+
+        local items = ItemApply.liveItemsOf(list, true)
         hintSrc = items and items[1] or false
     end
     if hintSrc == false then return nil end
     return hintSrc
 end
 
-function ItemApply.hintFor(src, dst, playerObj)
+function ItemApply.hintFor(src, dst, playerObj, insideStack)
     if src == nil or dst == nil then return nil end
-    local cached = hintMemo[dst]
+
+    local memo = insideStack and hintMemoInside or hintMemo
+    local cached = memo[dst]
     if cached ~= nil then
         if cached == false then return nil end
         return cached
     end
-    local ok, kind = pcall(ItemApply.classify, src, dst, playerObj)
+    local ok, kind = pcall(ItemApply.classify, src, dst, playerObj, insideStack)
     if not ok then kind = nil end
-    hintMemo[dst] = kind or false
+    memo[dst] = kind or false
     return kind
 end
 

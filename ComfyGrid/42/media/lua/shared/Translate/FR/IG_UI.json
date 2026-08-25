@@ -9,6 +9,8 @@
     "IGUI_ComfyGrid_OptLootSectionsTip": "Fenêtre de butin : affiche tous les conteneurs à portée en sections empilées, comme la fenêtre d'inventaire.",
     "IGUI_ComfyGrid_OptCompactRows": "Rogner les lignes vides",
     "IGUI_ComfyGrid_OptCompactRowsTip": "Chaque grille affiche ses objets plus une ligne libre (aucune quand le conteneur est plein) au lieu de toute sa capacité.",
+    "IGUI_ComfyGrid_OptStackByType": "Empiler par type uniquement",
+    "IGUI_ComfyGrid_OptStackByTypeTip": "Les objets identiques s'empilent quel que soit leur état, fraîcheur, usages ou remplissage ; l'inspecteur de pile montre toujours chacun. Désactivé : ils ne s'empilent que si leur état correspond aussi.",
     "IGUI_ComfyGrid_IncompatibleTetris": "Comfy Grid : Inventory Tetris est activé. Les deux mods remplacent l'interface d'inventaire et ne peuvent pas fonctionner ensemble : désactivez-en un.",
     "IGUI_ComfyGrid_SlotPrimary": "Main",
     "IGUI_ComfyGrid_SlotSecondary": "Sec.",

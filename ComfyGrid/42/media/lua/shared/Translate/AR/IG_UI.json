@@ -9,6 +9,8 @@
     "IGUI_ComfyGrid_OptLootSectionsTip": "Ventana de loot: muestra todos los contenedores al alcance como secciones apiladas, igual que la ventana del inventario.",
     "IGUI_ComfyGrid_OptCompactRows": "Recortar filas vacías",
     "IGUI_ComfyGrid_OptCompactRowsTip": "Cada tablero muestra sus objetos más una fila libre (ninguna si el contenedor está lleno) en vez de toda su capacidad.",
+    "IGUI_ComfyGrid_OptStackByType": "Apilar solo por tipo",
+    "IGUI_ComfyGrid_OptStackByTypeTip": "Los objetos iguales se apilan sin importar condición, frescura, usos o llenado; el inspector del stack sigue mostrando cada uno. Desactivado: solo se apilan si además coincide su estado.",
     "IGUI_ComfyGrid_IncompatibleTetris": "Comfy Grid: Inventory Tetris está activo. Ambos mods reemplazan la interfaz del inventario y no pueden funcionar juntos: desactivá uno de los dos.",
     "IGUI_ComfyGrid_SlotPrimary": "Mano",
     "IGUI_ComfyGrid_SlotSecondary": "Otra",
