@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.7
+    Version: 1.3.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -124,6 +124,17 @@ StackRules.HEAVY_WEIGHT = 5
 
 StackRules.MATERIAL_WEAPON_CATEGORY = "MaterialWeapon"
 
+local function isThrowable(item)
+    if item.isExplosive == nil then return false end
+    local ok, explosive = pcall(item.isExplosive, item)
+    if not ok or explosive ~= true then return false end
+    if item.isRanged ~= nil then
+        local okR, ranged = pcall(item.isRanged, item)
+        if okR and ranged == true then return false end
+    end
+    return true
+end
+
 StackRules.NEVER_STACK_TYPES = {
     ["Base.44Clip"] = true,
     ["Base.45Clip"] = true,
@@ -149,7 +160,10 @@ function StackRules.isStackable(item)
     if instanceof(item, "HandWeapon") then
         local cat = item.getDisplayCategory ~= nil and item:getDisplayCategory()
             or nil
-        if cat ~= StackRules.MATERIAL_WEAPON_CATEGORY then return false end
+        if cat ~= StackRules.MATERIAL_WEAPON_CATEGORY
+                and not isThrowable(item) then
+            return false
+        end
     end
 
     if item.getWeight ~= nil then

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.7
+    Version: 1.3.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -77,7 +77,7 @@ local function computeDims(self)
     if self.compactEligible and Settings.get("COMPACT_ROWS") then
 
         rows = math.ceil(grid:contentSlots() / cols)
-        if not Capacity.isFull(self.model.inventory, self.playerNum) then
+        if not Capacity.isFull(self.model.inventory) then
             rows = rows + 1
         end
     else

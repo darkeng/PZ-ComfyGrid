@@ -7,7 +7,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 ## Features
 
 - **Square-tile grid** — no more scrolling a text list; it reflows to your window width.
-- **Auto-stacking** — identical items merge into one tile whatever their state (fresh and stale food, a full and a half-used roll of tape); weapons, tools and heavy items always keep a tile of their own. A colour bar shows each tile's status, and an option restores strict grouping by state.
+- **Auto-stacking** — identical items merge into one tile whatever their state (fresh and stale food, a full and a half-used roll of tape); weapons, tools and heavy items always keep a tile of their own, while throwables (grenades, molotovs, traps) pile up. A colour bar shows each tile's status, and an option restores strict grouping by state.
 - **Stack inspector** — click a stack to see every item's individual condition, and drag one member onto another to top it up; it closes itself once the stack drops below two items.
 - **Every container, one panel** — equipment, hotbar, pockets and every worn bag stack as sections; drag to equip or attach, no clicking through container tabs.
 - **Ammo counters** — guns and magazines show their rounds right on the tile, mirrored on the vanilla hotbar.
