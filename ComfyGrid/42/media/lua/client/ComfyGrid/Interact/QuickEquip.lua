@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.8
+    Version: 1.3.9
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -28,7 +28,7 @@ local function isWearable(item)
     if instanceof(item, "Clothing") then return true end
     if item.canBeEquipped ~= nil then
         local ok, loc = pcall(item.canBeEquipped, item)
-        if ok and type(loc) == "string" and loc ~= "" then return true end
+        if ok and loc ~= nil and tostring(loc) ~= "" then return true end
     end
     return false
 end
@@ -63,6 +63,7 @@ local function equipHovered()
     if isWearable(front) then
         displaced = Equipment.findDisplacedWorn(playerObj, front)
         ISInventoryPaneContextMenu.onWearItems({ front }, 0)
+
     elseif instanceof(front, "HandWeapon") then
         local okH, held = pcall(playerObj.getPrimaryHandItem, playerObj)
         displaced = okH and held or nil
