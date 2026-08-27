@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -65,6 +65,11 @@ local function equipHovered()
         ISInventoryPaneContextMenu.onWearItems({ front }, 0)
 
     elseif instanceof(front, "HandWeapon") then
+
+        local okCond, condition = pcall(front.getCondition, front)
+        if okCond and type(condition) == "number" and condition <= 0 then
+            return
+        end
         local okH, held = pcall(playerObj.getPrimaryHandItem, playerObj)
         displaced = okH and held or nil
         local twoHands = front.isTwoHandWeapon ~= nil

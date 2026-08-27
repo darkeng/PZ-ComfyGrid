@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -77,7 +77,7 @@ local function computeDims(self)
     if self.compactEligible and Settings.get("COMPACT_ROWS") then
 
         rows = math.ceil(grid:contentSlots() / cols)
-        if not Capacity.isFull(self.model.inventory) then
+        if not Capacity.isFull(self.model.inventory, self.playerNum) then
             rows = rows + 1
         end
     else
@@ -619,7 +619,13 @@ local function dragCancelImpl(owner)
     if items == nil then return end
     local playerObj = getSpecificPlayer(owner.playerNum)
     if playerObj == nil then return end
-    Transfer.dropToFloor(items, playerObj)
+    local dropped, moveables = Transfer.dropToFloor(items, playerObj)
+
+    if dropped == 0 and moveables ~= nil then
+
+        DragAndDrop.endDrag()
+        Transfer.openMoveableCursor(playerObj, moveables[1])
+    end
 end
 
 local function onDragCancelled(owner)

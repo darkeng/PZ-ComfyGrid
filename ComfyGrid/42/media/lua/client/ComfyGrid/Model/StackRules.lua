@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -179,9 +179,19 @@ function StackRules.isStackable(item)
     return true
 end
 
+function StackRules.identityOf(item)
+    if item == nil then return nil end
+    local Herbalist = ComfyGrid.Model and ComfyGrid.Model.Herbalist
+    if Herbalist ~= nil then
+        local masked = Herbalist.groupNameOf(item)
+        if masked ~= nil then return masked end
+    end
+    return item.getFullType and item:getFullType() or nil
+end
+
 function StackRules.isSameStack(stack, item)
     if not stack or not item then return false end
-    if stack.itemType ~= (item.getFullType and item:getFullType()) then
+    if stack.itemType ~= StackRules.identityOf(item) then
         return false
     end
     return stack.bucket == StackRules.bucketOf(item)

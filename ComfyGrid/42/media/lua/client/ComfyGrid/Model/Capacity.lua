@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -23,7 +23,22 @@ local MIN_SLOTS = 2
 local FLOOR_SLOTS = 80
 local FALLBACK_CAPACITY = 20
 
-function Capacity.isFull(inventory)
+function Capacity.effectiveFor(inventory, playerNum)
+    if inventory == nil then return nil end
+    if playerNum ~= nil and inventory.getEffectiveCapacity ~= nil then
+        local okP, playerObj = pcall(getSpecificPlayer, playerNum)
+        if okP and playerObj ~= nil then
+            local okE, eff = pcall(inventory.getEffectiveCapacity, inventory,
+                playerObj)
+            if okE and type(eff) == "number" then return eff end
+        end
+    end
+    local okC, cap = pcall(inventory.getCapacity, inventory)
+    if okC and type(cap) == "number" then return cap end
+    return nil
+end
+
+function Capacity.isFull(inventory, playerNum)
     if inventory == nil then return false end
     local okT, invType = pcall(inventory.getType, inventory)
     if okT and invType == "floor" then return false end
@@ -34,12 +49,12 @@ function Capacity.isFull(inventory)
     end
     local okC, cur = pcall(inventory.getCapacityWeight, inventory)
     if not okC or type(cur) ~= "number" then return false end
-    local okM, cmax = pcall(inventory.getCapacity, inventory)
-    if not okM or type(cmax) ~= "number" or cmax <= 0 then return false end
+    local cmax = Capacity.effectiveFor(inventory, playerNum)
+    if type(cmax) ~= "number" or cmax <= 0 then return false end
     return cur >= cmax
 end
 
-function Capacity.slotsFor(inventory)
+function Capacity.slotsFor(inventory, playerNum)
     if inventory and inventory:getType() == "floor" then
         return FLOOR_SLOTS
     end
@@ -47,8 +62,8 @@ function Capacity.slotsFor(inventory)
     local capacity = FALLBACK_CAPACITY
     if inventory then
 
-        local ok, value = pcall(inventory.getCapacity, inventory)
-        if ok and type(value) == "number" then
+        local value = Capacity.effectiveFor(inventory, playerNum)
+        if type(value) == "number" then
             capacity = value
         end
 

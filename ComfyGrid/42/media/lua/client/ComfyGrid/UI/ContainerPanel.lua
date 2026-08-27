@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,6 +9,7 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
+require "ComfyGrid/Model/Capacity"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/GridView"
 require "ComfyGrid/UI/EquipmentStrip"
@@ -19,6 +20,7 @@ ComfyGrid.UI = ComfyGrid.UI or {}
 local ContainerPanel = ISPanel:derive("ComfyContainerPanel")
 ComfyGrid.UI.ContainerPanel = ContainerPanel
 
+local Capacity = ComfyGrid.Model.Capacity
 local Style = ComfyGrid.UI.Style
 local GridView = ComfyGrid.UI.GridView
 local EquipmentStrip = ComfyGrid.UI.EquipmentStrip
@@ -285,8 +287,8 @@ function ContainerPanel:prerender()
             local okM, m = pcall(playerObj.getMaxWeight, playerObj)
             if okM and type(m) == "number" then cmax = m end
         else
-            local okM, m = pcall(inv.getCapacity, inv)
-            if okM and type(m) == "number" then cmax = m end
+
+            cmax = Capacity.effectiveFor(inv, self.playerNum)
         end
         if cur ~= nil and cmax ~= nil then
             local key = math.floor(cur * 10 + 0.5) * 1000 + cmax

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,6 +9,7 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
+require "ComfyGrid/Model/Capacity"
 require "ComfyGrid/Model/ContainerModel"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/GridView"
@@ -19,6 +20,7 @@ ComfyGrid.UI.PocketsPanel = PocketsPanel
 
 local Log = ComfyGrid.Core.Log
 local Text = ComfyGrid.Core.Text
+local Capacity = ComfyGrid.Model.Capacity
 local ContainerModel = ComfyGrid.Model.ContainerModel
 local Style = ComfyGrid.UI.Style
 local GridView = ComfyGrid.UI.GridView
@@ -237,8 +239,9 @@ local function renderImpl(self)
             local cur, max = 0, 0
             local okC, c = pcall(isl.inv.getCapacityWeight, isl.inv)
             if okC and type(c) == "number" then cur = c end
-            local okM, m = pcall(isl.inv.getCapacity, isl.inv)
-            if okM and type(m) == "number" then max = m end
+
+            local m = Capacity.effectiveFor(isl.inv, self.playerNum)
+            if type(m) == "number" then max = m end
             local key = math.floor(cur * 10 + 0.5) * 1000 + max
             if isl.wtKey ~= key or isl.gen ~= metricsGen then
                 isl.wtKey = key

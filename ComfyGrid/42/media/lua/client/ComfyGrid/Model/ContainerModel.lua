@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Model/Herbalist"
 require "ComfyGrid/Model/Persistence"
 require "ComfyGrid/Model/SlotGrid"
 ComfyGrid = ComfyGrid or {}
@@ -62,6 +63,11 @@ function ContainerModel:refresh(force)
         if fresh ~= nil and fresh ~= self.grid.data then
             self.grid:rebindData(fresh)
         end
+    end
+
+    local Herbalist = ComfyGrid.Model and ComfyGrid.Model.Herbalist
+    if Herbalist ~= nil then
+        Herbalist.applyMask(self.inventory, self.playerNum)
     end
     self.grid:validate()
     self.grid:reconcile()

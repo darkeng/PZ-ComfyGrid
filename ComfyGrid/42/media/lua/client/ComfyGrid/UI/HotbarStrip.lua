@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -505,6 +505,14 @@ local function resolveReslotDrop(self, fromIdx, toIdx)
         hotbar:attachItem(other,
             fromSlot.def.attachments[other:getAttachmentType()],
             fromIdx + 1, fromSlot.def, false)
+    end
+
+    if syncItemFields ~= nil then
+        local playerObj = getSpecificPlayer(self.playerNum)
+        if playerObj ~= nil then
+            pcall(syncItemFields, playerObj, item)
+            if other ~= nil then pcall(syncItemFields, playerObj, other) end
+        end
     end
 end
 

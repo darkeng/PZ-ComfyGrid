@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -247,12 +247,23 @@ local function assignOrderedSlots(grid, startSlot, n)
     return slots
 end
 
+local function tutorialMode()
+    local okCore, core = pcall(getCore)
+    if not okCore or core == nil or core.getGameMode == nil then
+        return false
+    end
+    local okMode, mode = pcall(core.getGameMode, core)
+    return okMode and tostring(mode) == "Tutorial"
+end
+
 function DropHandler.resolve(gridView, localX, localY)
     if gridView == nil or gridView.model == nil
             or gridView.model.grid == nil then
         return false
     end
     if localX == nil or localY == nil then return false end
+
+    if tutorialMode() then return false end
     local targetSlot = gridView:slotAt(localX, localY)
     if targetSlot == nil then return false end
 
@@ -343,8 +354,9 @@ function DropHandler.resolve(gridView, localX, localY)
                         local front = ItemStack.frontItem(tag, srcInv)
                         if front ~= nil
                                 and not ItemStack.canAdd(occupant, front) then
+
                             Transfer.moveStacks({ occupant }, srcInv,
-                                playerObj, tag.slot, inventory)
+                                playerObj, tag.slot, inventory, true)
                         end
                     end
                 end

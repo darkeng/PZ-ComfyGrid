@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -111,7 +111,7 @@ end
 function SlotGrid:findStackFor(item)
     local stacks = self.data.stacks
     if #stacks == 0 then return nil end
-    local fullType = item:getFullType()
+    local fullType = StackRules.identityOf(item)
     local bucket = StackRules.bucketOf(item)
     local maxStack = StackRules.maxStackOf(item)
     for i = 1, #stacks do
@@ -124,7 +124,7 @@ function SlotGrid:findStackFor(item)
 end
 
 function SlotGrid:firstFreeSlot(forId)
-    local total = Capacity.slotsFor(self.inventory)
+    local total = Capacity.slotsFor(self.inventory, self.playerNum)
     local highest = self:_highestOccupiedSlot()
     if highest + 1 > total then total = highest + 1 end
     local map = self.slotMap
@@ -401,7 +401,9 @@ function SlotGrid:validate()
                         drop = true
                         seen[id] = true
                         migrated[#migrated + 1] = item
-                    elseif StackRules.bucketOf(item) ~= stack.bucket then
+                    elseif StackRules.bucketOf(item) ~= stack.bucket
+                            or StackRules.identityOf(item) ~= stack.itemType then
+
                         drop = true
 
                         seen[id] = true
@@ -566,7 +568,7 @@ function SlotGrid:_rebuildSlotMap()
 end
 
 function SlotGrid:_recomputeSlotCount()
-    local slots = Capacity.slotsFor(self.inventory)
+    local slots = Capacity.slotsFor(self.inventory, self.playerNum)
     local occupied = self:_highestOccupiedSlot() + 1
     if occupied > slots then slots = occupied end
 

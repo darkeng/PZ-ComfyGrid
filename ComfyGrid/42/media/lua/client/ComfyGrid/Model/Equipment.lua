@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -247,10 +247,44 @@ function Equipment.findDisplacedWorn(playerObj, item)
     return nil
 end
 
+local function handAccepts(item)
+    local okCore, core = pcall(getCore)
+    if okCore and core ~= nil and core.getGameMode ~= nil then
+        local okMode, mode = pcall(core.getGameMode, core)
+        if okMode and tostring(mode) == "Tutorial" then return false end
+    end
+    if item.getScriptItem ~= nil then
+        local okS, script = pcall(item.getScriptItem, item)
+        if okS and script ~= nil and script.getReplaceWhenUnequip ~= nil then
+            local okR, replace = pcall(script.getReplaceWhenUnequip, script)
+            if okR and replace then return false end
+        end
+    end
+    if item.IsWeapon ~= nil then
+        local okW, isWeapon = pcall(item.IsWeapon, item)
+        if okW and isWeapon then
+            local okC, condition = pcall(item.getCondition, item)
+            if okC and type(condition) == "number" then
+                return condition > 0
+            end
+            return true
+        end
+    end
+    if item.IsFood ~= nil then
+        local okF, isFood = pcall(item.IsFood, item)
+        if okF and isFood then return false end
+    end
+    if item.IsClothing ~= nil then
+        local okCl, isClothing = pcall(item.IsClothing, item)
+        if okCl and isClothing then return false end
+    end
+    return true
+end
+
 function Equipment.itemMatchesGroup(item, groupKey)
     if item == nil then return false end
     if groupKey == "Primary" or groupKey == "Secondary" then
-        return true
+        return handAccepts(item)
     end
     local location = nil
     if item.getBodyLocation ~= nil then

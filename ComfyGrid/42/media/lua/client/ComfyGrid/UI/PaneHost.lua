@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -121,7 +121,7 @@ local function layout(self)
         local inv = invs[i]
         if not sectioned or i == 1 then
             bigs[#bigs + 1] = inv
-        elseif Capacity.slotsFor(inv) <= POCKET_MAX_SLOTS then
+        elseif Capacity.slotsFor(inv, pane.player) <= POCKET_MAX_SLOTS then
             pockets[#pockets + 1] = inv
         else
 

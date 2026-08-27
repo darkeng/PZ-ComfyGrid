@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.3.9
+    Version: 1.4.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -84,11 +84,21 @@ local function destinationFor(sourceInventory, playerObj, playerNum)
     return pane.inventory
 end
 
+local function tutorialMode()
+    local okCore, core = pcall(getCore)
+    if not okCore or core == nil or core.getGameMode == nil then
+        return false
+    end
+    local okMode, mode = pcall(core.getGameMode, core)
+    return okMode and tostring(mode) == "Tutorial"
+end
+
 function QuickMove.run(stacks, sourceInventory, playerNum)
     if stacks == nil or sourceInventory == nil then return false end
     playerNum = playerNum or 0
     local playerObj = getSpecificPlayer(playerNum)
     if playerObj == nil then return false end
+    if tutorialMode() then return false end
 
     if stacks.itemIDs ~= nil or stacks.items ~= nil then
         stacks = { stacks }
@@ -109,8 +119,18 @@ function QuickMove.run(stacks, sourceInventory, playerNum)
         Log.warn("QuickMove: Transfer module missing; nothing queued")
         return false
     end
+
+    local carried = 0
+    if Transfer.escalateHeavyItems ~= nil then
+        liveItems, carried = Transfer.escalateHeavyItems(liveItems, dest,
+            playerObj)
+        if #liveItems == 0 then return carried > 0 end
+    end
     local queued
-    if Transfer.moveStacks ~= nil then
+    if carried > 0 then
+
+        queued = Transfer.moveItems(liveItems, dest, playerObj, nil)
+    elseif Transfer.moveStacks ~= nil then
 
         queued = Transfer.moveStacks(vanillaList, dest, playerObj, nil)
     else
