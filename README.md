@@ -4,26 +4,44 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 ![Comfy Grid](ComfyGrid/poster.png)
 
-## Features
+## The grid
 
-- **Square-tile grid** — no more scrolling a text list; it reflows to your window width.
-- **Auto-stacking** — identical items merge into one tile whatever their state (fresh and stale food, a full and a half-used roll of tape); weapons, tools and heavy items always keep a tile of their own, while throwables (grenades, molotovs, traps) pile up. A colour bar shows each tile's status, and an option restores strict grouping by state.
-- **Stack inspector** — click a stack to see every item's individual condition, and drag one member onto another to top it up; it closes itself once the stack drops below two items.
-- **Every container, one panel** — equipment, hotbar, pockets and every worn bag stack as sections; drag to equip or attach, no clicking through container tabs.
-- **Ammo counters** — guns and magazines show their rounds right on the tile, mirrored on the vanilla hotbar.
-- **Weight at a glance** — a scale-weight icon on every tile fades from faint green to blood red with the item's weight; stacks show the weight of the whole pile.
-- **Read indicator** — books, magazines and maps show reading progress and get a tick once fully read.
-- **Drag & drop** with positional swap, multi-select, quick-move and spring-loaded containers.
-- **Drop to use** — rounds on a magazine load it, a magazine or attachment on its gun fits it, a bottle on another pours, and the right-click *Pour into* menu tops up a part-used item (pills, tape, glue…) from any container; compatible targets light up while dragging, and everything returns to where it was afterwards.
-- **Full controller support** — a cell cursor over every section, one button per action, button hints, controller stack splitting through the inspector. Steam Deck friendly.
-- **Full multiplayer support**, plus configurable interface scale (0.1 steps; it also follows the game's font-size setting), grid density, stacking by type or by state, instant transfers, stacked loot containers and trimmed empty rows.
-- **8 languages** — English, Español, Español (AR), Français, Deutsch, Русский, 简体中文, Português (BR).
+- **Square tiles** that reflow to your window width — no more scrolling a text list.
+- **Auto-stacking** — identical items share one tile with a counter whatever their state (fresh and stale food, a full and a half-used roll of tape); weapons, tools and heavy gear keep a tile of their own, while throwables pile up. An option restores strict grouping by state.
+- **Status at a glance** — a colour bar for freshness, condition, uses and fluid; rounds on guns and magazines; reading progress on books; a weight icon that reddens with the load.
+- **Stack inspector** — left-click a stack to see every item on its own, and drag one onto another to top it up.
 
-Heads up: it replaces the vanilla inventory windows, so enable only one inventory-UI mod at a time (incompatible with Inventory Tetris).
+## Every container, one window
+
+- **Sections** — your pockets, every worn bag and every container within reach, stacked in one panel. No tabs.
+- **Verbs on every header** — sort into category islands, pull in more of the same, spread across the open containers, send the lot over, or tip it on the floor.
+- **The object's own buttons too** — ovens, washers, campfires, mannequins and car boots put their controls right on their header.
+- **Reorder** — drag a container button to move it.
+
+## Your character
+
+- **Equipment window** — docked beside the inventory, with a live 3D character and every socket on the body part it dresses. Or a flat silhouette, or a row inside the inventory.
+- **Layer drawer** — click a socket to see everything you wear on that zone.
+- **The hotbar, redressed** — the bar at the bottom of the screen wears the same tiles, and an empty slot shows what belongs in it.
+
+## Controls
+
+- **Drag** to move or swap; **Ctrl+click** or **Ctrl+drag** to multi-select; **Shift+click** quick-moves; hold a drag over a container to open it.
+- **Drop to use** — rounds onto a magazine, a magazine or sight onto its gun, a bottle onto another to pour, a half-used item onto its twin to combine. Right-click *Pour into* does it from any container.
+- **E** over gear equips it; if the socket is taken, they swap.
+- **Full controller support** — a cell cursor over every surface, one button per action, on-screen hints, stack splitting from the inspector. Steam Deck friendly.
+
+## Set up in game
+
+The gear in the title bar opens the mod's own panel: interface scale, grid density, stacking by type or state, instant transfers, and where the equipment lives. Every option applies live, and a tooltip says what it does.
+
+**Full multiplayer support**, and 8 languages: English, Español, Español (AR), Français, Deutsch, Русский, 简体中文, Português (BR).
+
+Heads up: it replaces the vanilla inventory windows, so don't run it with Inventory Tetris or CleanUI — they replace the same UI. The mod warns you if it finds one.
 
 ## Install
 
-Copy the [`ComfyGrid/`](ComfyGrid/) folder into `%USERPROFILE%\Zomboid\mods\` and enable it in-game, or subscribe on the Steam Workshop once the mod is published there.
+Copy the [`ComfyGrid/`](ComfyGrid/) folder into `%USERPROFILE%\Zomboid\mods\` and enable it in-game, or subscribe on the [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3772457854).
 
 ## About this repository
 

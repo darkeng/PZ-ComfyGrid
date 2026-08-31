@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -114,6 +114,37 @@ function SlotRenderer.drawApplyHint(ctx, pulse)
     view:drawRect(x + cell - 1 - t, y + 1 + k, t, span, a, c.r, c.g, c.b)
 end
 
+local HIGHLIGHT = { r = 1.0, g = 1.0, b = 1.0 }
+local HIGHLIGHT_WASH = 0.22
+local HIGHLIGHT_RING_A = 0.75
+local HIGHLIGHT_RING = 2
+local HIGHLIGHT_CLIP = 3
+
+function SlotRenderer.drawHighlight(ctx)
+    local cell = Style.CELL
+    local view = ctx.view
+    local x, y = ctx.x, ctx.y
+    local c = HIGHLIGHT
+    local tex = tileTexture()
+    if tex ~= nil then
+        view:drawTextureScaled(tex, x + 1, y + 1, cell - 2, cell - 2,
+            HIGHLIGHT_WASH, c.r, c.g, c.b)
+    else
+        view:drawRect(x + 1, y + 1, cell - 2, cell - 2,
+            HIGHLIGHT_WASH, c.r, c.g, c.b)
+    end
+
+    local t = HIGHLIGHT_RING
+    local k = HIGHLIGHT_CLIP
+    local span = cell - 2 - 2 * k
+    if span <= 0 then return end
+    local a = HIGHLIGHT_RING_A
+    view:drawRect(x + 1 + k, y + 1, span, t, a, c.r, c.g, c.b)
+    view:drawRect(x + 1 + k, y + cell - 1 - t, span, t, a, c.r, c.g, c.b)
+    view:drawRect(x + 1, y + 1 + k, t, span, a, c.r, c.g, c.b)
+    view:drawRect(x + cell - 1 - t, y + 1 + k, t, span, a, c.r, c.g, c.b)
+end
+
 local pulseUnsupported = false
 function SlotRenderer.applyPulse()
     if pulseUnsupported then return 1 end
@@ -128,8 +159,8 @@ end
 local SOCKET_FILL = { r = 0.115, g = 0.11, b = 0.135, a = 1.0 }
 local SOCKET_EDGE = { r = 0.44, g = 0.39, b = 0.29, a = 0.8 }
 
-function SlotRenderer.drawSocket(ctx)
-    local cell = Style.CELL
+function SlotRenderer.drawSocket(ctx, size)
+    local cell = size or Style.CELL
     local view = ctx.view
     local x = ctx.x
     local y = ctx.y
@@ -163,8 +194,8 @@ end
 local GHOST_ALPHA = 0.30
 local GHOST_R, GHOST_G, GHOST_B = 0.72, 0.72, 0.78
 
-function SlotRenderer.drawGhost(view, tex, x, y)
-    local cell = Style.CELL
+function SlotRenderer.drawGhost(view, tex, x, y, size)
+    local cell = size or Style.CELL
     local texW = tex:getWidth()
     local texH = tex:getHeight()
     if not texW or not texH or texW <= 0 or texH <= 0 then return end

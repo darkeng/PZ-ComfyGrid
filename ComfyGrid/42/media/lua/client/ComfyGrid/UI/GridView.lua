@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -18,6 +18,7 @@ require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
 require "ComfyGrid/Interact/Transfer"
 require "ComfyGrid/Interact/TransferJobs"
+require "ComfyGrid/Interact/Highlight"
 require "ComfyGrid/Interact/DropHandler"
 require "ComfyGrid/Interact/QuickMove"
 require "ComfyGrid/Interact/ContextMenu"
@@ -37,6 +38,7 @@ local StackRenderer = ComfyGrid.UI.StackRenderer
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
 local Transfer = ComfyGrid.Interact.Transfer
 local TransferJobs = ComfyGrid.Interact.TransferJobs
+local Highlight = ComfyGrid.Interact.Highlight
 local DropHandler = ComfyGrid.Interact.DropHandler
 local QuickMove = ComfyGrid.Interact.QuickMove
 local ContextMenu = ComfyGrid.Interact.ContextMenu
@@ -345,6 +347,8 @@ local function renderAll(self)
     local jobs = TransferJobs.itemsFor(inventory)
     local currentAction = StackRenderer.currentActionOf(self.playerNum)
 
+    local highlightIds = Highlight.idsFor(self.playerNum)
+
     local ItemApply = ComfyGrid.Interact.ItemApply
     local applySrc = ItemApply ~= nil and ItemApply.dragSource() or nil
     local applyPlayer = nil
@@ -387,6 +391,10 @@ local function renderAll(self)
                 if applySrc ~= nil
                         and ItemApply.hintFor(applySrc, front, applyPlayer) then
                     SlotRenderer.drawApplyHint(ctx, applyPulse)
+                end
+                if highlightIds ~= nil
+                        and Highlight.hasStack(highlightIds, stack) then
+                    SlotRenderer.drawHighlight(ctx)
                 end
 
                 if stack == draggedStack or stack == padCarried

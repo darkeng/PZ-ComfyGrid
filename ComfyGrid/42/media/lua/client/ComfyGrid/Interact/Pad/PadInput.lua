@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -36,8 +36,15 @@ local function hotbarIndexOf(strip, seat, itemId)
 end
 
 local function verbA(page, seat)
+
+    if PadFocus.endMove(page) then return true end
     local kind, el, slot, occupant = PadFocus.peek(page)
     if kind == nil then return true end
+
+    if kind == "chip" then
+        if el.padActivateChip ~= nil then el:padActivateChip(slot) end
+        return true
+    end
     if PadCarry.isCarrying(seat) then
         if kind == "equip" then
             el:resolvePadDrop(slot)
@@ -128,7 +135,12 @@ local function verbY(page, seat)
     local kind, el, slot, occupant = PadFocus.peek(page)
     if kind == nil or occupant == nil then return true end
 
-    local px, py = Style.pixelForSlot(slot, el.cols or 1)
+    local px, py
+    if el.padTileXY ~= nil then
+        px, py = el:padTileXY(slot)
+    else
+        px, py = Style.pixelForSlot(slot, el.cols or 1)
+    end
     local cell = Style.CELL or 45
     local ax = el:getAbsoluteX() + px + cell
     local ay = el:getAbsoluteY() + py + cell
@@ -141,6 +153,8 @@ local function verbY(page, seat)
 end
 
 local function verbB(page, seat)
+
+    if PadFocus.endMove(page, true) then return true end
     if PadCarry.cancel(seat) then return true end
 
     if PadFocus.clearSelections(page) then return true end
@@ -189,6 +203,13 @@ local function verbInspect(page, seat)
     return true
 end
 
+local function verbMove(page, seat)
+    if PadFocus.endMove(page) then return true end
+    if PadCarry.isCarrying(seat) then return true end
+    PadFocus.beginMove(page)
+    return true
+end
+
 local VERBS = nil
 
 local function verbs()
@@ -202,6 +223,7 @@ local function verbs()
             [Joypad.RBumper] = verbRB,
             [Joypad.LStickButton] = verbSelect,
             [Joypad.RStickButton] = verbInspect,
+            [Joypad.Back] = verbMove,
         }
     end
     return VERBS
@@ -224,6 +246,18 @@ local function label(key)
 end
 
 function PadInput.promptFor(page, slotKey)
+
+    local carrying = PadFocus.movingInv(page)
+    if carrying ~= nil then
+        if slotKey == "A" or slotKey == "Back" then return label("Done") end
+        if slotKey == "B" then return label("Cancel") end
+        return nil
+    end
+    if slotKey == "Back" then
+
+        if PadCarry.isCarrying(page.player) then return nil end
+        return PadFocus.canMove(page) ~= nil and label("Move") or nil
+    end
     if slotKey == "LB" then
 
         if page.onCharacter then return label("Section") end
@@ -271,6 +305,11 @@ function PadInput.promptFor(page, slotKey)
         return nil
     end
     if slotKey == "B" then return label("Close") end
+
+    if kind == "chip" then
+        if slotKey == "A" then return label("Use") end
+        return nil
+    end
     if occupant == nil then return nil end
     if slotKey == "A" then return label("Take") end
     if slotKey == "X" then

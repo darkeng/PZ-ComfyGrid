@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -384,7 +384,7 @@ function StackRenderer.draw(ctx)
     if not tex then
 
         view:drawTextCentre("?", x + CELL * 0.5,
-            y + (CELL - Style.FONT_H) * 0.5, 1, 1, 1, 1, UIFont.Small)
+            y + (CELL - Style.FONT_H) * 0.5, 1, 1, 1, 1, Style.FONT)
     end
 
     if item then
@@ -470,7 +470,7 @@ function StackRenderer.draw(ctx)
             end
             local tw = byFont[ammoText]
             if tw == nil then
-                tw = getTextManager():MeasureStringX(UIFont.Small, ammoText)
+                tw = getTextManager():MeasureStringX(Style.FONT, ammoText)
                 byFont[ammoText] = tw
             end
             local ax = x + CELL - 9 - tw
@@ -483,11 +483,11 @@ function StackRenderer.draw(ctx)
                     local off = floor(Style.SCALE + 0.5)
                     if off < 1 then off = 1 end
                     view:drawText(ammoText, ax + off, ty + off,
-                        cs.r, cs.g, cs.b, cs.a or 1, UIFont.Small)
+                        cs.r, cs.g, cs.b, cs.a or 1, Style.FONT)
                 end
                 local ct = (colors2 and colors2.COUNT_TEXT) or FALLBACK_COUNT_TEXT
                 view:drawText(ammoText, ax, ty, ct.r, ct.g, ct.b, ct.a or 1,
-                    UIFont.Small)
+                    Style.FONT)
             end
         end
 
@@ -512,9 +512,9 @@ function StackRenderer.draw(ctx)
             local off = floor(Style.SCALE + 0.5)
             if off < 1 then off = 1 end
             view:drawText(text, x + 2 + off, y + off,
-                cs.r, cs.g, cs.b, cs.a or 1, UIFont.Small)
+                cs.r, cs.g, cs.b, cs.a or 1, Style.FONT)
         end
-        view:drawText(text, x + 2, y, ct.r, ct.g, ct.b, ct.a or 1, UIFont.Small)
+        view:drawText(text, x + 2, y, ct.r, ct.g, ct.b, ct.a or 1, Style.FONT)
     end
 end
 

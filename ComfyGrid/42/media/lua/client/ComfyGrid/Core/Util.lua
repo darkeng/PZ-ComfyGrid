@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -34,7 +34,7 @@ function Util.tableCount(t)
 end
 
 function Util.isEmpty(t)
-    return t == nil or next(t) == nil
+    return t == nil or Util.tableCount(t) == 0
 end
 
 function Util.shallowCopy(t)

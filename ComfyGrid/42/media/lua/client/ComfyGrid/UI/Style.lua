@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,6 +10,7 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Util"
 require "ComfyGrid/Settings"
+require "ComfyGrid/Model/Categories"
 
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
@@ -36,12 +37,15 @@ Style.CELL = 45
 Style.CELL_STRIDE = 44
 
 Style.FONT_H = 16
+Style.SMALL_H = 16
 
 local scaleListeners = {}
 
 function Style.onScaleChanged(fn)
     scaleListeners[#scaleListeners + 1] = fn
 end
+
+local pickFont
 
 local function recompute(force)
     local eff = Util.clamp(Style.USER_SCALE * Style.FONT_SCALE,
@@ -73,28 +77,65 @@ function Style.applyScale(s)
         s = Settings.defaults.SCALE
     end
     Style.USER_SCALE = Util.clamp(s, MIN_SCALE, MAX_SCALE)
-    recompute(false)
+
+    recompute(pickFont())
+end
+
+local SMALLEST_FONT_H = 16
+
+local ladderCache = nil
+local function ladder()
+    if ladderCache == nil and UIFont ~= nil then
+        ladderCache = { UIFont.Small, UIFont.Medium, UIFont.Large }
+    end
+    return ladderCache
+end
+
+local function rungFor(eff)
+    if eff >= 1.9 then return 3 end
+    if eff >= 1.5 then return 2 end
+    return 1
+end
+
+function pickFont()
+    if UIFont == nil then return false end
+    local tm = type(getTextManager) == "function" and getTextManager() or nil
+    if tm == nil then return false end
+    local eff = Util.clamp(Style.USER_SCALE * Style.FONT_SCALE,
+        MIN_SCALE, MAX_EFFECTIVE)
+    local rungs = ladder()
+    local font = rungs ~= nil and rungs[rungFor(eff)] or UIFont.Small
+    local changed = false
+    if font ~= nil and font ~= Style.FONT then
+        Style.FONT = font
+        changed = true
+    end
+    local h = tm:getFontHeight(Style.FONT)
+    if type(h) == "number" and h > 0 and h ~= Style.FONT_H then
+        Style.FONT_H = h
+        changed = true
+    end
+    return changed
 end
 
 function Style.refreshFont()
     if UIFont == nil then return end
     local changed = false
-    local core = type(getCore) == "function" and getCore() or nil
-    if core ~= nil and core.getOptionFontSizeReal ~= nil then
-        local real = core:getOptionFontSizeReal()
-        if type(real) == "number" and real > 0
-                and real ~= Style.FONT_SCALE then
-            Style.FONT_SCALE = real
-            changed = true
-        end
-    end
     local tm = type(getTextManager) == "function" and getTextManager() or nil
     if tm ~= nil then
-        local h = tm:getFontHeight(UIFont.Small)
-        if type(h) == "number" and h > 0 and h ~= Style.FONT_H then
-            Style.FONT_H = h
+
+        local small = tm:getFontHeight(UIFont.Small)
+        if type(small) == "number" and small > 0 and small ~= Style.SMALL_H then
+            Style.SMALL_H = small
             changed = true
         end
+
+        local fs = Style.SMALL_H / SMALLEST_FONT_H
+        if fs > 0 and fs ~= Style.FONT_SCALE then
+            Style.FONT_SCALE = fs
+            changed = true
+        end
+        if pickFont() then changed = true end
     end
     if changed then
         recompute(true)
@@ -181,6 +222,39 @@ Style.COLORS.CATEGORY = {
 
 Style.COLORS.CATEGORY.FirstAid = Style.COLORS.CATEGORY.Medical
 Style.COLORS.CATEGORY.Bag = Style.COLORS.CATEGORY.Container
+
+local BUCKET_TINT = {
+    weapons    = Style.COLORS.CATEGORY.Weapon,
+    tools      = { r = 0.15, g = 0.15, b = 0.17, a = 1.0 },
+    food       = Style.COLORS.CATEGORY.Food,
+    medical    = Style.COLORS.CATEGORY.Medical,
+    hygiene    = { r = 0.20, g = 0.22, b = 0.28, a = 1.0 },
+    kitchen    = { r = 0.24, g = 0.16, b = 0.08, a = 1.0 },
+    materials  = { r = 0.17, g = 0.13, b = 0.07, a = 1.0 },
+    containers = Style.COLORS.CATEGORY.Container,
+    literature = Style.COLORS.CATEGORY.Literature,
+    clothing   = Style.COLORS.CATEGORY.Clothing,
+    survival   = { r = 0.15, g = 0.17, b = 0.11, a = 1.0 },
+    misc       = { r = 0.17, g = 0.16, b = 0.15, a = 1.0 },
+    other      = Style.COLORS.CATEGORY.default,
+}
+Style.COLORS.BUCKET = BUCKET_TINT
+do
+
+    local Categories = ComfyGrid.Model and ComfyGrid.Model.Categories
+    if Categories ~= nil and Categories.BUCKET ~= nil then
+        local cats = Style.COLORS.CATEGORY
+        for cat, bucket in pairs(Categories.BUCKET) do
+            if cats[cat] == nil then
+                cats[cat] = BUCKET_TINT[bucket] or cats.default
+            end
+        end
+    end
+end
+
+function Style.headerHeight()
+    return math.max(18, Style.FONT_H + 4, floor(Style.CELL / 2))
+end
 
 Style.FONT = UIFont and UIFont.Small or nil
 

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,6 +11,7 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/UI/Style"
+require "ComfyGrid/UI/Chrome/PopupRegistry"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
@@ -35,6 +36,8 @@ local instance = nil
 local MIN_COLS = 2
 local MAX_COLS = 4
 local PAD_X = 4
+
+local GAP = 4
 
 local DEFAULT_BG = { r = 0.07, g = 0.07, b = 0.09, a = 0.96 }
 local DEFAULT_TEXT = { r = 0.9, g = 0.9, b = 0.9, a = 1 }
@@ -89,6 +92,8 @@ function LayersPopup:new(x, y, strip, groupKey)
         node = node.parent
     end
     o.titleH = math.max(18, Style.FONT_H + 4, math.floor(Style.CELL / 2))
+
+    o.anchor = nil
     return o
 end
 
@@ -144,6 +149,25 @@ local function relayout(self)
     local screenH = core and core:getScreenHeight() or 1080
     local x = self:getX()
     local y = self:getY()
+
+    local a = self.anchor
+    if a ~= nil then
+        local gap = GAP
+        if a.side == "below" then
+            x = a.x
+            y = a.y + a.cell + 2
+        else
+            y = a.y
+            local right = a.x + a.cell + gap
+            local left = a.x - w - gap
+            if a.side == "left" then
+
+                x = (left >= 0) and left or right
+            else
+                x = (right + w <= screenW) and right or math.max(0, left)
+            end
+        end
+    end
     if x + w > screenW then x = math.max(0, screenW - w) end
     if y + h > screenH then y = math.max(0, screenH - h) end
     if x ~= self:getX() then self:setX(x) end
@@ -488,23 +512,18 @@ function LayersPopup.openFor(strip, groupKey)
     if instance ~= nil then
         instance:close()
     end
-    local StackPopup = ComfyGrid.UI.StackPopup
-    if StackPopup ~= nil and StackPopup.current ~= nil then
-        local other = StackPopup.current()
-        if other ~= nil then other:close() end
-    end
 
-    local idx = nil
-    for i = 1, strip.entryCount do
-        if strip.entries[i].key == groupKey then
-            idx = i - 1
-            break
-        end
+    local Chrome = ComfyGrid.UI and ComfyGrid.UI.Chrome
+    local Registry = Chrome ~= nil and Chrome.PopupRegistry or nil
+    if Registry ~= nil then Registry.closeOthers(nil) end
+
+    local ax, ay, cell, side = strip:tileAnchor(groupKey)
+    if ax == nil then
+        ax, ay, cell, side = strip:getAbsoluteX(), strip:getAbsoluteY(),
+            Style.CELL, "below"
     end
-    local cx, cy = Style.pixelForSlot(idx or 0, strip.cols or 1)
-    local x = strip:getAbsoluteX() + cx
-    local y = strip:getAbsoluteY() + cy + Style.CELL + 2
-    local popup = LayersPopup:new(x, y, strip, groupKey)
+    local popup = LayersPopup:new(ax, ay, strip, groupKey)
+    popup.anchor = { x = ax, y = ay, cell = cell, side = side }
     popup:initialise()
     popup:addToUIManager()
     popup:bringToTop()
@@ -517,3 +536,5 @@ function LayersPopup.current()
 end
 
 PadPopup.attach(LayersPopup)
+
+ComfyGrid.UI.Chrome.PopupRegistry.register("LayersPopup", LayersPopup.current)

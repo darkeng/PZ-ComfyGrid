@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,6 +10,7 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
 require "ComfyGrid/Core/VanillaStacks"
+require "ComfyGrid/UI/HotbarGhosts"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
@@ -82,71 +83,6 @@ Style.onScaleChanged(function()
     for k in pairs(labelCache) do labelCache[k] = nil end
     for k in pairs(hoverLabelCache) do hoverLabelCache[k] = nil end
 end)
-
-local GHOST_ITEMS = {
-    SmallBeltLeft = "Base.HuntingKnife",
-    SmallBeltRight = "Base.HuntingKnife",
-    WebbingLeft = "Base.HuntingKnife",
-    WebbingRight = "Base.HuntingKnife",
-    HolsterLeft = "Base.Pistol",
-    HolsterRight = "Base.Pistol",
-    HolsterShoulder = "Base.Pistol",
-    HolsterAnkle = "Base.Pistol",
-    Back = "Base.BaseballBat",
-    Bag = "Base.Bag_Schoolbag",
-
-    BedrollBottom = "Base.SleepingBag_Green_Packed",
-    BedrollBottomBig = "Base.SleepingBag_Green_Packed",
-    BedrollBottomALICE = "Base.SleepingBag_Green_Packed",
-}
-
-local ATTACH_ITEMS = {
-    Bedroll = "Base.SleepingBag_Green_Packed",
-    Holster = "Base.Pistol",
-    HolsterSmall = "Base.Pistol",
-    Knife = "Base.HuntingKnife",
-    BigBlade = "Base.HuntingKnife",
-    Rifle = "Base.HuntingRifle",
-    BigWeapon = "Base.HuntingRifle",
-    Hammer = "Base.Hammer",
-}
-local ghostTexCache = {}
-local function ghostTexFor(slot)
-    if slot == nil then return nil end
-    local key = tostring(slot.slotType or slot.name or "?")
-    local cached = ghostTexCache[key]
-    if cached ~= nil then
-        if cached == false then return nil end
-        return cached
-    end
-    local fullType = GHOST_ITEMS[key]
-    if fullType == nil and slot.def ~= nil
-            and type(slot.def.attachments) == "table" then
-        for attachType in pairs(slot.def.attachments) do
-            if ATTACH_ITEMS[attachType] ~= nil then
-                fullType = ATTACH_ITEMS[attachType]
-                break
-            end
-        end
-    end
-    if fullType == nil then
-        if key:find("Holster") ~= nil then
-            fullType = "Base.Pistol"
-        elseif key:find("Belt") ~= nil or key:find("Webbing") ~= nil then
-            fullType = "Base.HuntingKnife"
-        end
-    end
-    local tex = nil
-    if fullType ~= nil and instanceItem ~= nil then
-        local ok, item = pcall(instanceItem, fullType)
-        if ok and item ~= nil and item.getTex ~= nil then
-            local okT, t = pcall(item.getTex, item)
-            if okT then tex = t end
-        end
-    end
-    ghostTexCache[key] = tex or false
-    return tex
-end
 
 local synths = {}
 local function synthFor(index, item)
@@ -325,7 +261,7 @@ local function renderImpl(self)
             ctx.x = tx
             ctx.y = ty
             SlotRenderer.drawSocket(ctx)
-            local tex = ghostTexFor(slots[i])
+            local tex = ComfyGrid.UI.HotbarGhosts.texFor(slots[i])
             if tex ~= nil then
                 SlotRenderer.drawGhost(self, tex, tx, ty)
             elseif font ~= nil then

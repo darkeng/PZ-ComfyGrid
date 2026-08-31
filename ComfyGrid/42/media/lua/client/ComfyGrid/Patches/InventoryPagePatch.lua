@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -54,32 +54,86 @@ Events.OnGameBoot.Add(function()
         end
     end
 
+    local function noop() end
+
     local og_pagePrerender = ISInventoryPage.prerender
     function ISInventoryPage:prerender()
         local pane = self.inventoryPane
-        if pane ~= nil and pane.mode == "comfy" then
-            local UI = ComfyGrid.UI
-            local Draw = UI ~= nil and UI.Draw or nil
-            local colors = UI ~= nil and UI.Style ~= nil
-                and UI.Style.COLORS or nil
-            local sf = colors ~= nil and colors.SURFACE or nil
-            if Draw ~= nil and sf ~= nil then
-                if not self._comfyChrome then
-                    self._comfyChrome = true
-                    local ba = self.backgroundColor
-                        and self.backgroundColor.a or 0.8
-                    local bo = self.borderColor and self.borderColor.a or 0.85
-                    self.backgroundColor =
-                        { r = sf.bg.r, g = sf.bg.g, b = sf.bg.b, a = ba }
-                    self.borderColor =
-                        { r = sf.line.r, g = sf.line.g, b = sf.line.b, a = bo }
-                end
-                if not self.isCollapsed then
-                    Draw.shadow(self, 0, 0, self.width, self.height, 12, 0.45)
-                end
+        local Chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
+        local WindowChrome = Chrome ~= nil and Chrome.WindowChrome or nil
+        if WindowChrome ~= nil then
+            if pane ~= nil and pane.mode == "comfy" then
+                WindowChrome.applyTo(self)
+                WindowChrome.shadow(self)
+            else
+
+                WindowChrome.restore(self)
             end
         end
-        og_pagePrerender(self)
+
+        local Drag = ComfyGrid.Interact ~= nil
+            and ComfyGrid.Interact.ContainerDrag or nil
+        if Drag ~= nil then Drag.update(self) end
+
+        local EquipWindow = ComfyGrid.UI ~= nil
+            and ComfyGrid.UI.EquipWindow or nil
+        if EquipWindow ~= nil then pcall(EquipWindow.follow, self) end
+
+        local mute = self.inventoryPane ~= nil
+            and self.inventoryPane.mode == "comfy"
+        local savedText, savedRight
+        if mute then
+            savedText = rawget(self, "drawText")
+            savedRight = rawget(self, "drawTextRight")
+            self.drawText = noop
+            self.drawTextRight = noop
+        end
+        local ok, err = pcall(og_pagePrerender, self)
+        if mute then
+            self.drawText = savedText
+            self.drawTextRight = savedRight
+
+            if WindowChrome ~= nil and WindowChrome.resizeGrips ~= nil then
+                pcall(WindowChrome.resizeGrips, self)
+            end
+
+            if WindowChrome ~= nil and WindowChrome.resync ~= nil then
+                pcall(WindowChrome.resync, self)
+            end
+        end
+        if not ok then error(err) end
+    end
+
+    local og_pageRender = ISInventoryPage.render
+    function ISInventoryPage:render()
+        local pane = self.inventoryPane
+        local comfy = pane ~= nil and pane.mode == "comfy"
+                and not self.isCollapsed
+
+        local savedBorder
+        if comfy then
+            savedBorder = rawget(self, "drawRectBorder")
+            local ogBorder = self.drawRectBorder
+            local height = self:getHeight()
+            self.drawRectBorder = function(sel, x, y, w, h, ...)
+
+                if x == 0 and y > 0 and w == sel:getWidth()
+                        and (y + h) == height then
+                    return
+                end
+                return ogBorder(sel, x, y, w, h, ...)
+            end
+        end
+
+        if og_pageRender ~= nil then og_pageRender(self) end
+
+        if not comfy then return end
+        self.drawRectBorder = savedBorder
+        local Chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
+        local WindowChrome = Chrome ~= nil and Chrome.WindowChrome or nil
+        if WindowChrome ~= nil and WindowChrome.seam ~= nil then
+            pcall(WindowChrome.seam, self)
+        end
     end
 
     local function padModule(page, name)
@@ -172,6 +226,38 @@ Events.OnGameBoot.Add(function()
         if Pad ~= nil then raiseHintBar(self) end
         if Pad ~= nil and Pad.onDir(self, 1, 0) then return end
         return og_onJoypadDirRight(self, joypadData)
+    end
+
+    local function overEquipWindow(page)
+        if page == nil or page.onCharacter ~= true then return false end
+        local W = ComfyGrid.UI ~= nil and ComfyGrid.UI.EquipWindow or nil
+        if W == nil or W.isMouseOverIt == nil then return false end
+        local ok, over = pcall(W.isMouseOverIt, page.player)
+        return ok and over == true
+    end
+
+    local function pinnedThrough(self, original, x, y)
+        if not overEquipWindow(self) then return original(self, x, y) end
+        local saved = self.pin
+        self.pin = true
+        local ok, err = pcall(original, self, x, y)
+        self.pin = saved
+        if not ok then error(err) end
+    end
+
+    local og_onMouseDownOutside = ISInventoryPage.onMouseDownOutside
+    function ISInventoryPage:onMouseDownOutside(x, y)
+        return pinnedThrough(self, og_onMouseDownOutside, x, y)
+    end
+
+    local og_onRightMouseDownOutside = ISInventoryPage.onRightMouseDownOutside
+    function ISInventoryPage:onRightMouseDownOutside(x, y)
+        return pinnedThrough(self, og_onRightMouseDownOutside, x, y)
+    end
+
+    local og_onMouseMoveOutside = ISInventoryPage.onMouseMoveOutside
+    function ISInventoryPage:onMouseMoveOutside(dx, dy)
+        return pinnedThrough(self, og_onMouseMoveOutside, dx, dy)
     end
 
     Log.info("InventoryPagePatch applied")

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,6 +11,7 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/UI/Style"
+require "ComfyGrid/UI/Chrome/PopupRegistry"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
@@ -929,11 +930,9 @@ function StackPopup.openFor(gridView, stack)
         instance:close()
     end
 
-    local LayersPopup = ComfyGrid.UI.LayersPopup
-    if LayersPopup ~= nil and LayersPopup.current ~= nil then
-        local other = LayersPopup.current()
-        if other ~= nil then other:close() end
-    end
+    local Chrome = ComfyGrid.UI and ComfyGrid.UI.Chrome
+    local Registry = Chrome ~= nil and Chrome.PopupRegistry or nil
+    if Registry ~= nil then Registry.closeOthers(nil) end
 
     local cx, cy = Style.pixelForSlot(stack.slot, gridView.cols or 1)
 
@@ -952,3 +951,5 @@ function StackPopup.current()
 end
 
 PadPopup.attach(StackPopup)
+
+ComfyGrid.UI.Chrome.PopupRegistry.register("StackPopup", StackPopup.current)

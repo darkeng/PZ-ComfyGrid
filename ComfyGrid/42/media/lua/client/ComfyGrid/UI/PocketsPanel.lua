@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -66,7 +66,7 @@ local function sectionInfo()
         local width = 0
         local tm = getTextManager and getTextManager() or nil
         if tm ~= nil then
-            local ok, w = pcall(tm.MeasureStringX, tm, UIFont.Small, label)
+            local ok, w = pcall(tm.MeasureStringX, tm, Style.FONT, label)
             width = ok and w or 0
         end
         titleInfo = { label = label, width = width }
@@ -204,7 +204,7 @@ local function prerenderImpl(self)
     local info = sectionInfo()
     self:drawText(info.label, SECTION_PAD, 1,
         SECTION_TEXT.r, SECTION_TEXT.g, SECTION_TEXT.b, SECTION_TEXT.a,
-        UIFont.Small)
+        Style.FONT)
     local lineX = SECTION_PAD + info.width + 6
     local lineW = self.width - SECTION_PAD - lineX
     if lineW > 0 then

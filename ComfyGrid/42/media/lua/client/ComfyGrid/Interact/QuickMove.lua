@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -73,20 +73,40 @@ local function selectedContainer(page)
     return page.inventory
 end
 
-local function destinationFor(sourceInventory, playerObj, playerNum)
-    local playerInv = playerObj:getInventory()
-    local playerSide = (sourceInventory == playerInv)
-    if not playerSide then
+local function isPlayerSide(sourceInventory, playerObj)
+    if sourceInventory == playerObj:getInventory() then return true end
+    local ok, inChar = pcall(sourceInventory.isInCharacterInventory,
+        sourceInventory, playerObj)
+    return ok and inChar == true
+end
 
-        local ok, inChar = pcall(sourceInventory.isInCharacterInventory,
-            sourceInventory, playerObj)
-        playerSide = ok and inChar == true
-    end
-    if not playerSide then
+function QuickMove.destinationFor(sourceInventory, playerObj, playerNum)
+    local playerInv = playerObj:getInventory()
+    if not isPlayerSide(sourceInventory, playerObj) then
 
         return selectedContainer(getPlayerInventory(playerNum)) or playerInv
     end
     return selectedContainer(getPlayerLoot(playerNum))
+end
+
+function QuickMove.otherSideContainers(sourceInventory, playerObj, playerNum)
+    local out = {}
+    if sourceInventory == nil or playerObj == nil then return out end
+    local other
+    if isPlayerSide(sourceInventory, playerObj) then
+        other = getPlayerLoot(playerNum)
+    else
+        other = getPlayerInventory(playerNum)
+    end
+    if other == nil or other.backpacks == nil then return out end
+    for i = 1, #other.backpacks do
+        local button = other.backpacks[i]
+        local inv = button ~= nil and button.inventory or nil
+        if inv ~= nil and inv ~= sourceInventory then
+            out[#out + 1] = inv
+        end
+    end
+    return out
 end
 
 local function tutorialMode()
@@ -115,7 +135,7 @@ function QuickMove.run(stacks, sourceInventory, playerNum)
     end
     if #liveItems == 0 then return false end
 
-    local dest = destinationFor(sourceInventory, playerObj, playerNum)
+    local dest = QuickMove.destinationFor(sourceInventory, playerObj, playerNum)
 
     if dest == nil or dest == sourceInventory then return false end
 

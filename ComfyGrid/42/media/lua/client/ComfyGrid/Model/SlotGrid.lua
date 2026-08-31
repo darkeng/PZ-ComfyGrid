@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -272,6 +272,61 @@ function SlotGrid:swapStacks(a, b)
     local slotA, slotB = a.slot, b.slot
     a.slot, b.slot = slotB, slotA
     map[slotA], map[slotB] = b, a
+    self:_recomputeSlotCount()
+    return true
+end
+
+function SlotGrid:applyLayout(plan)
+    if plan == nil or type(plan.n) ~= "number" or plan.n <= 0 then
+        return false
+    end
+    if self.pendingClaims ~= nil then
+
+        return false
+    end
+    local stacks = self.data.stacks
+    if type(stacks) ~= "table" then return false end
+
+    local map = self.slotMap
+    local bySlot, planned = {}, {}
+    for i = 1, plan.n do
+        local entry = plan[i]
+        local stack = type(entry) == "table" and entry.stack or nil
+        local slot = type(entry) == "table" and entry.slot or nil
+        if type(stack) ~= "table" or type(slot) ~= "number"
+                or slot < 0 or slot ~= math.floor(slot) then
+            Log.warn("SlotGrid.applyLayout: malformed plan entry "
+                .. tostring(i) .. "; layout refused")
+            return false
+        end
+        if bySlot[slot] ~= nil then
+            Log.warn("SlotGrid.applyLayout: plan assigns slot " .. tostring(slot)
+                .. " twice; layout refused")
+            return false
+        end
+
+        if map[stack.slot] ~= stack then
+            Log.warn("SlotGrid.applyLayout: stale plan (stack no longer at its"
+                .. " slot); layout refused")
+            return false
+        end
+        bySlot[slot] = stack
+        planned[stack] = true
+    end
+
+    for i = 1, #stacks do
+        local stack = stacks[i]
+        if type(stack) == "table" and not planned[stack] then
+            Log.warn("SlotGrid.applyLayout: plan does not cover every stack;"
+                .. " layout refused")
+            return false
+        end
+    end
+
+    for i = 1, plan.n do
+        plan[i].stack.slot = plan[i].slot
+    end
+    self:_rebuildSlotMap()
     self:_recomputeSlotCount()
     return true
 end

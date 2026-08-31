@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,10 +10,10 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Util"
 require "ComfyGrid/Model/ContainerModel"
-require "ComfyGrid/Model/Capacity"
-require "ComfyGrid/Settings"
+require "ComfyGrid/Model/SectionPlan"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/ContainerPanel"
+require "ComfyGrid/UI/PlayerStrips"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 local PaneHost = ISUIElement:derive("ComfyPaneHost")
@@ -22,29 +22,14 @@ ComfyGrid.UI.PaneHost = PaneHost
 local Log = ComfyGrid.Core.Log
 local Util = ComfyGrid.Core.Util
 local ContainerModel = ComfyGrid.Model.ContainerModel
-local Capacity = ComfyGrid.Model.Capacity
-local Settings = ComfyGrid.Settings
+local SectionPlan = ComfyGrid.Model.SectionPlan
 local Style = ComfyGrid.UI.Style
 local ContainerPanel = ComfyGrid.UI.ContainerPanel
+local PlayerStrips = ComfyGrid.UI.PlayerStrips
 
 local SCROLLBAR_ALLOWANCE = 17
 
 local SECTION_GAP = 6
-
-local POCKET_MAX_SLOTS = 6
-
-local function lootSectionAllowed(page, inv, playerObj)
-    local okP, parent = pcall(inv.getParent, inv)
-    if okP and parent ~= nil and instanceof(parent, "IsoThumpable")
-            and parent.isLockedToCharacter ~= nil then
-        local okL, locked = pcall(parent.isLockedToCharacter, parent, playerObj)
-        if okL and locked then return false end
-    end
-    if page.checkExplored ~= nil then
-        pcall(page.checkExplored, page, inv, playerObj)
-    end
-    return true
-end
 
 function PaneHost:new(pane)
     local w = math.max(1, (pane.width or 1) - SCROLLBAR_ALLOWANCE)
@@ -59,17 +44,23 @@ function PaneHost:new(pane)
     o.shownInventory = nil
 
     o.panels = {}
+
+    o.strips = nil
     o.containerPanel = nil
     o.panelShown = false
     o.contentHeight = 0
-    o._invList = {}
-    o._bigList = {}
-    o._handList = {}
-    o._pocketList = {}
+
+    o.plan = SectionPlan.newPlan()
     o._layoutFailLogged = false
 
     o.keepOnScreen = false
     return o
+end
+
+local function stripsHeight(self)
+    local strips = self.strips
+    if strips == nil then return 0 end
+    return (strips.height or 0) + SECTION_GAP
 end
 
 local function layout(self)
@@ -84,71 +75,29 @@ local function layout(self)
     if self.height ~= h then self:setHeight(h) end
 
     local page = pane.inventoryPage
-    local sectioned = page ~= nil and page.onCharacter == true
-    local lootSectioned = page ~= nil and page.onCharacter == false
-        and Settings.get("LOOT_SECTIONS") == true
-    local lootPlayer = lootSectioned and getSpecificPlayer(pane.player) or nil
-    local invs = self._invList
-    for i = #invs, 1, -1 do invs[i] = nil end
-    if (sectioned or lootSectioned) and type(page.backpacks) == "table" then
-        for i = 1, #page.backpacks do
-            local inv = page.backpacks[i].inventory
-            if inv ~= nil and (not lootSectioned
-                    or lootSectionAllowed(page, inv, lootPlayer)) then
-                local dup = false
-                for j = 1, #invs do
-                    if invs[j] == inv then
-                        dup = true
-                        break
-                    end
-                end
-                if not dup then invs[#invs + 1] = inv end
-            end
-        end
-    end
-    if #invs == 0 and pane.inventory ~= nil then
-        invs[1] = pane.inventory
-    end
+    local plan = SectionPlan.build(self.plan, page, pane)
 
-    local bigs = self._bigList
-    local hands = self._handList
-    local pockets = self._pocketList
-    for i = #bigs, 1, -1 do bigs[i] = nil end
-    for i = #hands, 1, -1 do hands[i] = nil end
-    for i = #pockets, 1, -1 do pockets[i] = nil end
-    local playerObj = sectioned and getSpecificPlayer(pane.player) or nil
-    for i = 1, #invs do
-        local inv = invs[i]
-        if not sectioned or i == 1 then
-            bigs[#bigs + 1] = inv
-        elseif Capacity.slotsFor(inv, pane.player) <= POCKET_MAX_SLOTS then
-            pockets[#pockets + 1] = inv
-        else
-
-            local held = false
-            if playerObj ~= nil and playerObj.isHandItem ~= nil then
-                local ok, containing = pcall(inv.getContainingItem, inv)
-                if ok and containing ~= nil then
-                    local okH, h2 = pcall(playerObj.isHandItem, playerObj,
-                        containing)
-                    held = okH and h2 == true
-                end
-            end
-            if held then
-                hands[#hands + 1] = inv
-            else
-                bigs[#bigs + 1] = inv
-            end
-        end
+    local strips = self.strips
+    if plan.playerStrips and strips == nil then
+        strips = PlayerStrips:new(0, 0, pane.player)
+        strips:initialise()
+        self:addChild(strips)
+        self.strips = strips
+    elseif not plan.playerStrips and strips ~= nil then
+        strips:setVisible(false)
+        self:removeChild(strips)
+        self.strips = nil
+        strips = nil
     end
-    for i = 1, #hands do
-        bigs[#bigs + 1] = hands[i]
+    if strips ~= nil then
+        if strips.width ~= w then strips:setWidth(w) end
+        strips:setPocketInventories(plan.pockets)
     end
 
     local panels = self.panels
     local shown = 0
-    for i = 1, #bigs do
-        local model = ContainerModel.getOrCreate(bigs[i], pane.player)
+    for i = 1, plan.count do
+        local model = ContainerModel.getOrCreate(plan.sections[i], pane.player)
         if model ~= nil then
             shown = shown + 1
             local panel = panels[shown]
@@ -160,42 +109,27 @@ local function layout(self)
             elseif panel.model ~= model then
                 panel:setModel(model)
             end
-
-            panel:setShowStrips(sectioned and shown == 1)
         end
     end
 
     for i = #panels, shown + 1, -1 do
+        panels[i]:setVisible(false)
         self:removeChild(panels[i])
         panels[i] = nil
     end
     self.containerPanel = panels[1]
     self.panelShown = shown > 0
 
-    if panels[1] ~= nil and panels[1].setPocketInventories ~= nil then
-        panels[1]:setPocketInventories(pockets)
-    end
-
     local function ownsInventory(panel, inv)
-        if panel.model ~= nil and panel.model.inventory == inv then
-            return true
-        end
-        local pp = panel.pocketsPanel
-        local list = pp ~= nil and pp.inventories or nil
-        if list ~= nil then
-            for i = 1, #list do
-                if list[i] == inv then return true end
-            end
-        end
-        return false
+        return panel.model ~= nil and panel.model.inventory == inv
     end
 
     if pane.inventory ~= self.shownInventory then
         self.shownInventory = pane.inventory
-        if not (sectioned or lootSectioned) then
+        if not plan.stacked then
             self.yOffset = 0
         else
-            local y = 0
+            local y = stripsHeight(self)
             for i = 1, shown do
                 if ownsInventory(panels[i], pane.inventory) then
                     self.yOffset = y
@@ -206,18 +140,25 @@ local function layout(self)
         end
     end
 
-    local contentH = 0
+    local contentH = stripsHeight(self)
     for i = 1, shown do
         if i > 1 then contentH = contentH + SECTION_GAP end
         contentH = contentH + panels[i].height
     end
     self.contentHeight = contentH
-    local maxOffset = contentH - self.height
+
+    local maxOffset = contentH - self:viewportHeight()
     if maxOffset < 0 then maxOffset = 0 end
     if self.yOffset > maxOffset then self.yOffset = maxOffset end
     if self.yOffset < 0 then self.yOffset = 0 end
 
     local y = 0
+    if strips ~= nil then
+        if strips.x ~= 0 then strips:setX(0) end
+        local sy = -self.yOffset
+        if strips.y ~= sy then strips:setY(sy) end
+        y = strips.height + SECTION_GAP
+    end
     for i = 1, shown do
         local panel = panels[i]
         if panel.width ~= w then panel:setWidth(w) end
@@ -227,6 +168,11 @@ local function layout(self)
         if panel.y ~= py then panel:setY(py) end
         y = y + panel.height
     end
+end
+
+function PaneHost:viewportHeight()
+    local h = self.height or 0
+    return h > 0 and h or 0
 end
 
 function PaneHost:refreshLayout()
@@ -255,7 +201,7 @@ function PaneHost:onMouseWheel(del)
     if page and (page.isCollapsed or page:isCycleContainerKeyDown()) then
         return false
     end
-    local maxOffset = (self.contentHeight or 0) - self.height
+    local maxOffset = (self.contentHeight or 0) - self:viewportHeight()
     if maxOffset < 0 then maxOffset = 0 end
 
     self.yOffset = Util.clamp(self.yOffset + del * Style.CELL_STRIDE, 0, maxOffset)

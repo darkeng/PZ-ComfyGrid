@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -123,7 +123,7 @@ local function renderImpl(self)
     if not drew then
 
         self:drawTextCentre("?", mx, floor(y + (size - Style.FONT_H) * 0.5),
-            1, 1, 1, GHOST_ALPHA, UIFont.Small)
+            1, 1, 1, GHOST_ALPHA, Style.FONT)
     end
 
     if total > 1 then
@@ -139,12 +139,12 @@ local function renderImpl(self)
             local off = floor(Style.SCALE + 0.5)
             if off < 1 then off = 1 end
             self:drawText(text, x + 2 + off, y + off,
-                cs.r, cs.g, cs.b, cs.a or 1, UIFont.Small)
+                cs.r, cs.g, cs.b, cs.a or 1, Style.FONT)
         end
         if ct then
-            self:drawText(text, x + 2, y, ct.r, ct.g, ct.b, ct.a or 1, UIFont.Small)
+            self:drawText(text, x + 2, y, ct.r, ct.g, ct.b, ct.a or 1, Style.FONT)
         else
-            self:drawText(text, x + 2, y, 1, 1, 1, 1, UIFont.Small)
+            self:drawText(text, x + 2, y, 1, 1, 1, 1, Style.FONT)
         end
     end
 

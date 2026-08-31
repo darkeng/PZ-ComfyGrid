@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -123,15 +123,91 @@ function Draw.disc(el, x, y, d, a, c)
     end
 end
 
-local closeTex = nil
-local closeTexMissing = false
+local glyphTex = {}
+local glyphMissing = {}
+
+function Draw.glyphTexture(id)
+    if id == nil or glyphMissing[id] then return nil end
+    local t = glyphTex[id]
+    if t == nil then
+        t = TextureCache.get("media/textures/comfy_" .. id .. ".png")
+        if t == nil then
+            glyphMissing[id] = true
+            return nil
+        end
+        glyphTex[id] = t
+    end
+    return t
+end
 
 function Draw.closeTexture()
-    if closeTex == nil and not closeTexMissing then
-        closeTex = TextureCache.get("media/textures/comfy_close.png")
-        if closeTex == nil then closeTexMissing = true end
+    return Draw.glyphTexture("close")
+end
+
+function Draw.sortTexture()
+    return Draw.glyphTexture("sort")
+end
+
+function Draw.stowTexture()
+    return Draw.glyphTexture("stow")
+end
+
+function Draw.emptyTexture()
+    return Draw.glyphTexture("empty")
+end
+
+function Draw.trashTexture()
+    return Draw.glyphTexture("trash")
+end
+
+function Draw.spreadTexture()
+    return Draw.glyphTexture("spread")
+end
+
+function Draw.floorTexture()
+    return Draw.glyphTexture("floor")
+end
+
+function Draw.moreTexture()
+    return Draw.glyphTexture("more")
+end
+
+local titlebarTex = nil
+local titlebarTexMissing = false
+
+function Draw.titlebarTexture()
+    if titlebarTex == nil and not titlebarTexMissing then
+        titlebarTex = TextureCache.get("media/textures/comfy_titlebar.png")
+        if titlebarTex == nil then titlebarTexMissing = true end
     end
-    return closeTex
+    return titlebarTex
+end
+
+function Draw.pinTexture()
+    return Draw.glyphTexture("pin")
+end
+
+local gripTex = nil
+local gripTexMissing = false
+
+function Draw.gripTexture()
+    if gripTex == nil and not gripTexMissing then
+        gripTex = TextureCache.get("media/textures/comfy_grip.png")
+        if gripTex == nil then gripTexMissing = true end
+    end
+    return gripTex
+end
+
+function Draw.gearTexture()
+    return Draw.glyphTexture("gear")
+end
+
+function Draw.personTexture()
+    return Draw.glyphTexture("person")
+end
+
+function Draw.dockTexture()
+    return Draw.glyphTexture("dock")
 end
 
 function Draw.delta()

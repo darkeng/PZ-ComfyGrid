@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -12,6 +12,7 @@ require "ComfyGrid/Core/Text"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Model/Equipment"
 require "ComfyGrid/UI/Style"
+require "ComfyGrid/UI/Chrome/SectionRule"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
@@ -24,6 +25,7 @@ local Text = ComfyGrid.Core.Text
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local Equipment = ComfyGrid.Model.Equipment
 local Style = ComfyGrid.UI.Style
+local SectionRule = ComfyGrid.UI.Chrome.SectionRule
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local StackRenderer = ComfyGrid.UI.StackRenderer
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
@@ -33,6 +35,25 @@ local EquipmentStrip = ISUIElement:derive("ComfyEquipStrip")
 ComfyGrid.UI.EquipmentStrip = EquipmentStrip
 
 local MIN_COLS = 2
+
+local ROW_GAP = 4
+
+local ANCHORS = {
+    { key = "Face",      col = "l", y = 0.00, dy = -1 },
+    { key = "Neck",      col = "l", y = 0.18 },
+    { key = "Primary",   col = "l", y = 0.57 },
+    { key = "Head",      col = "c", y = 0.00, dy = -1 },
+    { key = "Torso",     col = "c", y = 0.21 },
+    { key = "Legs",      col = "c", y = 0.50 },
+    { key = "Feet",      col = "c", y = 0.80 },
+    { key = "Back",      col = "r", y = 0.00, dy = -1 },
+    { key = "Hands",     col = "r", y = 0.36 },
+    { key = "Secondary", col = "r", y = 0.57 },
+}
+
+local POPUP_SIDE = { l = "right", c = "right", r = "left" }
+
+local DRAWER_ROWS = 2
 
 local DEFAULT_BG = { r = 0.09, g = 0.09, b = 0.11, a = 0.85 }
 local LABEL = { r = 0.62, g = 0.62, b = 0.68, a = 0.9 }
@@ -147,6 +168,16 @@ function EquipmentStrip:new(x, y, playerNum)
     o.availWidth = nil
     o.cols = MIN_COLS
     o.rows = 1
+    o.layout = "flow"
+    o.padRagged = false
+    o.groups = {}
+    o.groupCount = 0
+    o.tilePos = {}
+    o.figure = nil
+    o.drawerKey = nil
+    o.drawerPool = {}
+    o.drawerY = 0
+    o.drawerCount = 0
     o.hoverIdx = nil
     o.sizeDirty = false
     o.pressedIdx = nil
@@ -160,14 +191,96 @@ function EquipmentStrip:setAvailableWidth(px)
     self.availWidth = px
 end
 
+function EquipmentStrip:setLayout(mode)
+    self.layout = mode == "anchors" and "anchors" or "flow"
+
+    self.padRagged = self.layout == "anchors"
+end
+
+function EquipmentStrip:setFigureBox(x, y, w, h)
+    local f = self.figure
+    if f == nil then
+        f = {}
+        self.figure = f
+    end
+    f.x, f.y, f.w, f.h = x, y, w, h
+end
+
+function EquipmentStrip.anchorsTop()
+    return Style.CELL_STRIDE
+end
+
+function EquipmentStrip.anchorsHeight(figureH)
+    return EquipmentStrip.anchorsTop() + figureH + ROW_GAP + Style.FONT_H
+        + DRAWER_ROWS * Style.CELL_STRIDE + 1
+end
+
+local function tileXY(self, idx)
+    if self.layout == "anchors" then
+        local p = self.tilePos[idx + 1]
+        if p == nil then return 0, 0 end
+        return p.x, p.y
+    end
+    return Style.pixelForSlot(idx, self.cols)
+end
+
 local function tileAt(self, x, y)
+    if self.layout == "anchors" then
+        if x < 0 or y < 0 then return nil end
+        local stride = Style.CELL_STRIDE
+        for i = 1, self.entryCount do
+            local pos = self.tilePos[i]
+            if pos ~= nil and x >= pos.x and x < pos.x + stride
+                    and y >= pos.y and y < pos.y + stride then
+                return i - 1
+            end
+        end
+        return nil
+    end
     local idx = Style.slotAtPixel(x, y, self.cols, self.rows)
     if idx == nil or idx >= self.entryCount then return nil end
     return idx
 end
 
+function EquipmentStrip:tileAnchor(groupKey)
+    for i = 1, self.entryCount do
+        local e = self.entries[i]
+        if e ~= nil and e.key == groupKey then
+            local x, y = tileXY(self, i - 1)
+            local side = "below"
+            if self.layout == "anchors" then
+                side = "right"
+                for j = 1, #ANCHORS do
+                    if ANCHORS[j].key == groupKey then
+                        side = POPUP_SIDE[ANCHORS[j].col] or "right"
+                        break
+                    end
+                end
+            end
+            return self:getAbsoluteX() + x, self:getAbsoluteY() + y,
+                Style.CELL, side
+        end
+    end
+    return nil
+end
+
+function EquipmentStrip:padTileXY(idx)
+    return tileXY(self, idx)
+end
+
+local function pointDrawerAt(self, idx)
+    if self.layout ~= "anchors" or idx == nil then return end
+    local e = self.entries[idx + 1]
+    if e ~= nil and e.key ~= nil then self.drawerKey = e.key end
+end
+
 local function updateHover(self)
     self.hoverIdx = tileAt(self, self:getMouseX(), self:getMouseY())
+    pointDrawerAt(self, self.hoverIdx)
+end
+
+function EquipmentStrip:padFocusChanged(idx)
+    pointDrawerAt(self, idx)
 end
 
 function EquipmentStrip:hoveredItem()
@@ -178,8 +291,141 @@ function EquipmentStrip:hoveredItem()
     return entry.items[1]
 end
 
+local function drawerEntry(self, group, slot, item)
+    local pool = self.drawerPool
+    local e = pool[slot]
+    if e == nil then
+        e = { items = {} }
+        pool[slot] = e
+    end
+    local items = e.items
+    for j = #items, 1, -1 do items[j] = nil end
+    items[1] = item
+    e.key = group.key
+    e.hand = group.hand
+    e.dynamic = group.dynamic
+    return e
+end
+
+local function anchorEntry(self, n, group)
+    self.entries[n] = group
+    return group
+end
+
+local function groupFor(self, key)
+    for i = 1, self.groupCount do
+        local g = self.groups[i]
+        if g.key == key then return g end
+    end
+    return nil
+end
+
+local function placeTile(self, n, x, y)
+    local pos = self.tilePos[n]
+    if pos == nil then
+        pos = {}
+        self.tilePos[n] = pos
+    end
+    pos.x, pos.y = x, y
+end
+
+local function layoutAnchors(self, playerObj)
+    self.groupCount = Equipment.collect(playerObj, self.groups)
+    local stride = Style.CELL_STRIDE
+    local cell = Style.CELL
+    local f = self.figure
+    local w = self.availWidth or self.width
+    if f == nil then
+
+        f = { x = 0, y = 0, w = 0, h = math.max(cell, self.height) }
+    end
+
+    local colL = 0
+    local colR = w - cell
+    local colC = math.floor((w - cell) / 2)
+
+    if colR < colL then colR = colL end
+    if colC < colL then colC = colL end
+    if colC > colR then colC = colR end
+
+    local n = 0
+    for i = 1, #ANCHORS do
+        local a = ANCHORS[i]
+        local g = groupFor(self, a.key)
+
+        if g ~= nil then
+            n = n + 1
+            anchorEntry(self, n, g)
+            local x = colC
+            if a.col == "l" then x = colL elseif a.col == "r" then x = colR end
+            local dy = (a.dy or 0) * stride
+            placeTile(self, n, x, f.y + math.floor(f.h * a.y + 0.5) + dy)
+        end
+    end
+    self.anchorCount = n
+
+    local trayY = f.y + f.h + ROW_GAP
+    local trayCols = math.max(1, math.floor((w - 1) / stride))
+    local tray = 0
+    for i = 1, self.groupCount do
+        local g = self.groups[i]
+        if g.dynamic then
+            n = n + 1
+            anchorEntry(self, n, g)
+            placeTile(self, n, (tray % trayCols) * stride,
+                trayY + math.floor(tray / trayCols) * stride)
+            tray = tray + 1
+        end
+    end
+    local trayRows = tray > 0 and math.ceil(tray / trayCols) or 0
+    self.drawerY = trayY + trayRows * stride + (tray > 0 and ROW_GAP or 0)
+
+    local shown = self.drawerKey ~= nil and groupFor(self, self.drawerKey)
+        or nil
+    if shown == nil then
+
+        local best, bestN = nil, 1
+        for i = 1, self.groupCount do
+            local g = self.groups[i]
+            if #g.items > bestN then best, bestN = g, #g.items end
+        end
+        shown = best
+        self.drawerKey = best ~= nil and best.key or nil
+    end
+    self.drawerCount = 0
+    if shown ~= nil then
+        local cols = math.max(1, math.floor((w - 1) / stride))
+        local top = self.drawerY + Style.FONT_H
+        local max = cols * DRAWER_ROWS
+        for j = 1, #shown.items do
+            if j > max then break end
+            n = n + 1
+            self.entries[n] = drawerEntry(self, shown, j, shown.items[j])
+            placeTile(self, n, ((j - 1) % cols) * stride,
+                top + math.floor((j - 1) / cols) * stride)
+            self.drawerCount = self.drawerCount + 1
+        end
+    end
+
+    self.entryCount = n
+    self.cols = math.max(1, math.floor((w - 1) / stride))
+    self.rows = 1
+    local h = self.drawerY + Style.FONT_H + DRAWER_ROWS * stride + 1
+
+    if self.width ~= w or self.height ~= h then
+        self:setWidth(w)
+        self:setHeight(h)
+        self.sizeDirty = true
+        updateHover(self)
+    end
+end
+
 local function prerenderImpl(self)
     local playerObj = getSpecificPlayer(self.playerNum)
+    if self.layout == "anchors" then
+        layoutAnchors(self, playerObj)
+        return
+    end
     self.entryCount = Equipment.collect(playerObj, self.entries)
 
     local avail = self.availWidth
@@ -212,17 +458,53 @@ function EquipmentStrip:prerender()
     end
 end
 
+local function drawDrawerRule(self)
+    if self.drawerKey == nil then return end
+    local band = Style.FONT_H
+    local g = nil
+    for i = 1, self.groupCount do
+        if self.groups[i].key == self.drawerKey then g = self.groups[i] break end
+    end
+    local count = g ~= nil and #g.items or 0
+    local rightPad = 0
+    if count > 1 then
+
+        local text = tostring(count)
+        local tm = getTextManager and getTextManager() or nil
+        local tw = 0
+        if tm ~= nil then
+            local ok, m = pcall(tm.MeasureStringX, tm, Style.FONT, text)
+            tw = ok and m or 0
+        end
+        local c = SectionRule.TEXT
+        self:drawText(text, self.width - SectionRule.PAD - tw,
+            self.drawerY + 1, c.r, c.g, c.b, c.a, Style.FONT)
+        rightPad = tw + 6
+    end
+    SectionRule.draw(self, hoverLabelFor(self.drawerKey), self.drawerY,
+        band, rightPad)
+end
+
 local function renderImpl(self)
+    local anchors = self.layout == "anchors"
     local cols = self.cols
     local rows = self.rows
-    local w, h = Style.gridPixelSize(cols, rows)
+    local w, h
+    if anchors then
+        w, h = self.width, self.height
+    else
+        w, h = Style.gridPixelSize(cols, rows)
+    end
     local colors = Style.COLORS
     local bg = colors and colors.BOARD_BG or DEFAULT_BG
 
-    self:drawRect(0, 0, w, h, bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
+    if not anchors then
+        self:drawRect(0, 0, w, h, bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
+    else
+        drawDrawerRule(self)
+    end
 
     local entries = self.entries
-    local pixelForSlot = Style.pixelForSlot
     local font = Style.FONT
     local cell = Style.CELL
 
@@ -243,7 +525,7 @@ local function renderImpl(self)
         local entry = entries[i]
         local items = entry.items
         local top = items[1]
-        local tx, ty = pixelForSlot(i - 1, cols)
+        local tx, ty = tileXY(self, i - 1)
         if top ~= nil then
 
             for j = 1, #items do
@@ -285,7 +567,7 @@ local function renderImpl(self)
 
     local hover = self.hoverIdx
     if hover ~= nil and hover < self.entryCount and self:isMouseOver() then
-        local hx, hy = pixelForSlot(hover, cols)
+        local hx, hy = tileXY(self, hover)
         ctx.stack = nil
         ctx.item = nil
         ctx.slot = hover
@@ -303,7 +585,7 @@ local function renderImpl(self)
     local padIdx = Pad ~= nil and Pad.cursorFor ~= nil and Pad.cursorFor(self)
         or nil
     if padIdx ~= nil and padIdx < self.entryCount then
-        local px, py = pixelForSlot(padIdx, cols)
+        local px, py = tileXY(self, padIdx)
         SlotRenderer.drawSelection(self, px, py)
         ctx.stack = nil
         ctx.item = nil
@@ -521,6 +803,10 @@ end
 function EquipmentStrip:onMouseDown(x, y)
     local ok, err = pcall(mouseDownImpl, self, x, y)
     if not ok then reportMouseError(err) end
+
+    if self.layout == "anchors" then
+        return tileAt(self, x, y) ~= nil
+    end
     return true
 end
 

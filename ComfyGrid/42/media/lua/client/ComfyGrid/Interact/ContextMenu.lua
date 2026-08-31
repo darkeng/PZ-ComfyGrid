@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -30,6 +30,18 @@ local function paneOf(gridView)
     return nil
 end
 
+function ContextMenu.handOff(playerNum, menu, origin)
+    if menu == nil or origin == nil then return false end
+    if menu.numOptions == nil or menu.numOptions <= 1 then return false end
+    if JoypadState == nil or not JoypadState.players[playerNum + 1] then
+        return false
+    end
+    menu.origin = origin
+    menu.mouseOver = 1
+    setJoypadFocus(playerNum, menu)
+    return true
+end
+
 function ContextMenu.open(playerNum, stacks, gridView, absX, absY)
 
     if absX == nil and playerNum ~= 0 then return false end
@@ -53,12 +65,8 @@ function ContextMenu.open(playerNum, stacks, gridView, absX, absY)
         playerNum, isInPlayerInventory, stackList,
         absX or getMouseX(), absY or getMouseY())
 
-    if menu ~= nil and menu.numOptions ~= nil and menu.numOptions > 1
-            and JoypadState.players[playerNum + 1] then
-        menu.origin = pane ~= nil and pane.inventoryPage or nil
-        menu.mouseOver = 1
-        setJoypadFocus(playerNum, menu)
-    end
+    ContextMenu.handOff(playerNum, menu,
+        pane ~= nil and pane.inventoryPage or nil)
 
     if menu == nil then
 
@@ -74,11 +82,6 @@ function ContextMenu.openForItems(playerNum, items, absX, absY, origin)
     local menu = ISInventoryPaneContextMenu.createMenu(
         playerNum, true, items, absX or getMouseX(), absY or getMouseY())
     if menu == nil then return false end
-    if menu.numOptions ~= nil and menu.numOptions > 1
-            and JoypadState.players[playerNum + 1] then
-        menu.origin = origin
-        menu.mouseOver = 1
-        setJoypadFocus(playerNum, menu)
-    end
+    ContextMenu.handOff(playerNum, menu, origin)
     return true
 end

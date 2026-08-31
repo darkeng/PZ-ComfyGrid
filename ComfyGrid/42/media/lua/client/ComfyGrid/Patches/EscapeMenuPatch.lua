@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -49,6 +49,24 @@ local function sampleSeat(playerNum)
     s.focusPage = (focused == inv or focused == loot) and focused or nil
 end
 
+local function restoreCollapsed(page, collapsed)
+    if collapsed then
+        page:collapseNow()
+    elseif page.isCollapsed then
+        page.isCollapsed = false
+        page:clearMaxDrawHeight()
+    end
+end
+
+local function restorePin(page, pinned)
+    if pinned then
+        page:setPinned()
+    else
+
+        page:collapse()
+    end
+end
+
 local function restoreSeat(playerNum, s)
 
     if s.inv ~= getPlayerInventory(playerNum)
@@ -57,10 +75,10 @@ local function restoreSeat(playerNum, s)
     end
     s.inv:setVisible(s.invVisible)
     s.loot:setVisible(s.lootVisible)
-    s.inv.isCollapsed = s.invCollapsed
-    s.loot.isCollapsed = s.lootCollapsed
-    s.inv.pin = s.invPin
-    s.loot.pin = s.lootPin
+    restoreCollapsed(s.inv, s.invCollapsed)
+    restoreCollapsed(s.loot, s.lootCollapsed)
+    restorePin(s.inv, s.invPin)
+    restorePin(s.loot, s.lootPin)
 
     if s.focusPage ~= nil and getFocusForPlayer(playerNum) == nil then
         setJoypadFocus(playerNum, s.focusPage)

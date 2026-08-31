@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.1
+    Version: 1.5.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -41,24 +41,35 @@ local function hoveredStack(pane)
         if model == nil or model.grid == nil then return nil, nil end
         return model.grid:stackAt(slot), model.inventory
     end
+
+    local strips = host.strips
+    local pocketsPanel = strips ~= nil and strips.pocketsPanel or nil
+    local islandGrids = pocketsPanel ~= nil and pocketsPanel.gridViews or nil
+    if islandGrids ~= nil then
+        for j = 1, #islandGrids do
+            local stack, inventory = probe(islandGrids[j])
+            if inventory ~= nil then return stack, inventory end
+        end
+    end
     for i = 1, count do
         local panel = panels ~= nil and panels[i] or single
         local stack, inventory = probe(panel ~= nil and panel.gridView or nil)
         if inventory ~= nil then return stack, inventory end
-
-        local pocketsPanel = panel ~= nil and panel.pocketsPanel or nil
-        local islandGrids = pocketsPanel ~= nil and pocketsPanel.gridViews or nil
-        if islandGrids ~= nil then
-            for j = 1, #islandGrids do
-                stack, inventory = probe(islandGrids[j])
-                if inventory ~= nil then return stack, inventory end
-            end
-        end
     end
     return nil, nil
 end
 
 Tooltip.hoveredStackOf = hoveredStack
+
+local function equipWindowStrip(pane)
+    local page = pane ~= nil and pane.parent or nil
+    if page == nil or page.onCharacter ~= true then return nil end
+    local EquipWindow = ComfyGrid.UI and ComfyGrid.UI.EquipWindow
+    if EquipWindow == nil or EquipWindow.windowFor == nil then return nil end
+    local win = EquipWindow.windowFor(page.player)
+    if win == nil or not win:getIsVisible() then return nil end
+    return win.content
+end
 
 function Tooltip.isOverBoard(pane)
     if pane == nil then return false end
@@ -70,21 +81,23 @@ function Tooltip.isOverBoard(pane)
     local function over(el)
         return el ~= nil and el.isMouseOver ~= nil and el:isMouseOver() == true
     end
-    for i = 1, count do
-        local panel = panels ~= nil and panels[i] or single
-        if panel ~= nil then
-            if over(panel.gridView) or over(panel.equipStrip)
-                    or over(panel.hotbarStrip) then
-                return true
-            end
-            local pocketsPanel = panel.pocketsPanel
-            local islandGrids = pocketsPanel ~= nil and pocketsPanel.gridViews or nil
-            if islandGrids ~= nil then
-                for j = 1, #islandGrids do
-                    if over(islandGrids[j]) then return true end
-                end
+    if over(equipWindowStrip(pane)) then return true end
+    local strips = host.strips
+    if strips ~= nil then
+        if over(strips.equipStrip) or over(strips.hotbarStrip) then
+            return true
+        end
+        local pocketsPanel = strips.pocketsPanel
+        local islandGrids = pocketsPanel ~= nil and pocketsPanel.gridViews or nil
+        if islandGrids ~= nil then
+            for j = 1, #islandGrids do
+                if over(islandGrids[j]) then return true end
             end
         end
+    end
+    for i = 1, count do
+        local panel = panels ~= nil and panels[i] or single
+        if panel ~= nil and over(panel.gridView) then return true end
     end
     return false
 end
@@ -138,10 +151,14 @@ local function updateImpl(pane)
 
     local padAnchorX, padAnchorY = nil, nil
     local padFocused = false
+
+    local focus = getFocusForPlayer(pane.player)
+    local padDrivesSeat = focus ~= nil
+        and (focus == getPlayerInventory(pane.player)
+            or focus == getPlayerLoot(pane.player))
     if pane.doController then
 
-        local page = pane.inventoryPage
-        padFocused = page ~= nil and getFocusForPlayer(pane.player) == page
+        padFocused = padDrivesSeat and focus == pane.inventoryPage
     end
     if padFocused and not isDragActive() then
         local PadFocus = ComfyGrid.Interact.PadFocus
@@ -164,13 +181,19 @@ local function updateImpl(pane)
                 if item ~= nil then
                     local Style = ComfyGrid.UI.Style
                     local cell = Style ~= nil and Style.CELL or 45
-                    local px, py = Style.pixelForSlot(slot, el.cols or 1)
+
+                    local px, py
+                    if el.padTileXY ~= nil then
+                        px, py = el:padTileXY(slot)
+                    else
+                        px, py = Style.pixelForSlot(slot, el.cols or 1)
+                    end
                     padAnchorX = el:getAbsoluteX() + px + cell + 6
                     padAnchorY = el:getAbsoluteY() + py - 2
                 end
             end
         end
-    elseif not isDragActive() then
+    elseif not padDrivesSeat and not isDragActive() then
         local stack, inventory = hoveredStack(pane)
         if stack ~= nil and inventory ~= nil then
 
@@ -182,15 +205,21 @@ local function updateImpl(pane)
 
         if item == nil then
             local host = pane.comfyHost
-            local panel = host ~= nil and host.containerPanel or nil
-            local strip = panel ~= nil and panel.equipStrip or nil
+            local strips = host ~= nil and host.strips or nil
+            local strip = strips ~= nil and strips.equipStrip or nil
             if strip ~= nil and strip.hoveredItem ~= nil then
                 item = strip:hoveredItem()
             end
             if item == nil then
-                local hotbar = panel ~= nil and panel.hotbarStrip or nil
+                local hotbar = strips ~= nil and strips.hotbarStrip or nil
                 if hotbar ~= nil and hotbar.hoveredItem ~= nil then
                     item = hotbar:hoveredItem()
+                end
+            end
+            if item == nil then
+                local zones = equipWindowStrip(pane)
+                if zones ~= nil and zones.hoveredItem ~= nil then
+                    item = zones:hoveredItem()
                 end
             end
         end
@@ -265,13 +294,11 @@ local function updateImpl(pane)
             toolRender:setOwner(pane)
             toolRender:setCharacter(getSpecificPlayer(pane.player))
 
-            toolRender.anchorBottomLeft = {
-                x = pane:getAbsoluteX() + (pane.column2 or 0),
-                y = pane.parent ~= nil and pane.parent:getAbsoluteY() or 0,
-            }
+            toolRender.anchorBottomLeft = { x = 0, y = 0 }
             pane.toolRender = toolRender
         end
-        toolRender.followMouse = not pane.doController
+
+        toolRender.followMouse = padAnchorX == nil
         toolRender.tooltip:setWeightOfStack(weightOfStack)
     elseif toolRender ~= nil then
 
