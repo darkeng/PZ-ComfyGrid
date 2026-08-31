@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.0
+    Version: 1.4.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -65,6 +65,14 @@ local function collectEntry(entry, sourceInventory, liveItems, seen, vanillaList
     end
 end
 
+local function selectedContainer(page)
+    if page == nil then return nil end
+    local pane = page.inventoryPane
+    local inv = pane ~= nil and pane.inventory or nil
+    if inv ~= nil then return inv end
+    return page.inventory
+end
+
 local function destinationFor(sourceInventory, playerObj, playerNum)
     local playerInv = playerObj:getInventory()
     local playerSide = (sourceInventory == playerInv)
@@ -75,13 +83,10 @@ local function destinationFor(sourceInventory, playerObj, playerNum)
         playerSide = ok and inChar == true
     end
     if not playerSide then
-        return playerInv
-    end
 
-    local lootPage = getPlayerLoot(playerNum)
-    local pane = lootPage ~= nil and lootPage.inventoryPane or nil
-    if pane == nil then return nil end
-    return pane.inventory
+        return selectedContainer(getPlayerInventory(playerNum)) or playerInv
+    end
+    return selectedContainer(getPlayerLoot(playerNum))
 end
 
 local function tutorialMode()

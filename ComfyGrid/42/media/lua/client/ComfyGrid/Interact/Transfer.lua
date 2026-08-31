@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.4.0
+    Version: 1.4.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -95,7 +95,13 @@ function Transfer.escalateHeavyItems(items, destInventory, playerObj)
     if not items or not destInventory or not playerObj then
         return items or remaining, 0
     end
+
     local own = destInventory == playerObj:getInventory()
+    if not own then
+        local okOwn, inChar = pcall(destInventory.isInCharacterInventory,
+            destInventory, playerObj)
+        own = okOwn and inChar == true
+    end
     for i = 1, #items do
         local item = items[i]
         local src = item ~= nil and item:getContainer() or nil
