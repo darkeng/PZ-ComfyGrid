@@ -8,7 +8,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 - **Square tiles** that reflow to your window width — no more scrolling a text list.
 - **Auto-stacking** — identical items share one tile with a counter whatever their state (fresh and stale food, a full and a half-used roll of tape); weapons, tools and heavy gear keep a tile of their own, while throwables pile up. An option restores strict grouping by state.
-- **Status at a glance** — a colour bar for freshness, condition, uses and fluid; rounds on guns and magazines; reading progress on books; a weight icon that reddens with the load.
+- **Status at a glance** — a colour bar for freshness, condition, uses and fluid; rounds on guns and magazines; reading progress on books; a weight icon that reddens with the load; and a torn red cross over anything broken.
 - **Stack inspector** — left-click a stack to see every item on its own, and drag one onto another to top it up.
 
 ## Every container, one window

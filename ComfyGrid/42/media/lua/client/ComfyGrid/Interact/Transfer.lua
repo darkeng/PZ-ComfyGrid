@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.0
+    Version: 1.5.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -22,6 +22,7 @@ local TransferJobs = ComfyGrid.Interact.TransferJobs
 local function releaseFromCharacter(item, playerObj, playerNum)
     if playerObj.removeAttachedItem ~= nil then
         playerObj:removeAttachedItem(item)
+
     end
     if item:isEquipped() then
         if playerObj.isHandItem ~= nil and playerObj:isHandItem(item) then

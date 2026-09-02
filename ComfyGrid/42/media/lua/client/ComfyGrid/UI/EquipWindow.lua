@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.0
+    Version: 1.5.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -156,6 +156,8 @@ function EquipWindow:new(playerNum)
     o.dockSide = "left"
 
     o.push = nil
+
+    o.pushWidth = nil
     o.dragging = false
 
     o.keepOnScreen = false
@@ -203,7 +205,13 @@ local function flushLootPage(playerNum, page)
 end
 
 local function makeRoom(self, page)
-    self.push = false
+    local prev = type(self.push) == "table" and self.push or nil
+
+    if prev ~= nil and prev.page ~= nil and prev.page:getX() ~= prev.pageX then
+        prev = nil
+    end
+    self.pushWidth = self.preferredWidth or self.width
+    self.push = prev or false
     local left = getPlayerScreenLeft ~= nil
         and getPlayerScreenLeft(self.playerNum) or 0
     local screenW = getPlayerScreenWidth ~= nil
@@ -219,13 +227,15 @@ local function makeRoom(self, page)
     page:setX(page:getX() + short)
     if loot ~= nil then loot:setX(loot:getX() + short) end
 
-    self.push = { page = page, pageX = page:getX(), amount = short,
+    self.push = { page = page, pageX = page:getX(),
+        amount = short + (prev ~= nil and prev.amount or 0),
         loot = loot, lootX = loot ~= nil and loot:getX() or nil }
 end
 
 local function giveBackRoom(self)
     local p = self.push
     self.push = nil
+    self.pushWidth = nil
     if type(p) ~= "table" then return end
     if p.page ~= nil and p.page:getX() == p.pageX then
         p.page:setX(p.pageX - p.amount)
@@ -457,7 +467,10 @@ function EquipWindow.follow(page)
             padRestore(page)
         end
     elseif wanted and win.docked then
-        if win.push == nil then makeRoom(win, page) end
+
+        local grew = win.pushWidth ~= nil
+            and (win.preferredWidth or win.width) > win.pushWidth
+        if win.push == nil or grew then makeRoom(win, page) end
     elseif win.push ~= nil then
         giveBackRoom(win)
     end

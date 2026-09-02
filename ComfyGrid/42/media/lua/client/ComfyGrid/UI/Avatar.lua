@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.0
+    Version: 1.5.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -37,6 +37,18 @@ local function silhouetteFor(female)
     end
     if tex == false then return nil end
     return tex
+end
+
+local dirty = {}
+
+function Avatar.markDirty(playerNum)
+    if type(playerNum) == "number" then dirty[playerNum] = true end
+end
+
+function Avatar._onClothingUpdated(character)
+    if character == nil or character.getPlayerNum == nil then return end
+    local ok, n = pcall(character.getPlayerNum, character)
+    if ok and type(n) == "number" then dirty[n] = true end
 end
 
 local lastError = nil
@@ -97,9 +109,10 @@ local function ensureModel(self)
         self.model = m
     end
 
-    if self.modelChar ~= playerObj then
+    if self.modelChar ~= playerObj or dirty[self.playerNum] then
         m:setCharacter(playerObj)
         self.modelChar = playerObj
+        dirty[self.playerNum] = nil
     end
     return m
 end
@@ -147,4 +160,16 @@ end
 function Avatar:render()
     local ok, err = pcall(renderImpl, self)
     if not ok then report("render", err) end
+end
+
+if not ComfyGrid._avatarClothingHooked then
+    ComfyGrid._avatarClothingHooked = true
+    if Events ~= nil and Events.OnClothingUpdated ~= nil then
+        Events.OnClothingUpdated.Add(function(character)
+            local A = ComfyGrid.UI and ComfyGrid.UI.Avatar
+            if A ~= nil and A._onClothingUpdated ~= nil then
+                A._onClothingUpdated(character)
+            end
+        end)
+    end
 end

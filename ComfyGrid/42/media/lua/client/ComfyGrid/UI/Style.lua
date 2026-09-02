@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.0
+    Version: 1.5.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -192,6 +192,9 @@ Style.COLORS = {
     BAR_LOW  = { r = 0.80, g = 0.18, b = 0.12, a = 1.0 },
     BAR_MID  = { r = 0.85, g = 0.75, b = 0.10, a = 1.0 },
     BAR_HIGH = { r = 0.20, g = 0.80, b = 0.75, a = 1.0 },
+
+    BROKEN      = { r = 0.92, g = 0.16, b = 0.13, a = 0.82 },
+    BROKEN_LINE = { r = 0.10, g = 0.05, b = 0.05, a = 0.74 },
 
     WEIGHT_LOW  = { r = 0.45, g = 0.80, b = 0.40, a = 1.0 },
     WEIGHT_MID  = { r = 0.93, g = 0.56, b = 0.20, a = 1.0 },

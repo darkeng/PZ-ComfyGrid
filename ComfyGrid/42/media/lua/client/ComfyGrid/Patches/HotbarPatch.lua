@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.0
+    Version: 1.5.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -87,19 +87,26 @@ end
 local function drawReadouts(self, x, y, size, item)
     local sr = ComfyGrid.UI and ComfyGrid.UI.StackRenderer
     if sr == nil or sr.overlayInfo == nil then return end
+
+    if item.isBroken and item:isBroken() and sr.drawBrokenMark ~= nil then
+        sr.drawBrokenMark(self, x, y, size)
+    end
     local frac, col, ammoText = sr.overlayInfo(item)
     if frac ~= nil and col ~= nil then
 
         local area = size - 10
         local barH = math.floor(area * frac + 0.5)
         if barH < 2 and frac > 0 then barH = 2 end
-        local bx = x + size - 7
-        local by = y + 5 + (area - barH)
-        self:drawRect(bx + 1, by, 1, 1, 1, col.r, col.g, col.b)
-        if barH > 2 then
-            self:drawRect(bx, by + 1, 3, barH - 2, 1, col.r, col.g, col.b)
+
+        if barH > 0 then
+            local bx = x + size - 7
+            local by = y + 5 + (area - barH)
+            self:drawRect(bx + 1, by, 1, 1, 1, col.r, col.g, col.b)
+            if barH > 2 then
+                self:drawRect(bx, by + 1, 3, barH - 2, 1, col.r, col.g, col.b)
+            end
+            self:drawRect(bx + 1, by + barH - 1, 1, 1, 1, col.r, col.g, col.b)
         end
-        self:drawRect(bx + 1, by + barH - 1, 1, 1, 1, col.r, col.g, col.b)
     end
     if ammoText == nil then return end
     local Style = ComfyGrid.UI.Style

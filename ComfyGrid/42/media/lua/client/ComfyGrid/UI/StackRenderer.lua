@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.0
+    Version: 1.5.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -22,6 +22,8 @@ local floor = math.floor
 
 local FALLBACK_TINT = { r = 0.65, g = 0.65, b = 0.65 }
 local FALLBACK_COUNT_TEXT = { r = 1, g = 1, b = 1, a = 1 }
+local FALLBACK_BROKEN = { r = 0.92, g = 0.16, b = 0.13 }
+local FALLBACK_BROKEN_LINE = { r = 0.10, g = 0.05, b = 0.05 }
 
 local BROKEN_OVERLAY_ALPHA = 0.35
 
@@ -117,11 +119,74 @@ local function weightLineTexture()
     return weightLineTex
 end
 
+local brokenTex, brokenTexMissing = nil, false
+local function brokenTexture()
+    if brokenTex == nil and not brokenTexMissing then
+        brokenTex = getTexture and getTexture("media/textures/comfy_broken.png") or nil
+        if brokenTex == nil then brokenTexMissing = true end
+    end
+    return brokenTex
+end
+
+local brokenLineTex, brokenLineTexMissing = nil, false
+local function brokenLineTexture()
+    if brokenLineTex == nil and not brokenLineTexMissing then
+        brokenLineTex = getTexture
+            and getTexture("media/textures/comfy_broken_line.png") or nil
+        if brokenLineTex == nil then brokenLineTexMissing = true end
+    end
+    return brokenLineTex
+end
+
+local BROKEN_SPAN = 0.86
+
+local BROKEN_BADGE_PX = 12
+
+local BROKEN_BADGE_MAX_FRAC = 0.30
+
 local ammoWidths = {}
 
 local stackWeights = {}
 local stackWeightEntries = 0
 local MAX_WEIGHT_ENTRIES = 512
+
+local stackBroken = {}
+local stackBrokenEntries = 0
+local MAX_BROKEN_ENTRIES = 512
+local BROKEN_RESCAN_MS = 700
+
+local function stackHasBroken(stack, inventory)
+
+    if not inventory or stack == nil or stack.itemIDs == nil then
+        return false
+    end
+    local now = getTimestampMs()
+    local entry = stackBroken[stack]
+    if entry ~= nil and entry.count == stack.count
+            and (now - entry.at) < BROKEN_RESCAN_MS then
+        return entry.broken
+    end
+    local broken = false
+    for id in pairs(stack.itemIDs) do
+        local it = inventory:getItemWithID(id)
+        if it ~= nil and it.isBroken ~= nil and it:isBroken() then
+            broken = true
+            break
+        end
+    end
+    if entry == nil then
+
+        if stackBrokenEntries >= MAX_BROKEN_ENTRIES then
+            stackBroken = {}
+            stackBrokenEntries = 0
+        end
+        entry = {}
+        stackBroken[stack] = entry
+        stackBrokenEntries = stackBrokenEntries + 1
+    end
+    entry.count, entry.at, entry.broken = stack.count, now, broken
+    return broken
+end
 
 local function totalStackWeight(stack, inventory)
     local entry = stackWeights[stack]
@@ -171,6 +236,30 @@ end
 
 function StackRenderer.weightLineTexture()
     return weightLineTexture()
+end
+
+function StackRenderer.drawBrokenMark(view, x, y, size)
+    local tex = brokenTexture()
+    if tex == nil then return end
+    local sz = floor(size * BROKEN_SPAN + 0.5)
+    if sz < 1 then return end
+    local off = floor((size - sz) * 0.5)
+    StackRenderer.blitBrokenMark(view, x + off, y + off, sz)
+end
+
+function StackRenderer.blitBrokenMark(view, x, y, sz)
+    local tex = brokenTexture()
+    if tex == nil or sz < 1 then return end
+    local colors = Style.COLORS
+    local fill = (colors and colors.BROKEN) or FALLBACK_BROKEN
+    local line = (colors and colors.BROKEN_LINE) or FALLBACK_BROKEN_LINE
+    local outline = brokenLineTexture()
+    if outline ~= nil then
+        view:drawTextureScaled(outline, x, y, sz, sz, line.a or 1,
+            line.r, line.g, line.b)
+    end
+    view:drawTextureScaled(tex, x, y, sz, sz, fill.a or 1,
+        fill.r, fill.g, fill.b)
 end
 
 local typeData = {}
@@ -329,6 +418,8 @@ local function readTickTexture()
 end
 
 function StackRenderer.draw(ctx)
+
+    local brokenBadge = false
     local stack = ctx.stack
     if not stack then return end
     local view = ctx.view
@@ -389,9 +480,16 @@ function StackRenderer.draw(ctx)
 
     if item then
 
-        if item.isBroken and item:isBroken() then
-            view:drawRect(x + 1, y + 1, CELL - 2, CELL - 2,
-                BROKEN_OVERLAY_ALPHA, 0, 0, 0)
+        local single = (stack.count == nil or stack.count <= 1)
+        if single then
+            if item.isBroken and item:isBroken() then
+                view:drawRect(x + 1, y + 1, CELL - 2, CELL - 2,
+                    BROKEN_OVERLAY_ALPHA, 0, 0, 0)
+
+                StackRenderer.drawBrokenMark(view, x, y, CELL)
+            end
+        else
+            brokenBadge = stackHasBroken(stack, ctx.inventory)
         end
 
         local td = typeDataFor(item,
@@ -407,14 +505,19 @@ function StackRenderer.draw(ctx)
             local area = CELL - 10
             local barH = floor(area * frac + 0.5)
             if barH < 2 and frac > 0 then barH = 2 end
-            local col = BAR_COLORS[floor(frac * 100 + 0.5)]
-            local bx = x + CELL - 7
-            local by = y + 5 + (area - barH)
-            view:drawRect(bx + 1, by, 1, 1, 1, col.r, col.g, col.b)
-            if barH > 2 then
-                view:drawRect(bx, by + 1, 3, barH - 2, 1, col.r, col.g, col.b)
+
+            if barH > 0 then
+                local col = BAR_COLORS[floor(frac * 100 + 0.5)]
+                local bx = x + CELL - 7
+                local by = y + 5 + (area - barH)
+                view:drawRect(bx + 1, by, 1, 1, 1, col.r, col.g, col.b)
+                if barH > 2 then
+                    view:drawRect(bx, by + 1, 3, barH - 2, 1,
+                        col.r, col.g, col.b)
+                end
+                view:drawRect(bx + 1, by + barH - 1, 1, 1, 1,
+                    col.r, col.g, col.b)
             end
-            view:drawRect(bx + 1, by + barH - 1, 1, 1, 1, col.r, col.g, col.b)
         end
 
         if playerObj ~= nil and isReadDone(item, td, playerObj) then
@@ -501,6 +604,16 @@ function StackRenderer.draw(ctx)
 
     local count = stack.count
     if count and count > 1 then
+
+        local textX = x + 2
+        if brokenBadge then
+            local bsz = floor(BROKEN_BADGE_PX * Style.SCALE + 0.5)
+            local cap = floor(CELL * BROKEN_BADGE_MAX_FRAC)
+            if bsz > cap then bsz = cap end
+            if bsz < 4 then bsz = 4 end
+            StackRenderer.blitBrokenMark(view, textX, y + 1, bsz)
+            textX = textX + bsz + 2
+        end
         local text = countStrings[count]
         if not text then
             text = tostring(count)
@@ -511,10 +624,10 @@ function StackRenderer.draw(ctx)
         if cs then
             local off = floor(Style.SCALE + 0.5)
             if off < 1 then off = 1 end
-            view:drawText(text, x + 2 + off, y + off,
+            view:drawText(text, textX + off, y + off,
                 cs.r, cs.g, cs.b, cs.a or 1, Style.FONT)
         end
-        view:drawText(text, x + 2, y, ct.r, ct.g, ct.b, ct.a or 1, Style.FONT)
+        view:drawText(text, textX, y, ct.r, ct.g, ct.b, ct.a or 1, Style.FONT)
     end
 end
 
