@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.1
+    Version: 1.5.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -30,6 +30,8 @@ local PENDING_CLAIM_RETRY_MS_MP = 5000
 
 local scratchSeen = {}
 local scratchMigrated = {}
+
+local scratchHome = {}
 
 local tableWipe = table.wipe
 local function wipe(t)
@@ -494,6 +496,59 @@ function SlotGrid:validate()
     if changed then
         noteMutation(self)
     end
+end
+
+function SlotGrid:consolidateLoose()
+    local stacks = self.data.stacks
+    local inventory = self.inventory
+    if type(stacks) ~= "table" or inventory == nil then return false end
+
+    local home = scratchHome
+    wipe(home)
+    for i = 1, #stacks do
+        local stack = stacks[i]
+        if type(stack) == "table" and type(stack.itemIDs) == "table" then
+            local key = tostring(stack.itemType) .. "|" .. tostring(stack.bucket)
+            local best = home[key]
+            if best == nil or (stack.count or 0) > (best.count or 0) then
+                home[key] = stack
+            end
+        end
+    end
+
+    local moved = false
+    local i = 1
+    while i <= #stacks do
+        local stack = stacks[i]
+        local absorbed = false
+        if type(stack) == "table" and type(stack.itemIDs) == "table"
+                and stack.count == 1 then
+            local key = tostring(stack.itemType) .. "|" .. tostring(stack.bucket)
+            local target = home[key]
+            if target ~= nil and target ~= stack then
+                local item = ItemStack.frontItem(stack, inventory)
+
+                if item ~= nil and ItemStack.canAdd(target, item) then
+                    ItemStack.add(target, item)
+
+                    if self.slotMap[stack.slot] == stack then
+                        self.slotMap[stack.slot] = nil
+                    end
+                    table.remove(stacks, i)
+                    moved = true
+                    absorbed = true
+                end
+            end
+        end
+        if not absorbed then i = i + 1 end
+    end
+    wipe(home)
+
+    if moved then
+        self:_rebuildSlotMap()
+        noteMutation(self)
+    end
+    return moved
 end
 
 function SlotGrid:reconcile()

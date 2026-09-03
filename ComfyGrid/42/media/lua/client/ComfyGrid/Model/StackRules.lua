@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.1
+    Version: 1.5.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -24,6 +24,13 @@ local parts = {}
 
 function StackRules.bucketOf(item)
     local n = 0
+
+    if item.getInventory ~= nil then
+        local held = item:getInventory()
+        if held ~= nil and held:getItems():size() > 0 then
+            n = n + 1; parts[n] = "bag:" .. tostring(item:getID())
+        end
+    end
     if Settings.get("STACK_BY_TYPE") == true then
         if item.isFavorite and item:isFavorite() then
             n = n + 1; parts[n] = "fav"
@@ -147,9 +154,13 @@ StackRules.NEVER_STACK_TYPES = {
 function StackRules.isStackable(item)
     if not item then return false end
 
-    if instanceof(item, "InventoryContainer") then return false end
+    if instanceof(item, "InventoryContainer") then
+        if item.canBeEquipped == nil then return false end
+        local okEquip, wornAt = pcall(item.canBeEquipped, item)
+        if not okEquip then return false end
+        if wornAt ~= nil and tostring(wornAt) ~= "" then return false end
+    end
 
-    if instanceof(item, "Key") then return false end
     if instanceof(item, "KeyRing") then return false end
 
     if instanceof(item, "Moveable") then return false end

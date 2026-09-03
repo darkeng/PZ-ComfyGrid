@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.1
+    Version: 1.5.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -50,6 +50,12 @@ function SortContainer.run(model)
         return SortContainer.BUSY
     end
 
+    local okMerge, merged = pcall(grid.consolidateLoose, grid)
+    if not okMerge then
+        Log.warn("SortContainer: consolidateLoose raised: " .. tostring(merged))
+        merged = false
+    end
+
     local okPlan, plan = pcall(SortPlan.build, grid)
     if not okPlan then
         Log.warn("SortContainer: plan failed: " .. tostring(plan))
@@ -57,7 +63,14 @@ function SortContainer.run(model)
     end
 
     if plan == nil then
-        return SortContainer.NO_CHANGE
+
+        if merged ~= true then
+            return SortContainer.NO_CHANGE
+        end
+        if now > 0 then lastSortMs[inventory] = now end
+        model.needsImmediateRefresh = true
+        pcall(Persistence.queueSync, inventory)
+        return SortContainer.OK
     end
 
     local okApply, applied = pcall(grid.applyLayout, grid, plan)
