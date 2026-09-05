@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.2
+    Version: 1.5.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -43,14 +43,16 @@ local Text = ComfyGrid.Core.Text
 local CHIPS = {
     { id = "sort", tex = function() return Draw.sortTexture() end,
       tipKey = "IGUI_ComfyGrid_ChipSortTip",
-      tipEN = "Sort this container by category." },
+
+      tipEN = "Sort this container." },
     { id = "stow", tex = function() return Draw.stowTexture() end,
       tipKey = "IGUI_ComfyGrid_ChipStowTip",
       tipEN = "Bring in more of what this container holds." },
 
     { id = "spread", tex = function() return Draw.spreadTexture() end,
       tipKey = "IGUI_ComfyGrid_ChipSpreadTip",
-      tipEN = "Spread these among the containers that hold their kind." },
+
+      tipEN = "Put each thing away where you already keep it." },
 
     { id = "empty", tex = function() return Draw.emptyTexture() end,
       tipKey = "IGUI_ComfyGrid_ChipEmptyTip",
@@ -533,7 +535,7 @@ function CHIP_ACTIONS.spread(self)
         Log.warn("ContainerPanel: spread failed: " .. tostring(outcome))
         Notify.bad(self.playerNum,
             Text.tr("IGUI_ComfyGrid_ChipSpreadFailed",
-                "Could not spread anything."))
+                "Could not put anything away."))
         return
     end
     Bulk.report(outcome, self.playerNum, "spread")

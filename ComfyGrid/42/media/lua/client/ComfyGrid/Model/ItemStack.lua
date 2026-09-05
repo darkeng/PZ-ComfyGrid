@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.2
+    Version: 1.5.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -119,6 +119,21 @@ function ItemStack.getItems(stack, inventory)
         end
     end
     return items
+end
+
+function ItemStack.weightOf(stack, inventory)
+    if not inventory or stack == nil or type(stack.itemIDs) ~= "table" then
+        return 0
+    end
+    local total = 0
+    for id in pairs(stack.itemIDs) do
+        local item = inventory:getItemWithID(id)
+        if item ~= nil and item.getUnequippedWeight ~= nil then
+            local ok, w = pcall(item.getUnequippedWeight, item)
+            if ok and type(w) == "number" then total = total + w end
+        end
+    end
+    return total
 end
 
 function ItemStack.split(stack, n)

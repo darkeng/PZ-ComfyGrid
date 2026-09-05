@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.2
+    Version: 1.5.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -193,14 +193,11 @@ local function totalStackWeight(stack, inventory)
     if entry ~= nil and entry.count == stack.count then
         return entry.total
     end
+
+    local ItemStack = ComfyGrid.Model and ComfyGrid.Model.ItemStack
     local total = 0
-    for id in pairs(stack.itemIDs) do
-        local item = inventory:getItemWithID(id)
-
-        if item ~= nil then
-
-            total = total + item:getUnequippedWeight()
-        end
+    if ItemStack ~= nil and ItemStack.weightOf ~= nil then
+        total = ItemStack.weightOf(stack, inventory)
     end
     if entry == nil then
         if stackWeightEntries >= MAX_WEIGHT_ENTRIES then
@@ -352,8 +349,9 @@ local function isReadDone(item, td, playerObj)
                     and playerObj:isLiteratureRead(modData.literatureTitle) then
                 return true
             end
+
             if modData.printMedia ~= nil and playerObj.isPrintMediaRead
-                    and playerObj:isPrintMediaRead(modData.printMedia.title) then
+                    and playerObj:isPrintMediaRead(modData.printMedia.id) then
                 return true
             end
             if modData.learnedRecipe ~= nil and playerObj.getKnownRecipes
@@ -377,6 +375,13 @@ local function isReadDone(item, td, playerObj)
                 and playerObj:getKnownRecipes():containsAll(recipes) then
             return true
         end
+
+        if playerObj.getAlreadyReadBook and item.getFullType then
+            local readBooks = playerObj:getAlreadyReadBook()
+            if readBooks ~= nil and readBooks:contains(item:getFullType()) then
+                return true
+            end
+        end
     end
     if td.hasMedia then
         if item.hasBeenSeen and item:hasBeenSeen(playerObj) then return true end
@@ -386,6 +391,52 @@ local function isReadDone(item, td, playerObj)
         return true
     end
     return false
+end
+
+local stackAllRead = {}
+local stackAllReadEntries = 0
+local MAX_READ_ENTRIES = 512
+local READ_RESCAN_MS = 700
+
+local function stackAllReadDone(stack, td, playerObj, inventory)
+
+    if not inventory or stack == nil or stack.itemIDs == nil
+            or playerObj == nil then
+        return false
+    end
+    local now = getTimestampMs()
+    local entry = stackAllRead[stack]
+
+    if entry ~= nil and entry.count == stack.count
+            and entry.player == playerObj
+            and (now - entry.at) < READ_RESCAN_MS then
+        return entry.allRead
+    end
+    local allRead, seen = true, false
+    for id in pairs(stack.itemIDs) do
+        local it = inventory:getItemWithID(id)
+        if it ~= nil then
+            seen = true
+            if not isReadDone(it, td, playerObj) then
+                allRead = false
+                break
+            end
+        end
+    end
+
+    if not seen then allRead = false end
+    if entry == nil then
+        if stackAllReadEntries >= MAX_READ_ENTRIES then
+            stackAllRead = {}
+            stackAllReadEntries = 0
+        end
+        entry = {}
+        stackAllRead[stack] = entry
+        stackAllReadEntries = stackAllReadEntries + 1
+    end
+    entry.count, entry.at, entry.allRead = stack.count, now, allRead
+    entry.player = playerObj
+    return allRead
 end
 
 local function ammoTextFor(item, td)
@@ -520,7 +571,15 @@ function StackRenderer.draw(ctx)
             end
         end
 
-        if playerObj ~= nil and isReadDone(item, td, playerObj) then
+        local readTick = false
+        if playerObj ~= nil then
+            if stack.count == nil or stack.count <= 1 or not ctx.inventory then
+                readTick = isReadDone(item, td, playerObj)
+            else
+                readTick = stackAllReadDone(stack, td, playerObj, ctx.inventory)
+            end
+        end
+        if readTick then
             local tick = readTickTexture()
             if tick then
                 local sz = floor(10 * Style.SCALE + 0.5)
@@ -542,10 +601,14 @@ function StackRenderer.draw(ctx)
                     and stack.itemIDs ~= nil then
                 total = totalStackWeight(stack, ctx.inventory)
             else
-                if aw == nil and item.getActualWeight then
-                    aw = item:getActualWeight()
+
+                if item.getUnequippedWeight then
+                    local okW, w = pcall(item.getUnequippedWeight, item)
+                    total = okW and w or nil
                 end
-                total = aw
+                if type(total) ~= "number" and item.getActualWeight then
+                    total = item:getActualWeight()
+                end
             end
             if type(total) == "number" then
                 local wc = StackRenderer.weightColor(total)
@@ -705,6 +768,25 @@ function StackRenderer.overlayInfo(item)
         col = BAR_COLORS[floor(frac * 100 + 0.5)]
     end
     return frac, col, ammoTextFor(item, td)
+end
+
+function StackRenderer.isReadDone(item, playerObj)
+    if item == nil or playerObj == nil then return false end
+    local td = typeDataFor(item,
+        (item.getFullType and item:getFullType()) or "?")
+    if not td.readable then return false end
+    return isReadDone(item, td, playerObj)
+end
+
+function StackRenderer.stackReadDone(stack, front, playerObj, inventory)
+    if stack == nil or front == nil or playerObj == nil then return false end
+    local td = typeDataFor(front,
+        stack.itemType or (front.getFullType and front:getFullType()) or "?")
+    if not td.readable then return false end
+    if stack.count == nil or stack.count <= 1 or not inventory then
+        return isReadDone(front, td, playerObj)
+    end
+    return stackAllReadDone(stack, td, playerObj, inventory)
 end
 
 function StackRenderer.jobOverlayFor(stack, front, jobs, currentAction)

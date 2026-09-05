@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.2
+    Version: 1.5.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -506,7 +506,7 @@ local WORDS = {
                   "Nothing to send: the rest is worn, favourited or in the hotbar." },
         trash = { "IGUI_ComfyGrid_ChipBinEmpty", "This bin is already empty." },
         spread = { "IGUI_ComfyGrid_ChipNothingToSpread",
-                  "No open container holds anything of these kinds." },
+                  "Nothing here has a container that already keeps it." },
         floor = { "IGUI_ComfyGrid_ChipNothingToDrop",
                   "Nothing to drop: the rest is worn, favourited or in the hotbar." },
     },
@@ -516,7 +516,7 @@ local WORDS = {
         empty = { "IGUI_ComfyGrid_ChipNowhereToSend",
                   "Nowhere to send it." },
         spread = { "IGUI_ComfyGrid_ChipNothingOpen",
-                  "Nothing open to spread into." },
+                  "Open the containers to put these away in." },
 
         floor = { "IGUI_ComfyGrid_ChipNoFloorReach",
                   "Can't reach the floor from here." },

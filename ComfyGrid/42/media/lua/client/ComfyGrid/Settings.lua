@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.2
+    Version: 1.5.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -25,6 +25,8 @@ Settings.defaults = {
     LOOT_LAYOUT = "sections",
 
     COMPACT_ROWS = true,
+
+    SORT_ORDER = "category",
     STACK_BY_TYPE = true,
     HOTBAR_SECTION = false,
     EQUIPMENT_VIEW = "window",
@@ -90,6 +92,18 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptSlotsPerCapacity",
       tipKey = "IGUI_ComfyGrid_OptSlotsPerCapacityTip",
       tooltip = "Slots each point of container capacity is worth." },
+
+    { key = "SORT_ORDER",         kind = "choice", group = "tiles",
+      values = { "category", "categoryWeight", "weight" },
+      labelKeys = { "IGUI_ComfyGrid_SortOrderCategory",
+                    "IGUI_ComfyGrid_SortOrderCategoryWeight",
+                    "IGUI_ComfyGrid_SortOrderWeight" },
+      labels = { "Category",
+                 "Category, heaviest first",
+                 "Heaviest first" },
+      nameKey = "IGUI_ComfyGrid_OptSortOrder",
+      tipKey = "IGUI_ComfyGrid_OptSortOrderTip",
+      tooltip = "What the sort button arranges by." },
     { key = "COMPACT_ROWS",       kind = "tickbox", group = "tiles",
       nameKey = "IGUI_ComfyGrid_OptCompactRows",
       tipKey = "IGUI_ComfyGrid_OptCompactRowsTip",
