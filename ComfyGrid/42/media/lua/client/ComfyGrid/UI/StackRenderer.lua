@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.3
+    Version: 1.6.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/SlotRenderer"
 ComfyGrid = ComfyGrid or {}
@@ -20,14 +21,26 @@ local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local floor = math.floor
 
+local showStatusBar = ComfyGrid.Settings.get("STATUS_BAR")
+ComfyGrid.Settings.onChanged("STATUS_BAR", function(newValue)
+    showStatusBar = newValue
+end)
+
 local FALLBACK_TINT = { r = 0.65, g = 0.65, b = 0.65 }
 local FALLBACK_COUNT_TEXT = { r = 1, g = 1, b = 1, a = 1 }
+local FALLBACK_BOOK_LOCKED = { r = 0.72, g = 0.42, b = 0.36, a = 1 }
+local FALLBACK_READ_TICK = { r = 0.36, g = 0.88, b = 0.52 }
+local FALLBACK_READ_TICK_LINE = { r = 0.05, g = 0.12, b = 0.07 }
+local FALLBACK_FAVORITE = { r = 0.98, g = 0.78, b = 0.25 }
+local FALLBACK_FAVORITE_LINE = { r = 0.12, g = 0.09, b = 0.02 }
 local FALLBACK_BROKEN = { r = 0.92, g = 0.16, b = 0.13 }
 local FALLBACK_BROKEN_LINE = { r = 0.10, g = 0.05, b = 0.05 }
 
 local BROKEN_OVERLAY_ALPHA = 0.35
 
 local countStrings = {}
+
+local VOLUME_OF_LVL = { [1] = 1, [3] = 2, [5] = 3, [7] = 4, [9] = 5 }
 
 local ammoStrings = {}
 
@@ -144,7 +157,7 @@ local BROKEN_BADGE_PX = 12
 
 local BROKEN_BADGE_MAX_FRAC = 0.30
 
-local ammoWidths = {}
+local textWidths = {}
 
 local stackWeights = {}
 local stackWeightEntries = 0
@@ -274,6 +287,19 @@ local function typeDataFor(item, fullType)
     td.readable = td.isLiterature or td.isMap or td.hasMedia
     if td.isDrainable and item.getMaxUses then
         td.maxUses = item:getMaxUses()
+    end
+
+    if td.isLiterature and item.getLvlSkillTrained and item.getSkillTrained then
+        local lvl = item:getLvlSkillTrained()
+        local vol = type(lvl) == "number" and VOLUME_OF_LVL[lvl] or nil
+        if vol ~= nil then
+            local trained = item:getSkillTrained()
+            if trained ~= nil then
+                td.bookVolume = vol
+                td.bookLvl = lvl
+                td.bookSkill = tostring(trained)
+            end
+        end
     end
 
     if item.getMaxAmmo then
@@ -457,15 +483,48 @@ local function ammoTextFor(item, td)
     return text
 end
 
-local tickTex = nil
-local tickTexMissing = false
+local marks = {}
 
-local function readTickTexture()
-    if tickTex == nil and not tickTexMissing then
-        tickTex = getTexture and getTexture("media/ui/Tick_Mark-10.png") or nil
-        if tickTex == nil then tickTexMissing = true end
+local function markTextures(name, vanillaPath)
+    local m = marks[name]
+    if m ~= nil then return m end
+    local fill = getTexture
+        and getTexture("media/textures/comfy_" .. name .. ".png") or nil
+    if fill ~= nil then
+        m = { fill = fill, ours = true,
+              line = getTexture("media/textures/comfy_" .. name .. "_line.png") }
+    else
+        local van = getTexture and getTexture(vanillaPath) or nil
+        m = van ~= nil and { fill = van, ours = false } or false
     end
-    return tickTex
+    marks[name] = m
+    return m
+end
+
+local function markFit(tex, sz)
+    local w, h = sz, sz
+    local sw, sh = tex:getWidth(), tex:getHeight()
+    if sw and sh and sw > 0 and sh > 0 and sw ~= sh then
+        if sw > sh then
+            h = floor(sz * sh / sw + 0.5)
+        else
+            w = floor(sz * sw / sh + 0.5)
+        end
+    end
+    return w, h
+end
+
+local function drawMark(view, mk, x, y, w, h, fillCol, lineCol)
+    if not mk.ours then
+        view:drawTextureScaled(mk.fill, x, y, w, h, 1, 1, 1, 1)
+        return
+    end
+    if mk.line ~= nil and lineCol ~= nil then
+        view:drawTextureScaled(mk.line, x, y, w, h, 1,
+            lineCol.r, lineCol.g, lineCol.b)
+    end
+    view:drawTextureScaled(mk.fill, x, y, w, h, 1,
+        fillCol.r, fillCol.g, fillCol.b)
 end
 
 function StackRenderer.draw(ctx)
@@ -549,7 +608,11 @@ function StackRenderer.draw(ctx)
         if td.readable and ctx.playerNum ~= nil then
             playerObj = getSpecificPlayer(ctx.playerNum)
         end
-        local frac = statusBarFraction(item, td, playerObj)
+
+        local frac = nil
+        if showStatusBar then
+            frac = statusBarFraction(item, td, playerObj)
+        end
         if frac then
             if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
 
@@ -559,7 +622,7 @@ function StackRenderer.draw(ctx)
 
             if barH > 0 then
                 local col = BAR_COLORS[floor(frac * 100 + 0.5)]
-                local bx = x + CELL - 7
+                local bx = x + CELL - Style.BAR_INSET
                 local by = y + 5 + (area - barH)
                 view:drawRect(bx + 1, by, 1, 1, 1, col.r, col.g, col.b)
                 if barH > 2 then
@@ -579,12 +642,19 @@ function StackRenderer.draw(ctx)
                 readTick = stackAllReadDone(stack, td, playerObj, ctx.inventory)
             end
         end
+
+        local clearRight = x + CELL - Style.BAR_INSET - 1
+        local textRight = clearRight
         if readTick then
-            local tick = readTickTexture()
-            if tick then
+            local mk = markTextures("tick", "media/ui/Tick_Mark-10.png")
+            if mk then
                 local sz = floor(10 * Style.SCALE + 0.5)
-                view:drawTextureScaled(tick, x + CELL - sz - 4, y + CELL - sz - 3,
-                    sz, sz, 1, 1, 1, 1)
+                local mw, mh = markFit(mk.fill, sz)
+                local mc = Style.COLORS
+                drawMark(view, mk, clearRight - mw, y + CELL - mh - 3, mw, mh,
+                    (mc and mc.READ_TICK) or FALLBACK_READ_TICK,
+                    (mc and mc.READ_TICK_LINE) or FALLBACK_READ_TICK_LINE)
+                textRight = clearRight - mw - 2
             end
         end
 
@@ -629,17 +699,17 @@ function StackRenderer.draw(ctx)
         local ammoText = ammoTextFor(item, td)
         if ammoText ~= nil then
             local fh = Style.FONT_H
-            local byFont = ammoWidths[fh]
+            local byFont = textWidths[fh]
             if byFont == nil then
                 byFont = {}
-                ammoWidths[fh] = byFont
+                textWidths[fh] = byFont
             end
             local tw = byFont[ammoText]
             if tw == nil then
                 tw = getTextManager():MeasureStringX(Style.FONT, ammoText)
                 byFont[ammoText] = tw
             end
-            local ax = x + CELL - 9 - tw
+            local ax = textRight - tw
 
             if ax >= markRight then
                 local colors2 = Style.COLORS
@@ -657,11 +727,73 @@ function StackRenderer.draw(ctx)
             end
         end
 
+        local vol = td.bookVolume
+        if vol ~= nil and playerObj ~= nil then
+            local text = countStrings[vol]
+            if text == nil then
+                text = tostring(vol)
+                countStrings[vol] = text
+            end
+            local fh = Style.FONT_H
+            local byFont = textWidths[fh]
+            if byFont == nil then
+                byFont = {}
+                textWidths[fh] = byFont
+            end
+            local tw = byFont[text]
+            if tw == nil then
+                tw = getTextManager():MeasureStringX(Style.FONT, text)
+                byFont[text] = tw
+            end
+            local vx = textRight - tw
+            if vx >= markRight then
+
+                local locked = false
+                if not readTick and SkillBook ~= nil and td.bookSkill ~= nil
+                        and playerObj.getPerkLevel ~= nil then
+                    local sb = SkillBook[td.bookSkill]
+                    if sb ~= nil and sb.perk ~= nil then
+                        locked = td.bookLvl > playerObj:getPerkLevel(sb.perk) + 1
+                    end
+                end
+                local colors3 = Style.COLORS
+                local ty = y + CELL - fh - 1
+                local cs = colors3 and colors3.COUNT_SHADOW
+                if cs then
+                    local off = floor(Style.SCALE + 0.5)
+                    if off < 1 then off = 1 end
+                    view:drawText(text, vx + off, ty + off,
+                        cs.r, cs.g, cs.b, cs.a or 1, Style.FONT)
+                end
+                local vc
+                if locked then
+                    vc = (colors3 and colors3.BOOK_LOCKED) or FALLBACK_BOOK_LOCKED
+                else
+                    vc = (colors3 and colors3.COUNT_TEXT) or FALLBACK_COUNT_TEXT
+                end
+                view:drawText(text, vx, ty, vc.r, vc.g, vc.b, vc.a or 1,
+                    Style.FONT)
+            end
+        end
+
         if bulky and weightIcon == nil and not ctx.skipWeightMark then
             local mb = y + CELL - 3
             view:drawRect(x + 3, mb - 2, 7, 2, 0.9, 0.82, 0.65, 0.38)
             view:drawRect(x + 3, mb - 4, 5, 2, 0.9, 0.82, 0.65, 0.38)
             view:drawRect(x + 3, mb - 6, 3, 2, 0.9, 0.82, 0.65, 0.38)
+        end
+    end
+
+    if item and item.isFavorite and item:isFavorite() then
+        local mk = markTextures("star", "media/ui/FavoriteStar.png")
+        if mk then
+            local sz = floor(10 * Style.SCALE + 0.5)
+            local mw, mh = markFit(mk.fill, sz)
+            local mc = Style.COLORS
+            drawMark(view, mk, x + CELL - Style.BAR_INSET - 1 - mw, y + 2,
+                mw, mh,
+                (mc and mc.FAVORITE) or FALLBACK_FAVORITE,
+                (mc and mc.FAVORITE_LINE) or FALLBACK_FAVORITE_LINE)
         end
     end
 

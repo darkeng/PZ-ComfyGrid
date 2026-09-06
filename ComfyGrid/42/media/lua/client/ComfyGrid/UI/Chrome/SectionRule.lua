@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.3
+    Version: 1.6.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -20,13 +20,21 @@ local Text = ComfyGrid.Core.Text
 
 SectionRule.PAD = 4
 
-local _surf = Style.COLORS and Style.COLORS.SURFACE
-SectionRule.TEXT = _surf
-    and { r = _surf.accent.r, g = _surf.accent.g, b = _surf.accent.b, a = 0.92 }
-    or { r = 0.66, g = 0.66, b = 0.72, a = 0.95 }
-SectionRule.LINE = _surf
-    and { r = _surf.line.r, g = _surf.line.g, b = _surf.line.b, a = 0.60 }
-    or { r = 0.45, g = 0.45, b = 0.50, a = 0.55 }
+SectionRule.TEXT = { r = 0.66, g = 0.66, b = 0.72, a = 0.95 }
+SectionRule.LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.55 }
+
+local function refreshColors()
+    local sf = Style.COLORS and Style.COLORS.SURFACE
+    if sf == nil then return end
+    local t, l = SectionRule.TEXT, SectionRule.LINE
+    t.r, t.g, t.b, t.a = sf.accent.r, sf.accent.g, sf.accent.b, 0.92
+    l.r, l.g, l.b, l.a = sf.line.r, sf.line.g, sf.line.b, 0.60
+end
+
+refreshColors()
+if Style.onPaletteChanged ~= nil then
+    Style.onPaletteChanged(refreshColors)
+end
 
 local cache = {}
 

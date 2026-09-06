@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.3
+    Version: 1.6.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,6 +10,7 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Prefs"
 require "ComfyGrid/Compat/Warnings"
+require "ComfyGrid/UI/Themes"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/Chrome/PopupRegistry"
 require "ComfyGrid/UI/Chrome/HoverTip"

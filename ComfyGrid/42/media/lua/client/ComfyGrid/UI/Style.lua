@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.3
+    Version: 1.6.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -36,6 +36,8 @@ Style.PAD = 2
 Style.CELL = 45
 Style.CELL_STRIDE = 44
 
+Style.BAR_INSET = 7
+
 Style.FONT_H = 16
 Style.SMALL_H = 16
 
@@ -63,6 +65,10 @@ local function recompute(force)
     Style.PAD = pad
     Style.CELL = cell
     Style.CELL_STRIDE = cell - 1
+
+    local barInset = floor(cell * 0.14)
+    if barInset > 7 then barInset = 7 elseif barInset < 4 then barInset = 4 end
+    Style.BAR_INSET = barInset
     for i = 1, #scaleListeners do
 
         local ok, err = pcall(scaleListeners[i], eff, oldScale)
@@ -193,6 +199,13 @@ Style.COLORS = {
     BAR_MID  = { r = 0.85, g = 0.75, b = 0.10, a = 1.0 },
     BAR_HIGH = { r = 0.20, g = 0.80, b = 0.75, a = 1.0 },
 
+    BOOK_LOCKED = { r = 0.72, g = 0.42, b = 0.36, a = 1.0 },
+
+    READ_TICK       = { r = 0.36, g = 0.88, b = 0.52, a = 1.0 },
+    READ_TICK_LINE  = { r = 0.05, g = 0.12, b = 0.07, a = 1.0 },
+    FAVORITE        = { r = 0.98, g = 0.78, b = 0.25, a = 1.0 },
+    FAVORITE_LINE   = { r = 0.12, g = 0.09, b = 0.02, a = 1.0 },
+
     BROKEN      = { r = 0.92, g = 0.16, b = 0.13, a = 0.82 },
     BROKEN_LINE = { r = 0.10, g = 0.05, b = 0.05, a = 0.74 },
 
@@ -251,6 +264,76 @@ do
             if cats[cat] == nil then
                 cats[cat] = BUCKET_TINT[bucket] or cats.default
             end
+        end
+    end
+end
+
+Style.THEME = "amber"
+
+local paletteListeners = {}
+
+function Style.onPaletteChanged(fn)
+    paletteListeners[#paletteListeners + 1] = fn
+end
+
+local function writeColor(dst, src)
+    if dst == nil or src == nil then return end
+    dst.r, dst.g, dst.b = src.r, src.g, src.b
+    if src.a ~= nil then dst.a = src.a end
+end
+
+local baseCategory = {}
+
+do
+    local function snapshot(t)
+        if t == nil then return end
+        for _, c in pairs(t) do
+            if type(c) == "table" and c.r ~= nil and baseCategory[c] == nil then
+                baseCategory[c] = { r = c.r, g = c.g, b = c.b }
+            end
+        end
+    end
+    snapshot(Style.COLORS.CATEGORY)
+    snapshot(Style.COLORS.BUCKET)
+end
+
+local function recolorCategories(sat, bri)
+    sat = sat or 1
+    bri = bri or 1
+    for live, base in pairs(baseCategory) do
+        local l = 0.299 * base.r + 0.587 * base.g + 0.114 * base.b
+        local r = (l + (base.r - l) * sat) * bri
+        local g = (l + (base.g - l) * sat) * bri
+        local b = (l + (base.b - l) * sat) * bri
+        live.r = r < 0 and 0 or (r > 1 and 1 or r)
+        live.g = g < 0 and 0 or (g > 1 and 1 or g)
+        live.b = b < 0 and 0 or (b > 1 and 1 or b)
+    end
+end
+
+local LADDER = { "dark", "bg", "panel", "card", "cardHi", "line", "accent" }
+
+function Style.applyPalette(name, theme)
+    if type(theme) ~= "table" then return end
+    local C = Style.COLORS
+    local sf = C.SURFACE
+    if type(theme.surface) == "table" then
+        for i = 1, #LADDER do
+            writeColor(sf[LADDER[i]], theme.surface[LADDER[i]])
+        end
+    end
+
+    writeColor(C.BOARD_BG, theme.board or sf.bg)
+    writeColor(C.EMPTY_CELL, theme.emptyCell or sf.card)
+    writeColor(C.COUNT_TEXT, theme.countText)
+    writeColor(C.COUNT_SHADOW, theme.countShadow)
+    recolorCategories(theme.categorySaturation, theme.categoryBrightness)
+    Style.THEME = name or Style.THEME
+    for i = 1, #paletteListeners do
+
+        local ok, err = pcall(paletteListeners[i], Style.THEME)
+        if not ok then
+            Log.warn("Style palette listener failed: " .. tostring(err))
         end
     end
 end

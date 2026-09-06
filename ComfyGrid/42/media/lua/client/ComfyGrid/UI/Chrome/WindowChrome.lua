@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.3
+    Version: 1.6.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -91,6 +91,32 @@ function WindowChrome.seam(page)
         sf.line.r, sf.line.g, sf.line.b)
 end
 
+local styled = {}
+
+local function repaintChrome(page)
+    local sf = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
+    if sf == nil or page == nil then return end
+    local bg, bo = page.backgroundColor, page.borderColor
+    if bg ~= nil then bg.r, bg.g, bg.b = sf.bg.r, sf.bg.g, sf.bg.b end
+    if bo ~= nil then bo.r, bo.g, bo.b = sf.line.r, sf.line.g, sf.line.b end
+
+    local tex = Draw ~= nil and Draw.titlebarTexture ~= nil
+        and Draw.titlebarTexture() or nil
+    if tex ~= nil then
+        page.titlebarbkg = tex
+        page.statusbarbkg = tex
+    end
+    local grip = Draw ~= nil and Draw.gripTexture ~= nil
+        and Draw.gripTexture() or nil
+    if grip ~= nil then page.resizeimage = grip end
+end
+
+if Style.onPaletteChanged ~= nil then
+    Style.onPaletteChanged(function()
+        for i = 1, #styled do repaintChrome(styled[i]) end
+    end)
+end
+
 function WindowChrome.applyTo(page)
     if page._comfyChrome then return end
     local sf = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
@@ -146,11 +172,15 @@ function WindowChrome.applyTo(page)
     page._comfyStrip = strip
 
     page._comfyChrome = true
+    styled[#styled + 1] = page
 
 end
 
 function WindowChrome.restore(page)
     if not page._comfyChrome then return end
+    for i = #styled, 1, -1 do
+        if styled[i] == page then table.remove(styled, i) end
+    end
     local saved = page._comfyChromeSaved
     if saved ~= nil then
         if saved.bg ~= nil then page.backgroundColor = saved.bg end

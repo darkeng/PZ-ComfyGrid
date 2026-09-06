@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.3
+    Version: 1.6.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -17,6 +17,7 @@ local Log = ComfyGrid.Core.Log
 local Text = ComfyGrid.Core.Text
 
 Settings.defaults = {
+    THEME = "amber",
     SCALE = 1,
     SLOTS_PER_CAPACITY = 2,
     INSTANT_TRANSFER = false,
@@ -28,18 +29,39 @@ Settings.defaults = {
 
     SORT_ORDER = "category",
     STACK_BY_TYPE = true,
+
+    STATUS_BAR = true,
     HOTBAR_SECTION = false,
     EQUIPMENT_VIEW = "window",
     EQUIPMENT_AVATAR = "model",
 }
 
 local GROUPS = {
+
+    { key = "style",    nameKey = "IGUI_ComfyGrid_GroupStyle",    name = "Style" },
     { key = "layout",   nameKey = "IGUI_ComfyGrid_GroupLayout",   name = "Layout" },
     { key = "tiles",    nameKey = "IGUI_ComfyGrid_GroupTiles",    name = "Tiles" },
     { key = "advanced", nameKey = "IGUI_ComfyGrid_GroupAdvanced", name = "Advanced" },
 }
 
 local OPTION_DEFS = {
+
+    { key = "THEME",              kind = "choice", group = "style",
+
+      values = { "amber", "dark", "slate", "olive", "sakura" },
+      labelKeys = { "IGUI_ComfyGrid_ThemeAmber",
+                    "IGUI_ComfyGrid_ThemeDark",
+                    "IGUI_ComfyGrid_ThemeSlate",
+                    "IGUI_ComfyGrid_ThemeOlive",
+                    "IGUI_ComfyGrid_ThemeSakura" },
+      labels = { "Comfy Grid - warm amber",
+                 "Dark - vanilla greys",
+                 "Slate - cool blue",
+                 "Olive - muted green",
+                 "Sakura - warm pink" },
+      nameKey = "IGUI_ComfyGrid_OptTheme",
+      tipKey = "IGUI_ComfyGrid_OptThemeTip",
+      tooltip = "Colours for windows, borders, buttons, text and tiles." },
     { key = "SCALE",              kind = "slider", group = "layout",
       min = 0.3, max = 4, step = 0.1,
       nameKey = "IGUI_ComfyGrid_OptScale",
@@ -112,6 +134,11 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptStackByType",
       tipKey = "IGUI_ComfyGrid_OptStackByTypeTip",
       tooltip = "Identical items share a tile whatever their state." },
+
+    { key = "STATUS_BAR",         kind = "tickbox", group = "tiles",
+      nameKey = "IGUI_ComfyGrid_OptStatusBar",
+      tipKey = "IGUI_ComfyGrid_OptStatusBarTip",
+      tooltip = "The bar at a tile's edge: condition, charge, what's left and reading progress." },
     { key = "INSTANT_TRANSFER",   kind = "tickbox", group = "advanced",
       nameKey = "IGUI_ComfyGrid_OptInstantTransfer",
       tipKey = "IGUI_ComfyGrid_OptInstantTransferTip",
@@ -222,6 +249,22 @@ local function setValue(key, newValue)
             end
         end
     end
+end
+
+local function applyTheme(name)
+    local Themes = ComfyGrid.UI and ComfyGrid.UI.Themes
+    if Themes == nil then return end
+    local ok, err = pcall(Themes.apply, name)
+    if not ok then
+        Log.warn("Settings: theme '" .. tostring(name) .. "' failed: "
+            .. tostring(err))
+    end
+end
+
+Settings.onChanged("THEME", applyTheme)
+
+function Settings.applyStoredTheme()
+    applyTheme(Settings.get("THEME"))
 end
 
 function Settings.buildOptions()
@@ -412,6 +455,8 @@ if not ComfyGrid._settingsApplyHooked then
         end
 
         pcall(migrateLegacyOptions)
+
+        pcall(Settings.applyStoredTheme)
 
         pcall(runMigrations)
     end)

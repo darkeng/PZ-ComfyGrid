@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.5.3
+    Version: 1.6.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -172,30 +172,39 @@ function Draw.moreTexture()
     return Draw.glyphTexture("more")
 end
 
-local titlebarTex = nil
-local titlebarTexMissing = false
+local bakedTex = {}
+
+local function bakedTexture(name)
+
+    local S = ComfyGrid.UI and ComfyGrid.UI.Style
+
+    local T = ComfyGrid.UI and ComfyGrid.UI.Themes
+    local fallback = (T ~= nil and T.DEFAULT) or "amber"
+    local theme = (S ~= nil and S.THEME) or fallback
+    local key = name .. "|" .. theme
+    local tex = bakedTex[key]
+    if tex ~= nil then return tex or nil end
+    local path = "media/textures/" .. name
+        .. (theme == fallback and "" or ("_" .. theme)) .. ".png"
+    tex = TextureCache.get(path)
+    if tex == nil and theme ~= fallback then
+
+        tex = TextureCache.get("media/textures/" .. name .. ".png")
+    end
+    bakedTex[key] = tex or false
+    return tex
+end
 
 function Draw.titlebarTexture()
-    if titlebarTex == nil and not titlebarTexMissing then
-        titlebarTex = TextureCache.get("media/textures/comfy_titlebar.png")
-        if titlebarTex == nil then titlebarTexMissing = true end
-    end
-    return titlebarTex
+    return bakedTexture("comfy_titlebar")
 end
 
 function Draw.pinTexture()
     return Draw.glyphTexture("pin")
 end
 
-local gripTex = nil
-local gripTexMissing = false
-
 function Draw.gripTexture()
-    if gripTex == nil and not gripTexMissing then
-        gripTex = TextureCache.get("media/textures/comfy_grip.png")
-        if gripTex == nil then gripTexMissing = true end
-    end
-    return gripTex
+    return bakedTexture("comfy_grip")
 end
 
 function Draw.gearTexture()

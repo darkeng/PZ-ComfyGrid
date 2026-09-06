@@ -8,7 +8,8 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 - **Square tiles** that reflow to your window width — no more scrolling a text list.
 - **Auto-stacking** — identical items share one tile with a counter whatever their state (fresh and stale food, a full and a half-used roll of tape); weapons, tools and heavy gear keep a tile of their own, while throwables pile up. An option restores strict grouping by state.
-- **Status at a glance** — a colour bar for freshness, condition, uses and fluid; rounds on guns and magazines; reading progress on books; a weight icon that reddens with the load; and a torn red cross over anything broken.
+- **Status at a glance** — a colour bar for freshness, condition, uses and fluid; rounds on guns and magazines; reading progress on books; a weight icon that reddens with the load; and a torn red cross over anything broken. The bar can be switched off.
+- **Marks that answer a question** — a star on your favourites, a tick on what you have already read, and the volume number on a skill book, dimmed while your level is too low to read it.
 - **Stack inspector** — left-click a stack to see every item on its own, and drag one onto another to top it up.
 
 ## Every container, one window
@@ -33,7 +34,9 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 ## Set up in game
 
-The gear in the title bar opens the mod's own panel: interface scale, grid density, stacking by type or state, instant transfers, and where the equipment lives. Every option applies live, and a tooltip says what it does.
+The gear in the title bar opens the mod's own panel: **five colour themes** — Comfy Grid, Dark, Slate, Olive and Sakura — plus interface scale, grid density, stacking by type or state, instant transfers, and where the equipment lives. Every option applies live, and a tooltip says what it does.
+
+![Themes](workshop/card_14_themes.png)
 
 **Full multiplayer support**, and 8 languages: English, Español, Español (AR), Français, Deutsch, Русский, 简体中文, Português (BR).
 
