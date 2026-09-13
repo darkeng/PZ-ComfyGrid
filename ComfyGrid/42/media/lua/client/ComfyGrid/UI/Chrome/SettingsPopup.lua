@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.0
+    Version: 1.7.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -81,6 +81,14 @@ local function controlWidth(row)
     return 0
 end
 
+local versionText = nil
+local function versionLabel()
+    if versionText == nil then
+        versionText = "v" .. tostring(ComfyGrid.VERSION or "?")
+    end
+    return versionText
+end
+
 local function panelWidth(tabs, resetRow)
     local labelMax, ctrlMax, fullMax = 0, 0, 0
     local barMin = 0
@@ -99,7 +107,8 @@ local function panelWidth(tabs, resetRow)
     if barMin > fullMax then fullMax = barMin end
     if resetRow ~= nil then
 
-        local rw = measure(resetRow.label) + PAD * 2
+        local rw = measure(resetRow.label) + COL_GAP + measure(versionLabel())
+            + PAD * 2
         if rw > fullMax then fullMax = rw end
     end
     local w = PAD + labelMax + COL_GAP + ctrlMax + PAD
@@ -174,6 +183,8 @@ local function relayout(self)
 
     local w, ctrlW = panelWidth(self.tabs, self.resetRow)
     self.ctrlW = ctrlW
+
+    self.versionW = measure(versionLabel())
     local h = self.titleH + self.tabH + PAD
     h = h + #self.rows * (self.rowH + ROW_GAP)
 
@@ -506,10 +517,13 @@ function SettingsPopup:prerender()
         self:drawRect(PAD - 4, ry, self.width - (PAD - 4) * 2, rh, 0.35,
             sf.card.r, sf.card.g, sf.card.b)
     end
-    self:drawText(self.resetRow.label, PAD,
-        ry + math.floor((rh - Style.FONT_H) / 2),
+    local footerTextY = ry + math.floor((rh - Style.FONT_H) / 2)
+    self:drawText(self.resetRow.label, PAD, footerTextY,
         sf.accent.r, sf.accent.g, sf.accent.b, self.hotReset and 1 or 0.8,
         Style.FONT)
+
+    self:drawText(versionLabel(), self.width - PAD - (self.versionW or 0),
+        footerTextY, sf.line.r, sf.line.g, sf.line.b, 1, Style.FONT)
 
     local hotTip = nil
     if self.hotRow ~= nil and self.dragRow == nil then

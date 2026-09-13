@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.0
+    Version: 1.7.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -149,6 +149,13 @@ function ContainerWindow.gridFor(playerNum)
     if win == nil or not win:getIsVisible() then return nil end
     local panel = win.content
     return panel ~= nil and panel.gridView or nil
+end
+
+function ContainerWindow.showsInventory(playerNum, inv)
+    if inv == nil then return false end
+    local win = windows[playerNum or 0]
+    if win == nil or not win:getIsVisible() then return false end
+    return inventoryOf(win.item) == inv
 end
 
 function ContainerWindow.closeFor(playerNum)

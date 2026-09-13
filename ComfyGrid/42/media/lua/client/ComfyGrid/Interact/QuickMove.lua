@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.0
+    Version: 1.7.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -87,7 +87,13 @@ function QuickMove.destinationFor(sourceInventory, playerObj, playerNum)
         return selectedContainer(getPlayerInventory(playerNum)) or playerInv
     end
 
-    if sourceInventory ~= playerInv then return playerInv end
+    local ContainerWindow = ComfyGrid.UI ~= nil
+        and ComfyGrid.UI.ContainerWindow or nil
+    if ContainerWindow ~= nil and ContainerWindow.showsInventory ~= nil then
+        local ok, shown = pcall(ContainerWindow.showsInventory, playerNum,
+            sourceInventory)
+        if ok and shown == true then return playerInv end
+    end
     return selectedContainer(getPlayerLoot(playerNum))
 end
 
