@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.1
+    Version: 1.7.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -197,7 +197,15 @@ function StackRules.identityOf(item)
         local masked = Herbalist.groupNameOf(item)
         if masked ~= nil then return masked end
     end
-    return item.getFullType and item:getFullType() or nil
+    local fullType = item.getFullType and item:getFullType() or nil
+    if fullType == nil then return nil end
+    if item.getRecordedMediaIndex ~= nil then
+        local ok, idx = pcall(item.getRecordedMediaIndex, item)
+        if ok and type(idx) == "number" and idx >= 0 then
+            return fullType .. "@" .. tostring(idx)
+        end
+    end
+    return fullType
 end
 
 function StackRules.isSameStack(stack, item)

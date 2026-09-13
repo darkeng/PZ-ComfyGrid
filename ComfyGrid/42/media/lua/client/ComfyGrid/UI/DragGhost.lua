@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.1
+    Version: 1.7.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -98,8 +98,15 @@ local function renderImpl(self)
         local cat = front.getDisplayCategory and front:getDisplayCategory()
             or nil
         local tints = Style.COLORS and Style.COLORS.CATEGORY
-        local tint = (cat ~= nil and tints ~= nil and tints[cat])
-            or (tints ~= nil and tints.default) or nil
+        local tint = nil
+
+        if Style.tintForCategory ~= nil then
+            tint = Style.tintForCategory(cat)
+        end
+        if tint == nil then
+            tint = (cat ~= nil and tints ~= nil and tints[cat])
+                or (tints ~= nil and tints.default) or nil
+        end
         if tint ~= nil then
             self:drawTextureScaled(tileTex, gx, gy, cell, cell,
                 0.85, tint.r, tint.g, tint.b)

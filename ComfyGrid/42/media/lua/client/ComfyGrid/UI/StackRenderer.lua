@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.1
+    Version: 1.7.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -542,8 +542,14 @@ function StackRenderer.draw(ctx)
 
     local colors = Style.COLORS
     local tints = colors and colors.CATEGORY
-    local tint = (tints and (tints[stack.category] or tints.default))
-        or FALLBACK_TINT
+    local tint = nil
+    if Style.tintForCategory ~= nil then
+        tint = Style.tintForCategory(stack.category)
+    end
+    if tint == nil then
+        tint = (tints and (tints[stack.category] or tints.default))
+            or FALLBACK_TINT
+    end
     SlotRenderer.drawCell(ctx, tint)
 
     local tex = item and item:getTex() or nil

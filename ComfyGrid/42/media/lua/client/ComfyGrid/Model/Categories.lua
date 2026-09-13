@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.1
+    Version: 1.7.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -111,6 +111,74 @@ Categories.BUCKET = {
     Animal      = "materials",
 
 }
+
+Categories.BS_PREFIX = {
+    { "ClothBag", "containers" },
+    { "CookImp",  "kitchen"    },
+    { "CookBev",  "food"       },
+    { "CookIng",  "food"       },
+    { "Media",    "misc"       },
+    { "Wep",      "weapons"    },
+    { "Tool",     "tools"      },
+    { "Mech",     "tools"      },
+    { "Elec",     "tools"      },
+    { "Food",     "food"       },
+    { "Cook",     "food"       },
+    { "Med",      "medical"    },
+    { "Drugs",    "medical"    },
+    { "Clean",    "hygiene"    },
+    { "Appear",   "clothing"   },
+    { "Cloth",    "clothing"   },
+    { "Cont",     "containers" },
+    { "Lit",      "literature" },
+    { "Sur",      "survival"   },
+    { "Craft",    "materials"  },
+    { "Build",    "materials"  },
+    { "Fuel",     "materials"  },
+    { "Collect",  "misc"       },
+    { "Misc",     "misc"       },
+}
+
+local bsActive = nil
+local function betterSortingActive()
+    if bsActive ~= nil then return bsActive end
+    bsActive = false
+    if getActivatedMods ~= nil then
+        local ok, mods = pcall(getActivatedMods)
+        if ok and mods ~= nil and mods.size ~= nil then
+            for i = 0, mods:size() - 1 do
+                if tostring(mods:get(i)) == "BetterSortCC" then
+                    bsActive = true
+                    break
+                end
+            end
+        end
+    end
+    return bsActive
+end
+
+local catBucket = {}
+function Categories.bucketForCategory(cat)
+    if cat == nil then return nil end
+    local memo = catBucket[cat]
+    if memo ~= nil then
+        if memo == false then return nil end
+        return memo
+    end
+    local bucket = Categories.BUCKET[cat]
+    if bucket == nil and betterSortingActive() then
+        local rules = Categories.BS_PREFIX
+        for i = 1, #rules do
+            local prefix = rules[i][1]
+            if string.sub(cat, 1, #prefix) == prefix then
+                bucket = rules[i][2]
+                break
+            end
+        end
+    end
+    catBucket[cat] = bucket or false
+    return bucket
+end
 
 Categories.HYGIENE_TYPES = {
     ["Base.Soap2"]         = true,
@@ -224,7 +292,7 @@ function Categories.bucketOf(stack)
     end
     local c = stack.category
     if c == nil then return DEFAULT_BUCKET end
-    return Categories.BUCKET[c] or DEFAULT_BUCKET
+    return Categories.bucketForCategory(c) or DEFAULT_BUCKET
 end
 
 function Categories.classify(stack, inventory)

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.1
+    Version: 1.7.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -266,6 +266,39 @@ do
             end
         end
     end
+end
+
+local catTint = {}
+local BAND_TINTS = {
+    BUCKET_TINT.tools, BUCKET_TINT.materials, BUCKET_TINT.survival,
+    BUCKET_TINT.hygiene, BUCKET_TINT.kitchen, BUCKET_TINT.misc,
+    BUCKET_TINT.literature, BUCKET_TINT.containers,
+}
+
+function Style.tintForCategory(cat)
+    if cat == nil then return Style.COLORS.CATEGORY.default end
+    local memo = catTint[cat]
+    if memo ~= nil then return memo end
+
+    local tint = Style.COLORS.CATEGORY[cat]
+    if tint == nil then
+        local Categories = ComfyGrid.Model and ComfyGrid.Model.Categories
+        local bucket = nil
+        if Categories ~= nil and Categories.bucketForCategory ~= nil then
+            bucket = Categories.bucketForCategory(cat)
+        end
+        if bucket ~= nil then
+            tint = BUCKET_TINT[bucket]
+        else
+
+            local h = 0
+            for i = 1, #cat do h = h + string.byte(cat, i) end
+            tint = BAND_TINTS[(h % #BAND_TINTS) + 1]
+        end
+    end
+    tint = tint or Style.COLORS.CATEGORY.default
+    catTint[cat] = tint
+    return tint
 end
 
 Style.THEME = "amber"
