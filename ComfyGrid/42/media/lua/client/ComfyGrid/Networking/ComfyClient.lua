@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -85,6 +85,13 @@ local function transmitWorldItem(worldObj)
     transmitPartialData(WORLD_ITEM_DATA, WORLD_ITEM_PARTIAL, record)
 end
 
+local function transmitItemLayout(item)
+    local record = item:getModData().ComfyGrid
+    if record == nil then return end
+    record[COMFY_UUID] = item:getID()
+    transmitPartialData(WORLD_ITEM_DATA, WORLD_ITEM_PARTIAL, record)
+end
+
 local function transmitVehicle(vehicle)
     local record = vehicle:getModData().ComfyGrid
     if record == nil then return end
@@ -102,6 +109,9 @@ local function drainOne(owner)
         transmitWorldItem(owner)
     elseif instanceof(owner, "BaseVehicle") then
         transmitVehicle(owner)
+
+    elseif instanceof(owner, "InventoryItem") then
+        transmitItemLayout(owner)
     elseif owner.transmitModData then
         transmitObject(owner)
     end
@@ -119,6 +129,14 @@ local function drain()
         end
     end
     hasPending = false
+end
+
+function ComfyClient.flush()
+    local ok, err = pcall(drain)
+    if not ok then
+        Log.error("ComfyClient flush failed: " .. tostring(err))
+    end
+    return ok
 end
 
 local function onReceiveGlobalModData(key, data)

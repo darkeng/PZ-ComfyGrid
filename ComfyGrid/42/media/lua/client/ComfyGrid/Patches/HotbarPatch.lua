@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -24,7 +24,42 @@ local function hidden(self)
             and JoypadState.players[(self.playerNum or 0) + 1] ~= nil)
 end
 
+local function barEnabled()
+    local S = ComfyGrid.Settings
+    if S == nil or S.get == nil then return true end
+    return S.get("HOTBAR_BAR") ~= false
+end
+
+local function snapshot(self)
+    if self._comfyHotbarOg ~= nil then return end
+    self._comfyHotbarOg = {
+        slotWidth = self.slotWidth,
+        slotHeight = self.slotHeight,
+        slotPad = self.slotPad,
+        margins = self.margins,
+        height = self.height,
+    }
+end
+
+local function restoreMetrics(self)
+    local og = self._comfyHotbarOg
+    if og == nil then return false end
+    if self.slotWidth == og.slotWidth and self.slotHeight == og.slotHeight
+            and self.slotPad == og.slotPad and self.margins == og.margins then
+        return false
+    end
+    self.slotWidth = og.slotWidth
+    self.slotHeight = og.slotHeight
+    self.slotPad = og.slotPad
+    self.margins = og.margins
+    if og.height ~= nil then self:setHeight(og.height) end
+    return true
+end
+
 local function applyMetrics(self)
+
+    snapshot(self)
+    if not barEnabled() then return restoreMetrics(self) end
     local Style = ComfyGrid.UI.Style
     local cell = Style ~= nil and Style.CELL or nil
     if cell == nil or cell < 8 then return false end
@@ -230,6 +265,8 @@ if not ComfyGrid._hotbarPatched then
 
     local og_render = ISHotbar.render
     function ISHotbar:render()
+
+        if not barEnabled() then return og_render(self) end
         local fn = ComfyGrid._hotbarRender
         if fn == nil then return og_render(self) end
         local ok, err = pcall(fn, self)

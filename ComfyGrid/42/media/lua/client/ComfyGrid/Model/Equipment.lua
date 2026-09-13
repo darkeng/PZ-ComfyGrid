@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Core/Text"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Model = ComfyGrid.Model or {}
 local Equipment = {}
@@ -104,6 +105,9 @@ end
 
 local reportedLocations = {}
 local Log = ComfyGrid.Core.Log
+local Text = ComfyGrid.Core.Text
+
+local displayNames = {}
 local function resolveGroup(rawLocation)
     local pretty = tostring(rawLocation)
     local group = LOCATION_GROUP[pretty] or NORMALIZED[normalize(pretty)]
@@ -125,6 +129,12 @@ local function listFor(groupKey)
         itemsByGroup[groupKey] = list
     end
     return list
+end
+
+function Equipment.displayNameFor(key)
+    local name = displayNames[tostring(key)]
+    if name == false then return nil end
+    return name
 end
 
 function Equipment.collect(playerObj, out)
@@ -167,13 +177,32 @@ function Equipment.collect(playerObj, out)
                     end
                     local groupKey, pretty = resolveGroup(rawLoc or "?")
                     if groupKey == nil then
-                        groupKey = pretty
-                        local list = itemsByGroup[groupKey]
-                        if list == nil or #list == 0 then
-                            dynamicKeys[#dynamicKeys + 1] = groupKey
+
+                        local okHidden, hidden = pcall(item.isHidden, item)
+                        if okHidden and hidden then
+                            groupKey = nil
+                        else
+                            groupKey = pretty
+                            if displayNames[groupKey] == nil then
+                                local pretty2 = nil
+                                if rawLoc ~= nil and rawLoc.getTranslationName ~= nil then
+                                    local okN, n = pcall(rawLoc.getTranslationName, rawLoc)
+                                    if okN and n ~= nil then
+                                        pretty2 = Text.tr(
+                                            "UI_ClothingType_" .. tostring(n), nil)
+                                    end
+                                end
+                                displayNames[groupKey] = pretty2 or false
+                            end
+                            local list = itemsByGroup[groupKey]
+                            if list == nil or #list == 0 then
+                                dynamicKeys[#dynamicKeys + 1] = groupKey
+                            end
                         end
                     end
-                    table.insert(listFor(groupKey), 1, item)
+                    if groupKey ~= nil then
+                        table.insert(listFor(groupKey), 1, item)
+                    end
                 end
             end
         end

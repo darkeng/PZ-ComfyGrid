@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -222,6 +222,18 @@ local function clearSelection(self)
     self.selectionCount = 0
 end
 
+local function gestureIsDoubleClick()
+    local S = ComfyGrid.Settings
+    if S == nil or S.transferIsDoubleClick == nil then return false end
+    local ok, v = pcall(S.transferIsDoubleClick)
+    return ok and v == true
+end
+
+local function clickWindowMs()
+    local GV = ComfyGrid.UI and ComfyGrid.UI.GridView
+    return (GV ~= nil and GV.CLICK_DELAY_MS) or 260
+end
+
 local function isSelected(self, id)
     local sel = self.selection
     return sel ~= nil and sel[id] == true
@@ -254,6 +266,8 @@ local function syncSelection(self, stack)
 end
 
 local function prerenderImpl(self)
+
+    self:flushPendingClick()
     local stack = resolveStack(self)
     if stack == nil then
         self:close()
@@ -668,7 +682,13 @@ local function mouseDownImpl(self, x, y)
     local tile = idx ~= nil and self.tiles[idx + 1] or nil
     local id = tile ~= nil and tile.id or nil
 
-    if isCtrlKeyDown() and not isShiftKeyDown() then
+    local S = ComfyGrid.Settings
+    local markHeld = false
+    if S ~= nil and S.multiSelectHeld ~= nil then
+        local okM, v = pcall(S.multiSelectHeld)
+        markHeld = okM and v == true
+    end
+    if markHeld then
         local lx, ly = toBoard(self, x, y)
         self.marqueeArmed = true
         self.marqueeActive = false
@@ -689,7 +709,12 @@ local function mouseDownImpl(self, x, y)
     local item = liveTileItem(self, idx)
     if item == nil then return end
 
-    if isShiftKeyDown() then
+    local transferHeld = false
+    if S ~= nil and S.transferModifierHeld ~= nil then
+        local okG, v = pcall(S.transferModifierHeld)
+        transferHeld = okG and v == true
+    end
+    if transferHeld then
         local payload = payloadFor(self, id)
         if payload ~= nil then
             QuickMove.run(payload, self.model.inventory, self.playerNum)
@@ -709,7 +734,60 @@ local function mouseDownImpl(self, x, y)
     self.draggedIds = dragIdSet(self, id)
 end
 
+local function resolveClick(self, id)
+    if not gestureIsDoubleClick() then
+        clearSelection(self)
+        return
+    end
+    local now = getTimestampMs()
+    local pending = self.pendingClick
+    if pending ~= nil and pending.id == id
+            and now - pending.atMs <= clickWindowMs() then
+        self.pendingClick = nil
+        local payload = payloadFor(self, id)
+        if payload ~= nil and QuickMove ~= nil then
+            QuickMove.run(payload, self.model.inventory, self.playerNum)
+        end
+        clearSelection(self)
+        return
+    end
+    self.pendingClick = { id = id, atMs = now }
+end
+
+local function doubleClickOnRelease(self, x, y)
+    if not gestureIsDoubleClick() then return false end
+    local pending = self.pendingClick
+    if pending == nil then return false end
+    if getTimestampMs() - pending.atMs > clickWindowMs() then return false end
+    local idx = tileAt(self, x, y)
+    local tile = idx ~= nil and self.tiles[idx + 1] or nil
+    local id = tile ~= nil and tile.id or nil
+    if id == nil or id ~= pending.id then return false end
+    self.pendingClick = nil
+    local payload = payloadFor(self, id)
+    if payload ~= nil and QuickMove ~= nil and self.model ~= nil then
+        QuickMove.run(payload, self.model.inventory, self.playerNum)
+    end
+    clearSelection(self)
+
+    if DragAndDrop.isDragOwner(self) then DragAndDrop.endDrag() end
+    self.pressedId = nil
+    self.draggedIds = nil
+    self.dragDidStart = false
+    return true
+end
+
+function StackPopup:flushPendingClick()
+    local pending = self.pendingClick
+    if pending == nil then return end
+    if getTimestampMs() - pending.atMs < clickWindowMs() then return end
+    self.pendingClick = nil
+    clearSelection(self)
+end
+
 local function mouseUpImpl(self, x, y)
+
+    if doubleClickOnRelease(self, x, y) then return end
 
     if self.marqueeArmed then
         endMarquee(self, true)
@@ -745,8 +823,9 @@ local function mouseUpImpl(self, x, y)
         if DragAndDrop.isDragOwner(self) then
 
             local clicked = self.pressedId ~= nil and not self.dragDidStart
+            local clickedId = self.pressedId
             DragAndDrop.endDrag()
-            if clicked then clearSelection(self) end
+            if clicked then resolveClick(self, clickedId) end
         end
 
         if not self.dragDidStart and y < self.titleH
@@ -912,6 +991,8 @@ function StackPopup:onMouseWheel(del)
 end
 
 function StackPopup:close()
+
+    self.pendingClick = nil
 
     PadPopup.releaseFocus(self)
     if DragAndDrop.isDragOwner(self) and not DragAndDrop.isDragging() then

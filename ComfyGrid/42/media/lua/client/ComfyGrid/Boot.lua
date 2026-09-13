@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -29,6 +29,9 @@ require "ComfyGrid/Patches/ButtonPromptPatch"
 require "ComfyGrid/Patches/EscapeMenuPatch"
 require "ComfyGrid/Patches/ConsolidateMenuPatch"
 require "ComfyGrid/Patches/ControlsStripPatch"
+require "ComfyGrid/UI/Chrome/ZOrder"
+require "ComfyGrid/UI/ContainerWindow"
+require "ComfyGrid/Interact/KeyBinds"
 require "ComfyGrid/Interact/QuickEquip"
 require "ComfyGrid/Interact/ItemApply"
 

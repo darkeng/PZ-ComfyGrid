@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,11 +11,13 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/Model/StackRules"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/Model/Capacity"
+require "ComfyGrid/Model/Persistence"
 
 local Log = ComfyGrid.Core.Log
 local StackRules = ComfyGrid.Model.StackRules
 local ItemStack = ComfyGrid.Model.ItemStack
 local Capacity = ComfyGrid.Model.Capacity
+local Persistence = ComfyGrid.Model.Persistence
 
 local SlotGrid = {}
 SlotGrid.__index = SlotGrid
@@ -82,6 +84,7 @@ function SlotGrid:new(inventory, persistentGridData, playerNum)
     o.playerNum = playerNum
     o.slotMap = {}
     o.pendingClaims = nil
+    o.claimLanded = false
     o.needsMoreReconcile = false
 
     o.changeCount = 0
@@ -165,6 +168,7 @@ function SlotGrid:insertItem(item, slot)
 
     if item:getContainer() ~= self.inventory then return false end
 
+    local explicit = slot ~= nil
     if slot == nil then
         local stack = self:findStackFor(item)
         if stack ~= nil then
@@ -178,13 +182,24 @@ function SlotGrid:insertItem(item, slot)
     end
 
     local occupant = self.slotMap[slot]
-    if occupant ~= nil then
-        if ItemStack.canAdd(occupant, item) then
-            ItemStack.add(occupant, item)
-            noteMutation(self)
-            return true
-        end
+
+    local alreadyThere = occupant ~= nil
+        and ItemStack.containsId(occupant, item:getID())
+    if occupant ~= nil and not alreadyThere
+            and not ItemStack.canAdd(occupant, item) then
         return false
+    end
+
+    if explicit then
+        self:removeItem(item)
+
+        occupant = self.slotMap[slot]
+    end
+
+    if occupant ~= nil then
+        ItemStack.add(occupant, item)
+        noteMutation(self)
+        return true
     end
 
     local stack = ItemStack.create(item, slot)
@@ -417,15 +432,32 @@ end
 
 function SlotGrid:releaseClaim(id)
     local claims = self.pendingClaims
-    if claims ~= nil and id ~= nil then claims[id] = nil end
+    if claims == nil or id == nil then return end
+    claims[id] = nil
+
+    for _ in pairs(claims) do return end
+    self.pendingClaims = nil
 end
 
 function SlotGrid:validate()
+
+    local identityClaims = {}
     local stacks = self.data.stacks
     local inventory = self.inventory
 
     local excludeEquipped = isOwnMainInventory(self)
     local hotbar = excludeEquipped and getHotbar(self.playerNum) or nil
+
+    local emptyRead = false
+    if not excludeEquipped and type(stacks) == "table" and #stacks > 0
+            and inventory ~= nil then
+        local okItems, items = pcall(inventory.getItems, inventory)
+        if okItems and items ~= nil and items:size() == 0 then
+            local okMD, _, persisted = pcall(Persistence.getModDataFor,
+                inventory, self.playerNum)
+            emptyRead = okMD and persisted == true
+        end
+    end
     local seen = scratchSeen
     local migrated = scratchMigrated
     wipe(seen)
@@ -444,20 +476,26 @@ function SlotGrid:validate()
         else
             local kept = 0
 
+            local migratedHere = 0
+            local lastMigrant = nil
             for id in pairs(ids) do
                 local drop = false
                 if seen[id] then
                     drop = true
                 else
                     local item = inventory:getItemWithID(id)
-                    if item == nil
-                            or isItemExcluded(item, hotbar, excludeEquipped) then
+                    if item == nil then
+
+                        drop = not emptyRead
+                    elseif isItemExcluded(item, hotbar, excludeEquipped) then
                         drop = true
                     elseif kept >= StackRules.maxStackOf(item) then
 
                         drop = true
                         seen[id] = true
                         migrated[#migrated + 1] = item
+                        migratedHere = migratedHere + 1
+                        lastMigrant = item
                     elseif StackRules.bucketOf(item) ~= stack.bucket
                             or StackRules.identityOf(item) ~= stack.itemType then
 
@@ -465,6 +503,8 @@ function SlotGrid:validate()
 
                         seen[id] = true
                         migrated[#migrated + 1] = item
+                        migratedHere = migratedHere + 1
+                        lastMigrant = item
                     end
                 end
                 if drop then
@@ -479,6 +519,11 @@ function SlotGrid:validate()
             end
             stack.count = kept
             if kept == 0 then
+
+                if migratedHere == 1 and lastMigrant ~= nil then
+                    self:claimSlotForItem(lastMigrant:getID(), stack.slot)
+                    identityClaims[#identityClaims + 1] = lastMigrant:getID()
+                end
                 table.remove(stacks, i)
             else
                 i = i + 1
@@ -490,6 +535,10 @@ function SlotGrid:validate()
 
     for j = 1, #migrated do
         self:insertItem(migrated[j])
+    end
+
+    for j = 1, #identityClaims do
+        self:releaseClaim(identityClaims[j])
     end
     wipe(migrated)
 
@@ -559,15 +608,6 @@ function SlotGrid:reconcile()
     local items = inventory:getItems()
     if items == nil then return end
 
-    local positioned = scratchSeen
-    wipe(positioned)
-    local stacks = self.data.stacks
-    for i = 1, #stacks do
-        for id in pairs(stacks[i].itemIDs) do
-            positioned[id] = true
-        end
-    end
-
     local claims = self.pendingClaims
     if claims ~= nil then
         local now = getTimestampMs()
@@ -582,6 +622,19 @@ function SlotGrid:reconcile()
         if not any then
             self.pendingClaims = nil
             claims = nil
+        end
+    end
+
+    local positioned = scratchSeen
+    wipe(positioned)
+    local stacks = self.data.stacks
+    for i = 1, #stacks do
+        for id in pairs(stacks[i].itemIDs) do
+            if claims ~= nil and claims[id] ~= nil then
+                positioned[id] = "claimed"
+            else
+                positioned[id] = true
+            end
         end
     end
 
@@ -606,7 +659,7 @@ function SlotGrid:reconcile()
         local item = items:get(i)
 
         if item ~= nil and instanceof(item, "InventoryItem")
-                and not positioned[item:getID()]
+                and positioned[item:getID()] ~= true
                 and not isItemExcluded(item, hotbar, excludeEquipped) then
             if inserted >= MAX_RECONCILE_INSERTS then
                 self.needsMoreReconcile = true
@@ -621,6 +674,8 @@ function SlotGrid:reconcile()
                     if self:insertItem(item, claim.slot) then
                         claims[item:getID()] = nil
                         claimed = true
+
+                        self.claimLanded = true
                     elseif outboundBusy
                             or nowMs - claim.ms < retryWindow then
 
@@ -633,7 +688,11 @@ function SlotGrid:reconcile()
             end
 
             if not held then
-                if claimed or self:insertItem(item) then
+                if claimed then
+                    inserted = inserted + 1
+                elseif positioned[item:getID()] ~= nil then
+
+                elseif self:insertItem(item) then
                     inserted = inserted + 1
                 else
                     failed = failed + 1

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -99,6 +99,20 @@ local function nodesFor(page)
             end
             nodes[#nodes + 1] = { kind = "equip", el = win.content,
                 panel = win, side = true }
+        end
+    end
+
+    do
+        local CW = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
+        local win = CW ~= nil and CW.windowFor ~= nil
+            and CW.windowFor(page.player) or nil
+        local grid = CW ~= nil and CW.gridFor ~= nil
+            and CW.gridFor(page.player) or nil
+        if page.onCharacter == true and win ~= nil and grid ~= nil
+                and win:getIsVisible() then
+
+            nodes[#nodes + 1] = { kind = "grid", el = grid, panel = win,
+                side = true, bubble = true }
         end
     end
     if #nodes == 0 then return nil, nil end
@@ -199,9 +213,13 @@ function PadFocus.onGain(page, _joypadData)
     st.page = page
     st.active = true
     local ws = winState(st, page)
-    if ws.el == nil then
-        local nodes = nodesFor(page)
-        local idx = nodes ~= nil and defaultIndex(nodes, page) or nil
+    local nodes = nodesFor(page)
+    local cur = nodes ~= nil and indexOfEl(nodes, ws.el) or nil
+
+    if nodes ~= nil and (cur == nil or nodes[cur].side
+            or nodes[cur].kind == "chip"
+            or countOf(nodes[cur]) < 1) then
+        local idx = defaultIndex(nodes, page)
         if idx ~= nil then stampNode(ws, nodes[idx], ws.slot or 0) end
     end
 end
@@ -327,24 +345,47 @@ local function verticalStep(nodes, cur, step, col)
     return nil
 end
 
+local function centreX(w)
+    return w:getAbsoluteX() + (w:getWidth() or 0) / 2
+end
+
 local function dirOf(node, page)
     local w = node.panel
     if w == nil then return 0, 0 end
     if w.docked == true and w.dockSide == "above" then return 0, -1 end
     if w.getAbsoluteX == nil then return 0, 0 end
-    return w:getAbsoluteX() < page:getAbsoluteX() and -1 or 1, 0
+
+    return centreX(w) < centreX(page) and -1 or 1, 0
 end
 
-local function sideNodeOn(nodes, page, dx, dy)
+local function sideSpan(node, page)
+    local w = node.panel
+    if w == nil or w.getAbsoluteX == nil then return 0 end
+    local d = centreX(w) - centreX(page)
+    return d < 0 and -d or d
+end
+
+local function sideNodeOn(nodes, page, dx, dy, after)
     if dx == 0 and dy == 0 then return nil end
+    local floor = after ~= nil and sideSpan(after, page) or nil
+    local best, bestSpan = nil, nil
     for i = 1, #nodes do
         local n = nodes[i]
-        if n.side and n.kind ~= "chip" and countOf(n) > 0 then
+
+        if n.side and not n.bubble and n.kind ~= "chip" and countOf(n) > 0
+                and n ~= after then
             local wx, wy = dirOf(n, page)
-            if wx == dx and wy == dy then return i end
+            if wx == dx and wy == dy then
+                local span = sideSpan(n, page)
+                if floor == nil or span > floor then
+                    if bestSpan == nil or span < bestSpan then
+                        best, bestSpan = i, span
+                    end
+                end
+            end
         end
     end
-    return nil
+    return best
 end
 
 local function cursorAbs(node, slot, cols)
@@ -385,6 +426,25 @@ local function raggedStep(el, slot, dx, dy, count)
 end
 
 local function raggedEntry(el, count, fromAbsX, fromAbsY)
+    if count <= 0 then return 0 end
+
+    if el.padRagged ~= true or el.padTileXY == nil then
+        local cols = el.cols or 1
+        if cols < 1 then cols = 1 end
+        local rows = math.ceil(count / cols)
+        local ex0 = el.getAbsoluteX ~= nil and el:getAbsoluteX() or 0
+        local ey0 = el.getAbsoluteY ~= nil and el:getAbsoluteY() or 0
+        local w = el.getWidth ~= nil and el:getWidth() or 0
+        local h = el.getHeight ~= nil and el:getHeight() or 0
+        local col = w > 0 and math.floor((fromAbsX - ex0) / (w / cols)) or 0
+        local row = h > 0 and math.floor((fromAbsY - ey0) / (h / rows)) or 0
+        if col < 0 then col = 0 elseif col > cols - 1 then col = cols - 1 end
+        if row < 0 then row = 0 elseif row > rows - 1 then row = rows - 1 end
+        local slot = row * cols + col
+        if slot > count - 1 then slot = count - 1 end
+        if slot < 0 then slot = 0 end
+        return slot
+    end
     local ex, ey = el:getAbsoluteX(), el:getAbsoluteY()
     local best, bestScore = 0, nil
     for i = 0, count - 1 do
@@ -515,13 +575,50 @@ local function movePress(page, inv, dx, dy)
     return true
 end
 
+local function leaveBubble(page, nodes, ws, host, dx, dy)
+    local idx = indexOfEl(nodes, ws.homeEl)
+    if idx == nil or nodes[idx].side or countOf(nodes[idx]) < 1 then
+        idx = defaultIndex(nodes, page)
+    end
+    if idx == nil then return true end
+    local node = nodes[idx]
+    local count = countOf(node)
+    local cols = shapeOf(node, count)
+    local slot = ws.homeSlot or 0
+    if slot >= count then slot = count - 1 end
+    if slot < 0 then slot = 0 end
+    local col = slot % cols + (dx or 0)
+    local row = math.floor(slot / cols) + (dy or 0)
+    if col < 0 then col = 0 elseif col > cols - 1 then col = cols - 1 end
+    if row < 0 then row = 0 end
+    local nslot = row * cols + col
+    if nslot >= count then nslot = count - 1 end
+    if nslot < 0 then nslot = 0 end
+    stampNode(ws, node, nslot)
+    ensureVisible(host, node, ws.slot)
+    if nslot == slot then ws.bubbleSkip = true end
+    return true
+end
+
 local function sideEdge(st, node, page, nodes, ws, host, dx, dy)
+
+    if node.bubble then
+        return leaveBubble(page, nodes, ws, host, dx, dy)
+    end
     local wx, wy = dirOf(node, page)
     if dx == -wx and dy == -wy then
         leaveSide(page, nodes, ws, host)
         return true
     end
 
+    local idx = sideNodeOn(nodes, page, dx, dy, node)
+    if idx ~= nil then
+        local sn = nodes[idx]
+        enterSide(sn)
+        stampNode(ws, sn, 0)
+        ensureVisible(host, sn, ws.slot)
+        return true
+    end
     if dx ~= 0 then crossWindow(st, page, dx, 0) end
     return true
 end
@@ -537,7 +634,54 @@ local function enterSideOn(nodes, page, ws, node, slot, cols, dx, dy)
     return true
 end
 
-function PadFocus.onDir(page, dx, dy)
+local function bubbleRedirect(page)
+    local CW = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
+    local grid = CW ~= nil and CW.gridFor ~= nil and CW.gridFor(page.player)
+        or nil
+    if grid == nil then return end
+    local ws = winState(stateFor(page.player), page)
+    if ws.bubbleSkip then
+        ws.bubbleSkip = nil
+        return
+    end
+    if ws.el == grid then return end
+    local kind, el, slot, occupant = PadFocus.peek(page)
+    if el == nil or occupant == nil then return end
+    if kind ~= "grid" and kind ~= "pocket" then return end
+    if occupant.itemIDs == nil then return end
+
+    local inv = grid.model ~= nil and grid.model.inventory or nil
+    if inv == nil then return end
+    local okItem, item = pcall(inv.getContainingItem, inv)
+    if not okItem or item == nil then return end
+    local id = item:getID()
+    local onTheDoor = false
+    for sid in pairs(occupant.itemIDs) do
+        if sid == id then onTheDoor = true break end
+    end
+    if not onTheDoor then return end
+
+    local nodes, host = nodesFor(page)
+    if nodes == nil then return end
+    local bidx, fidx = nil, indexOfEl(nodes, el)
+    for i = 1, #nodes do
+        if nodes[i].el == grid then bidx = i break end
+    end
+    if bidx == nil or countOf(nodes[bidx]) < 1 then return end
+    local from = fidx ~= nil and nodes[fidx] or nil
+    local ax, ay = 0, 0
+    if from ~= nil then
+        ax, ay = cursorAbs(from, slot, shapeOf(from, countOf(from)))
+    end
+    enterSide(nodes[bidx])
+
+    ws.homeEl, ws.homeSlot = el, slot
+    stampNode(ws, nodes[bidx], raggedEntry(nodes[bidx].el,
+        countOf(nodes[bidx]), ax, ay))
+    ensureVisible(host, nodes[bidx], ws.slot)
+end
+
+local function onDirStep(page, dx, dy)
     local st = stateFor(page.player)
     st.page = page
 
@@ -642,6 +786,12 @@ function PadFocus.onDir(page, dx, dy)
 
     enterSideOn(nodes, page, ws, node, slot, cols, 0, dy)
     return true
+end
+
+function PadFocus.onDir(page, dx, dy)
+    local handled = onDirStep(page, dx, dy)
+    if handled then pcall(bubbleRedirect, page) end
+    return handled
 end
 
 function PadFocus.cursorFor(el)

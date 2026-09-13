@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -445,21 +445,16 @@ function BulkTransfer.emptyTrash(model, playerNum)
     local okE, empty = pcall(model.inventory.isEmpty, model.inventory)
     if okE and empty then return BulkTransfer.NOTHING end
 
-    local width, height = 350, 120
-    local x = getPlayerScreenLeft(playerNum)
-        + (getPlayerScreenWidth(playerNum) - width) / 2
-    local y = getPlayerScreenTop(playerNum)
-        + (getPlayerScreenHeight(playerNum) - height) / 2
-    local modal = ISModalDialog:new(x, y, width, height,
-        getText("IGUI_ConfirmDeleteItems"), true, nil, onConfirmTrash,
-        playerNum, object, playerNum)
-    modal:initialise()
-    modal:addToUIManager()
-
-    if JoypadState.players[playerNum + 1] then
-        modal.prevFocus = JoypadState.players[playerNum + 1].focus
-        setJoypadFocus(playerNum, modal)
-    end
+    local Confirm = ComfyGrid.UI and ComfyGrid.UI.Chrome
+        and ComfyGrid.UI.Chrome.Confirm
+    if Confirm == nil or Confirm.open == nil then return BulkTransfer.NO_DEST end
+    Confirm.open({
+        text = getText("IGUI_ConfirmDeleteItems"),
+        playerNum = playerNum,
+        onYes = function()
+            onConfirmTrash(nil, { internal = "YES" }, object, playerNum)
+        end,
+    })
 
     return BulkTransfer.OK
 end

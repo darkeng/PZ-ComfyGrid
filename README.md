@@ -18,6 +18,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 - **Verbs on every header** — sort into category islands, pull in more of the same, spread across the open containers, send the lot over, or tip it on the floor.
 - **The object's own buttons too** — ovens, washers, campfires, mannequins and car boots put their controls right on their header.
 - **Reorder** — drag a container button to move it.
+- **Open a bag on the spot** — a backpack you are carrying opens in its own small window, without putting it on.
 
 ## Your character
 
@@ -28,13 +29,15 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 ## Controls
 
 - **Drag** to move or swap; **Ctrl+click** or **Ctrl+drag** to multi-select; **Shift+click** quick-moves; hold a drag over a container to open it.
+- **Pick your own gestures** — what moves an item (Shift, Ctrl, Alt or a double click) and what marks several tiles (Ctrl, Shift or Alt) are both yours to choose.
 - **Drop to use** — rounds onto a magazine, a magazine or sight onto its gun, a bottle onto another to pour, a half-used item onto its twin to combine. Right-click *Pour into* does it from any container.
-- **E** over gear equips it; if the socket is taken, they swap.
-- **Full controller support** — a cell cursor over every surface, one button per action, on-screen hints, stack splitting from the inspector. Steam Deck friendly.
+- **E** over gear equips it; if the socket is taken, they swap. It also eats, drinks, opens, smokes and reads — and takes only the portion you need.
+- **Rebind that key from the inventory itself**, combinations included.
+- **Full controller support** — a cell cursor over every surface, one button per action, on-screen hints, stack splitting from the inspector. The stack viewer, the bag window and the mod's own settings panel all answer the pad. Steam Deck friendly.
 
 ## Set up in game
 
-The gear in the title bar opens the mod's own panel: **five colour themes** — Comfy Grid, Dark, Slate, Olive and Sakura — plus interface scale, grid density, stacking by type or state, instant transfers, and where the equipment lives. Every option applies live, and a tooltip says what it does.
+The gear in the title bar opens the mod's own panel, **split into tabs**: **five colour themes** — Comfy Grid, Dark, Slate, Olive and Sakura — plus interface scale, grid density, stacking by type or state, instant transfers, and where the equipment lives. The equipment and the on-screen hotbar can be turned off altogether. Every option applies live, and a tooltip says what it does.
 
 ![Themes](workshop/card_14_themes.png)
 

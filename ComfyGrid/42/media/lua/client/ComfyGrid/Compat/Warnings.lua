@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -53,20 +53,13 @@ function Warnings.check()
             local msg = warningText(entry)
             Log.warn("incompatible mod active: " .. entry.id)
 
-            if ISModalDialog ~= nil then
-                local core = getCore and getCore() or nil
-                local sw = core and core:getScreenWidth() or 1920
-                local sh = core and core:getScreenHeight() or 1080
-                local w, h = 380, 120
-                local ok, dialog = pcall(function()
-                    local d = ISModalDialog:new((sw - w) / 2, (sh - h) / 2,
-                        w, h, msg, false, nil, nil)
-                    d:initialise()
-                    d:addToUIManager()
-                    return d
-                end)
+            local Confirm = ComfyGrid.UI and ComfyGrid.UI.Chrome
+                and ComfyGrid.UI.Chrome.Confirm
+            if Confirm ~= nil and Confirm.open ~= nil then
+                local ok, err = pcall(Confirm.open,
+                    { text = msg, yesno = false })
                 if not ok then
-                    Log.error("Warnings: modal failed: " .. tostring(dialog))
+                    Log.error("Warnings: dialog failed: " .. tostring(err))
                 end
             end
             return true

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -79,18 +79,41 @@ Events.OnGameBoot.Add(function()
     end
 
     local function parkPendingClaim(action, moved)
-        if action.comfySlot == nil then return end
         local playerNum = playerNumFor(action.character)
         local destModel = ContainerModel.getOrCreate(action.destContainer, playerNum)
-        if destModel and destModel.grid
+        if destModel == nil or destModel.grid == nil then return end
+        if action.comfySlot ~= nil
                 and destModel.grid.claimSlotForItem ~= nil then
             destModel.grid:claimSlotForItem(moved:getID(), action.comfySlot)
-            destModel.needsImmediateRefresh = true
         end
+
+        destModel.publishOnArrival = { id = moved:getID(), ms = getTimestampMs() }
+        destModel.needsImmediateRefresh = true
+    end
+
+    local function publishContainerLayout(action, moved)
+        if not isClient() then return end
+
+        if moved.getInventory == nil then return end
+        local okInv, ownInv = pcall(moved.getInventory, moved)
+        if not okInv or ownInv == nil then return end
+        local dest = action.destContainer
+        if dest == nil then return end
+
+        local okIn, inChar = pcall(dest.isInCharacterInventory, dest,
+            action.character)
+        if okIn and inChar then return end
+        Persistence.queueItemSync(moved)
     end
 
     local function bookkeepTransfer(action, moved, allowPending)
         if moved == nil then return end
+        local okPub, errPub = pcall(publishContainerLayout, action, moved)
+        if not okPub and not bookkeepFailLogged then
+            bookkeepFailLogged = true
+            Log.error("TransferActionPatch: container layout publish failed "
+                .. "(logged once): " .. tostring(errPub))
+        end
 
         local okType, destType = pcall(action.destContainer.getType,
             action.destContainer)
@@ -158,7 +181,8 @@ Events.OnGameBoot.Add(function()
             Log.error("TransferActionPatch: JIT aging failed (logged once): "
                 .. tostring(err))
         end
-        ok, err = pcall(bookkeepTransfer, self, self.item or item)
+
+        ok, err = pcall(bookkeepTransfer, self, self.item or item, isClient())
         if not ok and not bookkeepFailLogged then
             bookkeepFailLogged = true
             Log.error("TransferActionPatch: grid bookkeeping failed (logged once): "

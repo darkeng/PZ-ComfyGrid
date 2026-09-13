@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -182,6 +182,14 @@ function Persistence.resolveSyncOwner(inventory)
         return parent, "object"
     end
     return nil
+end
+
+function Persistence.queueItemSync(item)
+    if not isClient() then return end
+    if item == nil then return end
+    local ComfyClient = ComfyGrid.Networking and ComfyGrid.Networking.ComfyClient
+    if ComfyClient == nil or ComfyClient.queueModDataSync == nil then return end
+    ComfyClient.queueModDataSync(item, "worldItem")
 end
 
 function Persistence.queueSync(inventory)

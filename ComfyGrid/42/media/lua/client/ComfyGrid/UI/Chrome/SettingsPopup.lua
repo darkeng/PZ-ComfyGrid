@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -14,6 +14,7 @@ require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/Chrome/PopupRegistry"
 require "ComfyGrid/UI/Chrome/HoverTip"
+require "ComfyGrid/UI/Chrome/KeyCapture"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 ComfyGrid.UI.Chrome = ComfyGrid.UI.Chrome or {}
@@ -27,17 +28,23 @@ local Style = ComfyGrid.UI.Style
 local Draw = ComfyGrid.UI.Draw
 local PopupRegistry = ComfyGrid.UI.Chrome.PopupRegistry
 local HoverTip = ComfyGrid.UI.Chrome.HoverTip
+local KeyCapture = ComfyGrid.UI.Chrome.KeyCapture
+local KeyBinds = ComfyGrid.Interact ~= nil
+    and ComfyGrid.Interact.KeyBinds or nil
 
 local instance = nil
 
 local lastClosedMs = 0
 local REOPEN_GUARD_MS = 250
 
+local lastTab = 1
+
 local PAD = 12
 local ROW_GAP = 4
-local GROUP_GAP = 12
 
 local COL_GAP = 14
+
+local TAB_PAD = 10
 
 local function measure(s)
     if s == nil or s == "" then return 0 end
@@ -67,23 +74,33 @@ local function controlWidth(row)
     if row.kind == "tickbox" then
         return math.max(12, math.floor(Style.FONT_H * 0.8))
     end
+    if row.kind == "keybind" then
+
+        return measure("SHIFT + BACKSPACE") + PAD * 2
+    end
     return 0
 end
 
-local function panelWidth(rows)
+local function panelWidth(tabs, resetRow)
     local labelMax, ctrlMax, fullMax = 0, 0, 0
-    for i = 1, #rows do
-        local row = rows[i]
-        if row.kind == "group" then
-
-            local gw = measure(row.label) + PAD * 2
-            if gw > fullMax then fullMax = gw end
-        else
+    local barMin = 0
+    for t = 1, #tabs do
+        local tab = tabs[t]
+        barMin = barMin + measure(tab.label) + TAB_PAD * 2
+        local rows = tab.rows
+        for i = 1, #rows do
+            local row = rows[i]
             local lw = measure(row.label)
             if lw > labelMax then labelMax = lw end
             local cw = controlWidth(row)
             if cw > ctrlMax then ctrlMax = cw end
         end
+    end
+    if barMin > fullMax then fullMax = barMin end
+    if resetRow ~= nil then
+
+        local rw = measure(resetRow.label) + PAD * 2
+        if rw > fullMax then fullMax = rw end
     end
     local w = PAD + labelMax + COL_GAP + ctrlMax + PAD
     if fullMax > w then w = fullMax end
@@ -103,42 +120,64 @@ local function titleHeight()
     return math.max(18, Style.FONT_H + 8)
 end
 
-local function buildRows(out)
-    for i = #out, 1, -1 do out[i] = nil end
-    local defs = Settings.OPTION_DEFS or {}
-    local lastGroup = nil
+local function tabHeight()
+    return math.max(20, Style.FONT_H + 9)
+end
+
+local function keyLabelFor(def)
+    if KeyBinds == nil or KeyBinds.labelFor == nil then return "?" end
+    local ok, label = pcall(KeyBinds.labelFor, def.bind)
+    if ok and type(label) == "string" and label ~= "" then return label end
+    return "?"
+end
+
+local function buildTabRows(groupKey, defs)
+    for i = #defs, 1, -1 do defs[i] = nil end
+    Settings.defsInGroup(groupKey, defs)
+    local rows = {}
     for i = 1, #defs do
         local def = defs[i]
-        if def.group ~= lastGroup then
-            lastGroup = def.group
-            out[#out + 1] = { kind = "group", label = Settings.groupLabel(def.group) }
-        end
-        out[#out + 1] = {
+        local row = {
             kind = def.kind,
             def = def,
             label = Settings.labelFor(def),
             tip = Settings.tipFor(def),
         }
+        if def.kind == "keybind" then row.keyLabel = keyLabelFor(def) end
+        rows[#rows + 1] = row
     end
-    out[#out + 1] = { kind = "reset",
-        label = Text.tr("IGUI_ComfyGrid_ResetDefaults", "Reset to defaults") }
+    return rows
+end
+
+local function buildTabs(out)
+    for i = #out, 1, -1 do out[i] = nil end
+    local groups = Settings.GROUPS or {}
+    local defs = {}
+    for g = 1, #groups do
+        local key = groups[g].key
+        local rows = buildTabRows(key, defs)
+        if #rows > 0 then
+            out[#out + 1] = {
+                key = key,
+                label = Settings.groupLabel(key),
+                rows = rows,
+            }
+        end
+    end
     return out
 end
 
 local function relayout(self)
     self.titleH = titleHeight()
     self.rowH = rowHeight()
-    local w, ctrlW = panelWidth(self.rows)
+    self.tabH = tabHeight()
+
+    local w, ctrlW = panelWidth(self.tabs, self.resetRow)
     self.ctrlW = ctrlW
-    local h = self.titleH + PAD
-    for i = 1, #self.rows do
-        local row = self.rows[i]
-        if row.kind == "group" then
-            h = h + (i > 1 and GROUP_GAP or 0) + Style.FONT_H + 2
-        else
-            h = h + self.rowH + ROW_GAP
-        end
-    end
+    local h = self.titleH + self.tabH + PAD
+    h = h + #self.rows * (self.rowH + ROW_GAP)
+
+    h = h + ROW_GAP + 1 + ROW_GAP + self.rowH
     h = h + PAD
     if self.width ~= w then self:setWidth(w) end
     if self.height ~= h then self:setHeight(h) end
@@ -171,8 +210,15 @@ function SettingsPopup:new(x, y, host)
     o.background = false
 
     o.disableJoypadNavigation = true
-    o.rows = buildRows({})
+    o.resetRow = { kind = "reset",
+        label = Text.tr("IGUI_ComfyGrid_ResetDefaults", "Reset this tab") }
+    o.tabs = buildTabs({})
+
+    o.tab = (lastTab <= #o.tabs) and lastTab or 1
+    o.rows = o.tabs[o.tab] ~= nil and o.tabs[o.tab].rows or {}
     o.hotRow = nil
+    o.hotTab = nil
+    o.hotReset = false
     o.dragRow = nil
     o.pendingKey = nil
     o.pendingValue = nil
@@ -181,20 +227,22 @@ function SettingsPopup:new(x, y, host)
 end
 
 local function rowBounds(self, i)
-    local y = self.titleH + PAD
-    for k = 1, #self.rows do
-        local row = self.rows[k]
-        local h
-        if row.kind == "group" then
-            y = y + (k > 1 and GROUP_GAP or 0)
-            h = Style.FONT_H + 2
-        else
-            h = self.rowH
-        end
-        if k == i then return y, h end
-        y = y + h + (row.kind == "group" and 0 or ROW_GAP)
-    end
-    return nil, nil
+    if i < 1 or i > #self.rows then return nil, nil end
+    local top = self.titleH + self.tabH + PAD
+    return top + (i - 1) * (self.rowH + ROW_GAP), self.rowH
+end
+
+local function tabBounds(self, i)
+    local n = #self.tabs
+    if n == 0 or i < 1 or i > n then return nil, nil end
+    local total = self.width - 2
+    local x = 1 + math.floor(total * (i - 1) / n)
+    return x, 1 + math.floor(total * i / n) - x
+end
+
+local function resetBounds(self)
+    local y = self.height - PAD - self.rowH
+    return y, self.rowH, y - ROW_GAP - 1
 end
 
 local function controlBox(self, y, h)
@@ -264,6 +312,55 @@ local function drawChoice(self, row, x, y, w, h, hot)
     self:drawRect(cx, cy + 1, 2, 2, 0.9, sf.accent.r, sf.accent.g, sf.accent.b)
 end
 
+local function drawTabs(self, sf)
+    self:drawRect(1, self.titleH, self.width - 2, self.tabH, 0.55,
+        sf.panel.r, sf.panel.g, sf.panel.b)
+    for i = 1, #self.tabs do
+        local x, w = tabBounds(self, i)
+        if x ~= nil then
+            local active = self.tab == i
+            local hot = self.hotTab == i
+            if active then
+                self:drawRect(x, self.titleH, w, self.tabH, 0.95,
+                    sf.bg.r, sf.bg.g, sf.bg.b)
+                self:drawRect(x, self.titleH + self.tabH - 2, w, 2, 1,
+                    sf.accent.r, sf.accent.g, sf.accent.b)
+            elseif hot then
+                self:drawRect(x, self.titleH, w, self.tabH, 0.5,
+                    sf.card.r, sf.card.g, sf.card.b)
+            end
+
+            local label = Text.fitEllipsis(self.tabs[i].label, Style.FONT,
+                w - TAB_PAD, 24)
+            local tx = x + math.floor((w - measure(label)) / 2)
+            local ty = self.titleH + math.floor((self.tabH - Style.FONT_H) / 2)
+            if active then
+                self:drawText(label, tx, ty, sf.accent.r, sf.accent.g,
+                    sf.accent.b, 1, Style.FONT)
+            else
+                self:drawText(label, tx, ty, 0.86, 0.84, 0.80,
+                    hot and 0.95 or 0.62, Style.FONT)
+            end
+        end
+    end
+end
+
+local function drawKeybind(self, row, x, y, w, h, hot)
+    local sf = Style.COLORS.SURFACE
+    local label = row.keyLabel or "?"
+
+    local bw = measure(label) + PAD * 2
+    local floor = math.max(48, math.floor(Style.FONT_H * 2.6))
+    if bw < floor then bw = floor end
+    if bw > w then bw = w end
+    local bx = x + w - bw
+    Draw.roundFrame(self, bx, y, bw, h, 3, 1,
+        hot and sf.accent or sf.line, hot and sf.cardHi or sf.card, 1)
+    local fit = Text.fitEllipsis(label, Style.FONT, bw - 10, 40)
+    self:drawTextCentre(fit, bx + bw / 2, y + math.floor((h - Style.FONT_H) / 2),
+        sf.accent.r, sf.accent.g, sf.accent.b, 1, Style.FONT)
+end
+
 function SettingsPopup:prerender()
 
     local host = self.host
@@ -276,6 +373,48 @@ function SettingsPopup:prerender()
         relayout(self)
     end
 
+    self.hotRow = nil
+    self.hotTab = nil
+    self.hotReset = false
+    if self:isMouseOver() then
+        local mx, my = self:getMouseX(), self:getMouseY()
+        if my >= self.titleH and my < self.titleH + self.tabH then
+            for i = 1, #self.tabs do
+                local tx, tw = tabBounds(self, i)
+                if tx ~= nil and mx >= tx and mx < tx + tw then
+                    self.hotTab = i
+                    break
+                end
+            end
+        else
+            local ry, rh = resetBounds(self)
+            if my >= ry and my < ry + rh then
+                self.hotReset = true
+            else
+                for i = 1, #self.rows do
+                    local y, h = rowBounds(self, i)
+                    if y ~= nil and my >= y and my < y + h then
+                        self.hotRow = i
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    if self._padReturnPage ~= nil and getFocusForPlayer ~= nil then
+        local okF, cur = pcall(getFocusForPlayer, self.playerNum or 0)
+        if okF and cur == self then
+            local last = #self.rows + 1
+            local r = self.padRow
+            self.hotRow = nil
+            if r ~= nil and r >= 1 and r <= #self.rows then self.hotRow = r end
+            self.hotTab = nil
+            if r == 0 then self.hotTab = self.tab end
+            self.hotReset = r == last
+        end
+    end
+
     local sf = Style.COLORS.SURFACE
     Draw.shadow(self, 0, 0, self.width, self.height, 14, 0.5)
     Draw.roundFrame(self, 0, 0, self.width, self.height, 6, 0.98, sf.line,
@@ -286,7 +425,10 @@ function SettingsPopup:prerender()
     local title = Text.tr("IGUI_ComfyGrid_SettingsTitle", "Comfy Grid settings")
     self:drawText(title, PAD, math.floor((self.titleH - Style.FONT_H) / 2),
         sf.accent.r, sf.accent.g, sf.accent.b, 1, Style.FONT)
-    Draw.headerLine(self, 1, self.titleH - 1, self.width - 2, 4, sf)
+
+    drawTabs(self, sf)
+    Draw.headerLine(self, 1, self.titleH + self.tabH - 1, self.width - 2, 4,
+        Style.COLORS)
 
     local chip = math.max(14, math.floor(Style.FONT_H * 0.9 + 0.5))
     local cx = self.width - PAD - chip
@@ -312,18 +454,6 @@ function SettingsPopup:prerender()
     end
     self._closeX, self._closeY, self._closeS = cx, cy, chip
 
-    self.hotRow = nil
-    if self:isMouseOver() then
-        local my = self:getMouseY()
-        for i = 1, #self.rows do
-            local y, h = rowBounds(self, i)
-            if y ~= nil and my >= y and my < y + h then
-                self.hotRow = i
-                break
-            end
-        end
-    end
-
     if self.dragRow ~= nil then
         if isMouseButtonDown ~= nil and not isMouseButtonDown(0) then
             self:commitDrag()
@@ -336,45 +466,61 @@ function SettingsPopup:prerender()
         local row = self.rows[i]
         local y, h = rowBounds(self, i)
         if y ~= nil then
-            local hot = self.hotRow == i
-            if row.kind == "group" then
-                self:drawText(row.label, PAD, y, sf.accent.r, sf.accent.g,
-                    sf.accent.b, 0.75, Style.FONT)
-                self:drawRect(PAD, y + Style.FONT_H, self.width - PAD * 2, 1,
-                    0.4, sf.line.r, sf.line.g, sf.line.b)
-            elseif row.kind == "reset" then
-                if hot then
-                    self:drawRect(PAD - 4, y, self.width - (PAD - 4) * 2, h,
-                        0.35, sf.card.r, sf.card.g, sf.card.b)
+
+            local applies = Settings.appliesNow(row.def, self.playerNum)
+
+            local hot = self.hotRow == i and applies
+            if hot then
+                self:drawRect(PAD - 4, y, self.width - (PAD - 4) * 2, h,
+                    0.35, sf.card.r, sf.card.g, sf.card.b)
+            end
+            local cbx, cby, cbw, cbh = controlBox(self, y, h)
+            local fit = Text.fitEllipsis(row.label, Style.FONT,
+                cbx - PAD - 8, 60)
+            self:drawText(fit, PAD, y + math.floor((h - Style.FONT_H) / 2),
+                0.86, 0.84, 0.80, applies and 1 or 0.4, Style.FONT)
+            if not applies then
+
+                local note = Settings.padNoteFor(row.def)
+                if note ~= nil then
+                    self:drawText(Text.fitEllipsis(note, Style.FONT, cbw, 40),
+                        cbx, cby + math.floor((cbh - Style.FONT_H) / 2),
+                        0.86, 0.84, 0.80, 0.45, Style.FONT)
                 end
-                self:drawText(row.label, PAD, y + math.floor((h - Style.FONT_H) / 2),
-                    sf.accent.r, sf.accent.g, sf.accent.b, hot and 1 or 0.8,
-                    Style.FONT)
-            else
-                if hot then
-                    self:drawRect(PAD - 4, y, self.width - (PAD - 4) * 2, h,
-                        0.35, sf.card.r, sf.card.g, sf.card.b)
-                end
-                local cbx, cby, cbw, cbh = controlBox(self, y, h)
-                local fit = Text.fitEllipsis(row.label, Style.FONT,
-                    cbx - PAD - 8, 60)
-                self:drawText(fit, PAD, y + math.floor((h - Style.FONT_H) / 2),
-                    0.86, 0.84, 0.80, 1, Style.FONT)
-                if row.kind == "slider" then
-                    drawSlider(self, row, cbx, cby, cbw, cbh, hot)
-                elseif row.kind == "tickbox" then
-                    drawTickbox(self, row, cbx, cby, cbw, cbh, hot)
-                elseif row.kind == "choice" then
-                    drawChoice(self, row, cbx, cby, cbw, cbh, hot)
-                end
+            elseif row.kind == "slider" then
+                drawSlider(self, row, cbx, cby, cbw, cbh, hot)
+            elseif row.kind == "tickbox" then
+                drawTickbox(self, row, cbx, cby, cbw, cbh, hot)
+            elseif row.kind == "choice" then
+                drawChoice(self, row, cbx, cby, cbw, cbh, hot)
+            elseif row.kind == "keybind" then
+                drawKeybind(self, row, cbx, cby, cbw, cbh, hot)
             end
         end
     end
 
+    local ry, rh, sepY = resetBounds(self)
+    self:drawRect(PAD, sepY, self.width - PAD * 2, 1, 0.4,
+        sf.line.r, sf.line.g, sf.line.b)
+    if self.hotReset then
+        self:drawRect(PAD - 4, ry, self.width - (PAD - 4) * 2, rh, 0.35,
+            sf.card.r, sf.card.g, sf.card.b)
+    end
+    self:drawText(self.resetRow.label, PAD,
+        ry + math.floor((rh - Style.FONT_H) / 2),
+        sf.accent.r, sf.accent.g, sf.accent.b, self.hotReset and 1 or 0.8,
+        Style.FONT)
+
     local hotTip = nil
     if self.hotRow ~= nil and self.dragRow == nil then
         local row = self.rows[self.hotRow]
-        hotTip = row ~= nil and row.tip or nil
+        if row ~= nil then
+            hotTip = row.tip
+
+            if not Settings.appliesNow(row.def, self.playerNum) then
+                hotTip = Settings.padTipFor(row.def) or hotTip
+            end
+        end
     end
     if hotTip ~= nil then
         HoverTip.show(self, self, hotTip)
@@ -418,18 +564,43 @@ function SettingsPopup:commitDrag()
     end
 end
 
+local function resetTab(self)
+    local rows = self.rows or {}
+    for i = 1, #rows do
+        local def = rows[i].def
+        if def ~= nil then
+            if def.kind == "keybind" and KeyBinds ~= nil
+                    and KeyBinds.defaultKeyFor ~= nil then
+                local key = KeyBinds.defaultKeyFor(def.bind)
+                if key ~= nil and KeyBinds.assign ~= nil then
+                    pcall(KeyBinds.assign, def.bind, key, false, false, false)
+                end
+            else
+                local d = Settings.defaults[def.key]
+                if d ~= nil then pcall(Settings.set, def.key, d) end
+            end
+        end
+    end
+    Settings.save()
+    SettingsPopup.refreshKeybinds()
+end
+
 local function activateRow(self, i)
     local row = self.rows[i]
     if row == nil then return end
-    if row.kind == "reset" then
-        for k, v in pairs(Settings.defaults) do
-            pcall(Settings.set, k, v)
-        end
-        Settings.save()
-        return
-    end
     local def = row.def
     if def == nil then return end
+
+    if not Settings.appliesNow(def, self.playerNum) then return end
+    if row.kind == "keybind" then
+
+        if KeyCapture ~= nil and KeyCapture.open ~= nil then
+            KeyCapture.open(def.bind, function()
+                SettingsPopup.refreshKeybinds()
+            end)
+        end
+        return
+    end
     if row.kind == "tickbox" then
         pcall(Settings.set, def.key, not (Settings.get(def.key) == true))
     elseif row.kind == "choice" then
@@ -440,15 +611,31 @@ local function activateRow(self, i)
     end
 end
 
+function SettingsPopup:selectTab(i)
+    if i == nil or i == self.tab then return end
+    local tab = self.tabs[i]
+    if tab == nil then return end
+    self.tab = i
+    lastTab = i
+    self.rows = tab.rows
+    self.hotRow = nil
+    self.dragRow = nil
+    self.pendingKey = nil
+    self.pendingValue = nil
+    HoverTip.hide(self)
+    relayout(self)
+end
+
 function SettingsPopup:onMouseDown(x, y)
 
     self:bringToTop()
 
-    if y > self.titleH then
+    if y > self.titleH + self.tabH then
         for i = 1, #self.rows do
             local ry, rh = rowBounds(self, i)
             if ry ~= nil and y >= ry and y < ry + rh
-                    and self.rows[i].kind == "slider" then
+                    and self.rows[i].kind == "slider"
+                    and Settings.appliesNow(self.rows[i].def, self.playerNum) then
                 self.dragRow = i
                 self:updateDrag()
                 break
@@ -469,7 +656,22 @@ function SettingsPopup:onMouseUp(x, y)
         self:close()
         return true
     end
-    if y > self.titleH then
+    if y >= self.titleH and y < self.titleH + self.tabH then
+        for i = 1, #self.tabs do
+            local tx, tw = tabBounds(self, i)
+            if tx ~= nil and x >= tx and x < tx + tw then
+                self:selectTab(i)
+                break
+            end
+        end
+        return true
+    end
+    local fy, fh = resetBounds(self)
+    if y >= fy and y < fy + fh then
+        resetTab(self)
+        return true
+    end
+    if y > self.titleH + self.tabH then
         for i = 1, #self.rows do
             local ry, rh = rowBounds(self, i)
             if ry ~= nil and y >= ry and y < ry + rh then
@@ -486,6 +688,10 @@ function SettingsPopup:onMouseUpOutside(_x, _y)
 end
 
 function SettingsPopup:onMouseDownOutside(_x, _y)
+
+    if KeyCapture ~= nil and KeyCapture.isOpen ~= nil and KeyCapture.isOpen() then
+        return
+    end
     self:close()
 end
 
@@ -509,18 +715,143 @@ function SettingsPopup.current()
     return instance
 end
 
+function SettingsPopup.refreshKeybinds()
+    local self = instance
+    if self == nil or self.tabs == nil then return end
+    for t = 1, #self.tabs do
+        local rows = self.tabs[t].rows
+        for i = 1, #rows do
+            local row = rows[i]
+            if row.kind == "keybind" and row.def ~= nil then
+                row.keyLabel = keyLabelFor(row.def)
+            end
+        end
+    end
+    relayout(self)
+end
+
 local function sinceClose()
     if lastClosedMs == 0 then return math.huge end
     return getTimestampMs() - lastClosedMs
 end
 
+local PAD_TABS = 0
+
+local function padRowUsable(self, i)
+    if i == PAD_TABS then return true end
+    if i == #self.rows + 1 then return true end
+    local row = self.rows[i]
+    if row == nil then return false end
+    return Settings.appliesNow(row.def, self.playerNum)
+end
+
+local function padMove(self, delta)
+    local last = #self.rows + 1
+    local i = self.padRow or PAD_TABS
+    for _ = 1, last + 1 do
+        i = i + delta
+        if i < PAD_TABS then i = last elseif i > last then i = PAD_TABS end
+        if padRowUsable(self, i) then
+            self.padRow = i
+            return
+        end
+    end
+end
+
+local function padAdjust(self, dir)
+    local row = self.rows[self.padRow or -1]
+    if row == nil or row.def == nil then return end
+    if not Settings.appliesNow(row.def, self.playerNum) then return end
+    local def = row.def
+    if def.kind == "choice" then
+        local idx = Settings.choiceIndexOf(def, Settings.get(def.key)) or 1
+        local n = #def.values
+        local nxt = (idx - 1 + dir) % n + 1
+        pcall(Settings.set, def.key, def.values[nxt])
+    elseif def.kind == "slider" then
+        local v = (Settings.get(def.key) or def.min) + dir * (def.step or 1)
+        if v < def.min then v = def.min elseif v > def.max then v = def.max end
+        pcall(Settings.set, def.key, v)
+    elseif def.kind == "tickbox" then
+        pcall(Settings.set, def.key, dir > 0)
+    end
+end
+
+function SettingsPopup.padFocus(popup, page)
+    if popup == nil then return end
+    local Input = ComfyGrid.Core and ComfyGrid.Core.Input
+    if Input == nil or not Input.padOwns(popup.playerNum) then return end
+    popup._padReturnPage = page
+    popup.padRow = PAD_TABS
+    if setJoypadFocus ~= nil then
+        pcall(setJoypadFocus, popup.playerNum or 0, popup)
+    end
+end
+
+local function padRelease(popup)
+    if popup._padReturnPage == nil then return end
+    local seat = popup.playerNum or 0
+    if getFocusForPlayer ~= nil then
+        local ok, cur = pcall(getFocusForPlayer, seat)
+        if ok and cur ~= popup then return end
+    end
+    if setJoypadFocus ~= nil then
+        pcall(setJoypadFocus, seat, popup._padReturnPage)
+    end
+end
+
+SettingsPopup.disableJoypadNavigation = true
+
+function SettingsPopup:onJoypadDown(button, _joypadData)
+    if Joypad == nil then return end
+    if button == Joypad.BButton then
+        self:close()
+    elseif button == Joypad.AButton then
+        local last = #self.rows + 1
+        if self.padRow == last then
+            resetTab(self)
+        elseif self.padRow ~= nil and self.padRow >= 1 then
+            activateRow(self, self.padRow)
+        end
+    end
+end
+
+function SettingsPopup:onJoypadDirUp(_joypadData)
+    padMove(self, -1)
+end
+
+function SettingsPopup:onJoypadDirDown(_joypadData)
+    padMove(self, 1)
+end
+
+function SettingsPopup:onJoypadDirLeft(_joypadData)
+    if self.padRow == PAD_TABS then
+        self:selectTab(((self.tab or 1) - 2) % #self.tabs + 1)
+    else
+        padAdjust(self, -1)
+    end
+end
+
+function SettingsPopup:onJoypadDirRight(_joypadData)
+    if self.padRow == PAD_TABS then
+        self:selectTab((self.tab or 1) % #self.tabs + 1)
+    else
+        padAdjust(self, 1)
+    end
+end
+
 function SettingsPopup:close()
+
+    if KeyCapture ~= nil and KeyCapture.closeAny ~= nil then
+        pcall(KeyCapture.closeAny)
+    end
 
     pcall(Settings.save)
 
     HoverTip.hide(self)
     self:setVisible(false)
     self:removeFromUIManager()
+    padRelease(self)
     if instance == self then instance = nil end
     lastClosedMs = getTimestampMs()
 end
@@ -548,6 +879,8 @@ function SettingsPopup.openFor(toolbar)
     popup:bringToTop()
     popup:clampToScreen()
     instance = popup
+
+    SettingsPopup.padFocus(popup, host.parent or host)
     return popup
 end
 

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -41,10 +41,23 @@ local RIGHT_CHIPS = {
     { id = "equip", tex = function() return Draw.personTexture() end,
       tipKey = "IGUI_ComfyGrid_ChipEquipTip",
       tipEN = "Show the equipment window.",
+      tipFor = function(page)
+          local W = ComfyGrid.UI and ComfyGrid.UI.EquipWindow
+          local view = W ~= nil and W.viewOf ~= nil and W.viewOf(page.player)
+              or "strip"
+          if view == "strip" then
+              return "IGUI_ComfyGrid_ChipEquipTip", "Show the equipment window."
+          elseif view == "window" then
+              return "IGUI_ComfyGrid_ChipEquipOffTip",
+                  "Turn the equipment off - another mod shows it."
+          end
+          return "IGUI_ComfyGrid_ChipEquipBackTip",
+              "Put equipment back in the inventory."
+      end,
       when = function(page) return page.onCharacter == true end,
       active = function(page)
           local W = ComfyGrid.UI and ComfyGrid.UI.EquipWindow
-          return W ~= nil and W.isOpen ~= nil and W.isOpen(page.player) == true
+          return W ~= nil and W.isOn ~= nil and W.isOn(page.player) == true
       end },
     { id = "settings", tex = function() return Draw.gearTexture() end,
       tipKey = "IGUI_ComfyGrid_ChipSettingsTip",
@@ -59,11 +72,17 @@ local function chipWanted(def, page)
 end
 
 local tips = {}
-local function tipOf(def)
-    local t = tips[def.id]
+local function tipOf(def, page)
+    local key, en = def.tipKey, def.tipEN
+    if def.tipFor ~= nil then
+        local ok, k, e = pcall(def.tipFor, page)
+        if ok and k ~= nil then key, en = k, e end
+    end
+    if key == nil then return nil end
+    local t = tips[key]
     if t == nil then
-        t = Text.tr(def.tipKey, def.tipEN)
-        tips[def.id] = t
+        t = Text.tr(key, en)
+        tips[key] = t
     end
     return t
 end
@@ -135,7 +154,7 @@ function WindowStrip:prerender()
         local def = right[i]
         if chipWanted(def, page) then
             local on = def.active ~= nil and def.active(page) or false
-            self.chips:add(def.id, def.tex(), tipOf(def), on)
+            self.chips:add(def.id, def.tex(), tipOf(def, page), on)
         end
     end
     local left = self.spec.left or LEFT_CHIPS
@@ -143,7 +162,7 @@ function WindowStrip:prerender()
     for i = 1, #left do
         local def = left[i]
         if chipWanted(def, page) then
-            self.chipsLeft:add(def.id, def.tex(), tipOf(def))
+            self.chipsLeft:add(def.id, def.tex(), tipOf(def, page))
         end
     end
 end

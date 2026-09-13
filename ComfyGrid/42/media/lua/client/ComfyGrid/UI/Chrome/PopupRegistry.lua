@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -42,6 +42,15 @@ function PopupRegistry.closeOthers(keep)
                     .. tostring(err))
             end
         end
+    end
+end
+
+function PopupRegistry.forEach(fn)
+    if type(fn) ~= "function" then return end
+    for i = 1, #entries do
+        local e = entries[i]
+        local ok, popup = pcall(e.current)
+        if ok and popup ~= nil then pcall(fn, popup, e.name) end
     end
 end
 

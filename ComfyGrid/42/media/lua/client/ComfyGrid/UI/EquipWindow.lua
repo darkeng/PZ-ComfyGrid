@@ -1,13 +1,15 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Core/Prefs"
+require "ComfyGrid/Core/Text"
 require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
@@ -18,6 +20,8 @@ ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
 local Log = ComfyGrid.Core.Log
+local Prefs = ComfyGrid.Core.Prefs
+local Text = ComfyGrid.Core.Text
 local Style = ComfyGrid.UI.Style
 local Draw = ComfyGrid.UI.Draw
 local WindowStrip = ComfyGrid.UI.Chrome.WindowStrip
@@ -73,9 +77,15 @@ local function defaultWidth()
     return figureWidth() + 2 * sideColumn() + 2 * PAD
 end
 
-local function defaultHeight()
+local function defaultHeight(trayRows)
     return Style.headerHeight() + PAD
-        + EquipmentStrip.anchorsHeight(Avatar.heightFor(figureWidth())) + PAD
+        + EquipmentStrip.anchorsHeight(Avatar.heightFor(figureWidth()), trayRows)
+        + PAD
+end
+
+local function wantedHeight(win)
+    local strip = win ~= nil and win.content or nil
+    return defaultHeight(strip ~= nil and strip.trayRows or 0)
 end
 
 local lastError = nil
@@ -141,7 +151,7 @@ local CHIP_SPEC = { left = CHIP_LEFT, right = CHIP_RIGHT,
     actions = CHIP_ACTIONS }
 
 function EquipWindow:new(playerNum)
-    local w, h = defaultWidth(), defaultHeight()
+    local w, h = defaultWidth(), defaultHeight(0)
     local o = ISPanel:new(0, 0, w, h)
     setmetatable(o, self)
     self.__index = self
@@ -432,8 +442,47 @@ function EquipWindow.isOpen(_playerNum)
     return wantsWindow()
 end
 
-function EquipWindow.toggle(_playerNum)
-    setView(wantsWindow() and "strip" or "window")
+function EquipWindow.viewOf(_playerNum)
+    local S = settings()
+    local v = (S ~= nil and S.get ~= nil) and S.get("EQUIPMENT_VIEW") or nil
+    if v == "window" or v == "off" then return v end
+    return "strip"
+end
+
+function EquipWindow.isOn(playerNum)
+    return EquipWindow.viewOf(playerNum) ~= "off"
+end
+
+local NEXT_VIEW = { strip = "window", window = "off", off = "strip" }
+
+local WARNED_KEY = "equipOffWarned"
+
+local function confirmOff(playerNum, onYes)
+    if Prefs ~= nil and Prefs.get ~= nil and Prefs.get(WARNED_KEY) == "1" then
+        return onYes()
+    end
+    local Confirm = ComfyGrid.UI and ComfyGrid.UI.Chrome
+        and ComfyGrid.UI.Chrome.Confirm
+    if Confirm == nil or Confirm.open == nil then return onYes() end
+    local text = Text.tr("IGUI_ComfyGrid_EquipOffConfirm",
+
+        "Turn the equipment off?\n\nComfy Grid will not show it anywhere, and you will not be able to unequip from the mod. This is for players who would rather use another equipment mod.")
+
+    Confirm.open({
+        text = text,
+        playerNum = playerNum,
+        onYes = function()
+            if Prefs ~= nil and Prefs.set ~= nil then Prefs.set(WARNED_KEY, "1") end
+            onYes()
+        end,
+    })
+end
+
+function EquipWindow.toggle(playerNum)
+    playerNum = playerNum or 0
+    local next_ = NEXT_VIEW[EquipWindow.viewOf(playerNum)] or "window"
+    if next_ ~= "off" then return setView(next_) end
+    confirmOff(playerNum, function() setView("off") end)
 end
 
 function EquipWindow.follow(page)
@@ -543,6 +592,9 @@ local function prerenderImpl(self)
         if av.width ~= figW then av:setWidth(figW) end
         if av.height ~= figH then av:setHeight(figH) end
     end
+
+    local wantH = wantedHeight(self)
+    if wantH ~= nil and self.height ~= wantH then self:setHeight(wantH) end
 end
 
 function EquipWindow:prerender()
@@ -629,7 +681,7 @@ function EquipWindow:RestoreLayout(_name, layout)
 
     self.preferredWidth = defaultWidth()
     self:setWidth(self.preferredWidth)
-    self:setHeight(defaultHeight())
+    self:setHeight(wantedHeight(self))
 
     self:setVisible(wantsWindow())
 end
@@ -648,6 +700,6 @@ Style.onScaleChanged(function()
     for _, win in pairs(windows) do
         win.preferredWidth = defaultWidth()
         if not win.docked then win:setWidth(win.preferredWidth) end
-        win:setHeight(defaultHeight())
+        win:setHeight(wantedHeight(win))
     end
 end)

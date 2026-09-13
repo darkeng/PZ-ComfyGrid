@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,6 +10,7 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
 require "ComfyGrid/Core/VanillaStacks"
+require "ComfyGrid/Model/Equipment"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Chrome/PopupRegistry"
 require "ComfyGrid/UI/SlotRenderer"
@@ -22,6 +23,7 @@ ComfyGrid.UI = ComfyGrid.UI or {}
 local Log = ComfyGrid.Core.Log
 local Text = ComfyGrid.Core.Text
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
+local Equipment = ComfyGrid.Model.Equipment
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local StackRenderer = ComfyGrid.UI.StackRenderer
@@ -250,8 +252,10 @@ local function renderImpl(self)
 
     local font = Style.FONT
     if font ~= nil then
+
         local title = Text.tr("IGUI_ComfyGrid_Slot" .. self.groupKey,
-            self.groupKey) .. " x" .. tostring(#self.tiles)
+            Equipment.displayNameFor(self.groupKey) or self.groupKey)
+            .. " x" .. tostring(#self.tiles)
 
         local titleY = math.floor((self.titleH - 1 - Style.FONT_H) * 0.5)
         if titleY < 2 then titleY = 2 end

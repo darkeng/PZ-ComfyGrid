@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -28,6 +28,32 @@ local ContainerPanel = ComfyGrid.UI.ContainerPanel
 local PlayerStrips = ComfyGrid.UI.PlayerStrips
 
 local SCROLLBAR_ALLOWANCE = 17
+
+function PaneHost:showsInventory(inv)
+    if inv == nil then return false end
+    local panels = self.panels
+    if panels ~= nil then
+        for i = 1, #panels do
+            local p = panels[i]
+            if p ~= nil and p.model ~= nil and p.model.inventory == inv
+                    and p:getIsVisible() then
+                return true
+            end
+        end
+    end
+    local strips = self.strips
+    local pockets = strips ~= nil and strips.pocketsPanel or nil
+    local views = pockets ~= nil and pockets.gridViews or nil
+    if views ~= nil then
+        for i = 1, #views do
+            local g = views[i]
+            if g ~= nil and g.model ~= nil and g.model.inventory == inv then
+                return true
+            end
+        end
+    end
+    return false
+end
 
 local SECTION_GAP = 6
 

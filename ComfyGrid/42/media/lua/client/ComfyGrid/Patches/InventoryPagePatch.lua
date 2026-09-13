@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -78,6 +78,10 @@ Events.OnGameBoot.Add(function()
         local EquipWindow = ComfyGrid.UI ~= nil
             and ComfyGrid.UI.EquipWindow or nil
         if EquipWindow ~= nil then pcall(EquipWindow.follow, self) end
+
+        local ContainerWindow = ComfyGrid.UI ~= nil
+            and ComfyGrid.UI.ContainerWindow or nil
+        if ContainerWindow ~= nil then pcall(ContainerWindow.follow, self) end
 
         local mute = self.inventoryPane ~= nil
             and self.inventoryPane.mode == "comfy"
@@ -236,8 +240,20 @@ Events.OnGameBoot.Add(function()
         return ok and over == true
     end
 
+    local function overContainerWindow(page)
+        if page == nil then return false end
+        local W = ComfyGrid.UI ~= nil and ComfyGrid.UI.ContainerWindow or nil
+        if W == nil or W.isMouseOverIt == nil then return false end
+        local ok, over = pcall(W.isMouseOverIt, page.player)
+        return ok and over == true
+    end
+
+    local function overAnyComfyWindow(page)
+        return overEquipWindow(page) or overContainerWindow(page)
+    end
+
     local function pinnedThrough(self, original, x, y)
-        if not overEquipWindow(self) then return original(self, x, y) end
+        if not overAnyComfyWindow(self) then return original(self, x, y) end
         local saved = self.pin
         self.pin = true
         local ok, err = pcall(original, self, x, y)

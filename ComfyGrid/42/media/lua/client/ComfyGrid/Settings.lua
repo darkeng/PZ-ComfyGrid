@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -32,16 +32,19 @@ Settings.defaults = {
 
     STATUS_BAR = true,
     HOTBAR_SECTION = false,
+    HOTBAR_BAR = true,
     EQUIPMENT_VIEW = "window",
     EQUIPMENT_AVATAR = "model",
+
+    TRANSFER_GESTURE = "shift",
+    MULTISELECT_MOD = "ctrl",
 }
 
 local GROUPS = {
 
+    { key = "general",  nameKey = "IGUI_ComfyGrid_GroupGeneral",  name = "General" },
     { key = "style",    nameKey = "IGUI_ComfyGrid_GroupStyle",    name = "Style" },
-    { key = "layout",   nameKey = "IGUI_ComfyGrid_GroupLayout",   name = "Layout" },
-    { key = "tiles",    nameKey = "IGUI_ComfyGrid_GroupTiles",    name = "Tiles" },
-    { key = "advanced", nameKey = "IGUI_ComfyGrid_GroupAdvanced", name = "Advanced" },
+    { key = "controls", nameKey = "IGUI_ComfyGrid_GroupControls", name = "Controls" },
 }
 
 local OPTION_DEFS = {
@@ -62,60 +65,8 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptTheme",
       tipKey = "IGUI_ComfyGrid_OptThemeTip",
       tooltip = "Colours for windows, borders, buttons, text and tiles." },
-    { key = "SCALE",              kind = "slider", group = "layout",
-      min = 0.3, max = 4, step = 0.1,
-      nameKey = "IGUI_ComfyGrid_OptScale",
-      tipKey = "IGUI_ComfyGrid_OptScaleTip",
-      tooltip = "How big the grid is drawn." },
-    { key = "PLAYER_LAYOUT",      kind = "choice", group = "layout",
-      values = { "compact", "full", "single" },
-      labelKeys = { "IGUI_ComfyGrid_PlayerLayoutCompact",
-                    "IGUI_ComfyGrid_PlayerLayoutFull",
-                    "IGUI_ComfyGrid_PlayerLayoutSingle" },
-      labels = { "Compact - pockets share one row",
-                 "Full - a section per pocket",
-                 "One container at a time" },
-      nameKey = "IGUI_ComfyGrid_OptPlayerLayout",
-      tipKey = "IGUI_ComfyGrid_OptPlayerLayoutTip",
-      tooltip = "How your containers are arranged." },
-    { key = "LOOT_LAYOUT",        kind = "choice", group = "layout",
-      values = { "single", "sections" },
-      labelKeys = { "IGUI_ComfyGrid_LootLayoutSingle",
-                    "IGUI_ComfyGrid_LootLayoutSections" },
-      labels = { "One container at a time",
-                 "Every container within reach" },
-      nameKey = "IGUI_ComfyGrid_OptLootLayout",
-      tipKey = "IGUI_ComfyGrid_OptLootLayoutTip",
-      tooltip = "How many containers the loot window shows." },
-    { key = "EQUIPMENT_VIEW",     kind = "choice", group = "layout",
-      values = { "strip", "window" },
-      labelKeys = { "IGUI_ComfyGrid_EquipViewStrip",
-                    "IGUI_ComfyGrid_EquipViewWindow" },
-      labels = { "A row in the inventory",
-                 "Its own window" },
-      nameKey = "IGUI_ComfyGrid_OptEquipmentView",
-      tipKey = "IGUI_ComfyGrid_OptEquipmentViewTip",
-      tooltip = "The window replaces the row; you get one or the other." },
-    { key = "EQUIPMENT_AVATAR",   kind = "choice", group = "layout",
-      values = { "model", "silhouette" },
-      labelKeys = { "IGUI_ComfyGrid_EquipAvatarModel",
-                    "IGUI_ComfyGrid_EquipAvatarSilhouette" },
-      labels = { "Your character in 3D",
-                 "A plain silhouette" },
-      nameKey = "IGUI_ComfyGrid_OptEquipmentAvatar",
-      tipKey = "IGUI_ComfyGrid_OptEquipmentAvatarTip",
-      tooltip = "How your character is drawn." },
-    { key = "HOTBAR_SECTION",     kind = "tickbox", group = "layout",
-      nameKey = "IGUI_ComfyGrid_OptHotbarSection",
-      tipKey = "IGUI_ComfyGrid_OptHotbarSectionTip",
-      tooltip = "Turn it off if you use the bar at the bottom of the screen." },
-    { key = "SLOTS_PER_CAPACITY", kind = "slider", group = "tiles",
-      min = 1, max = 4, step = 0.5,
-      nameKey = "IGUI_ComfyGrid_OptSlotsPerCapacity",
-      tipKey = "IGUI_ComfyGrid_OptSlotsPerCapacityTip",
-      tooltip = "Slots each point of container capacity is worth." },
 
-    { key = "SORT_ORDER",         kind = "choice", group = "tiles",
+    { key = "SORT_ORDER",         kind = "choice", group = "style",
       values = { "category", "categoryWeight", "weight" },
       labelKeys = { "IGUI_ComfyGrid_SortOrderCategory",
                     "IGUI_ComfyGrid_SortOrderCategoryWeight",
@@ -126,20 +77,126 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptSortOrder",
       tipKey = "IGUI_ComfyGrid_OptSortOrderTip",
       tooltip = "What the sort button arranges by." },
-    { key = "COMPACT_ROWS",       kind = "tickbox", group = "tiles",
+    { key = "SCALE",              kind = "slider", group = "style",
+      min = 0.3, max = 4, step = 0.1,
+      nameKey = "IGUI_ComfyGrid_OptScale",
+      tipKey = "IGUI_ComfyGrid_OptScaleTip",
+      tooltip = "How big the grid is drawn." },
+    { key = "PLAYER_LAYOUT",      kind = "choice", group = "general",
+      values = { "compact", "full", "single" },
+      labelKeys = { "IGUI_ComfyGrid_PlayerLayoutCompact",
+                    "IGUI_ComfyGrid_PlayerLayoutFull",
+                    "IGUI_ComfyGrid_PlayerLayoutSingle" },
+      labels = { "Compact - pockets share one row",
+                 "Full - a section per pocket",
+                 "One container at a time" },
+      nameKey = "IGUI_ComfyGrid_OptPlayerLayout",
+      tipKey = "IGUI_ComfyGrid_OptPlayerLayoutTip",
+      tooltip = "How your containers are arranged." },
+    { key = "LOOT_LAYOUT",        kind = "choice", group = "general",
+      values = { "single", "sections" },
+      labelKeys = { "IGUI_ComfyGrid_LootLayoutSingle",
+                    "IGUI_ComfyGrid_LootLayoutSections" },
+      labels = { "One container at a time",
+                 "Every container within reach" },
+      nameKey = "IGUI_ComfyGrid_OptLootLayout",
+      tipKey = "IGUI_ComfyGrid_OptLootLayoutTip",
+      tooltip = "How many containers the loot window shows." },
+
+    { key = "EQUIPMENT_VIEW",     kind = "choice", group = "general",
+      values = { "strip", "window", "off" },
+      labelKeys = { "IGUI_ComfyGrid_EquipViewStrip",
+                    "IGUI_ComfyGrid_EquipViewWindow",
+                    "IGUI_ComfyGrid_EquipViewOff" },
+      labels = { "A row in the inventory",
+                 "Its own window",
+                 "Off - another mod shows it" },
+      nameKey = "IGUI_ComfyGrid_OptEquipmentView",
+      tipKey = "IGUI_ComfyGrid_OptEquipmentViewTip",
+      tooltip = "Where your equipment lives, or off if another mod shows it." },
+    { key = "EQUIPMENT_AVATAR",   kind = "choice", group = "general",
+      values = { "model", "silhouette" },
+      labelKeys = { "IGUI_ComfyGrid_EquipAvatarModel",
+                    "IGUI_ComfyGrid_EquipAvatarSilhouette" },
+      labels = { "Your character in 3D",
+                 "A plain silhouette" },
+      nameKey = "IGUI_ComfyGrid_OptEquipmentAvatar",
+      tipKey = "IGUI_ComfyGrid_OptEquipmentAvatarTip",
+      tooltip = "How your character is drawn." },
+    { key = "HOTBAR_SECTION",     kind = "tickbox", group = "general",
+      nameKey = "IGUI_ComfyGrid_OptHotbarSection",
+      tipKey = "IGUI_ComfyGrid_OptHotbarSectionTip",
+      tooltip = "Turn it off if you use the bar at the bottom of the screen." },
+
+    { key = "HOTBAR_BAR",         kind = "tickbox", group = "general",
+      nameKey = "IGUI_ComfyGrid_OptHotbarBar",
+      tipKey = "IGUI_ComfyGrid_OptHotbarBarTip",
+      tooltip = "The bar at the bottom of the screen wears the mod's tiles. Turn it off to leave it to the game or to another mod." },
+    { key = "SLOTS_PER_CAPACITY", kind = "slider", group = "style",
+      min = 1, max = 4, step = 0.5,
+      nameKey = "IGUI_ComfyGrid_OptSlotsPerCapacity",
+      tipKey = "IGUI_ComfyGrid_OptSlotsPerCapacityTip",
+      tooltip = "Slots each point of container capacity is worth." },
+    { key = "COMPACT_ROWS",       kind = "tickbox", group = "style",
       nameKey = "IGUI_ComfyGrid_OptCompactRows",
       tipKey = "IGUI_ComfyGrid_OptCompactRowsTip",
       tooltip = "Show one spare row instead of the whole capacity." },
-    { key = "STACK_BY_TYPE",      kind = "tickbox", group = "tiles",
+    { key = "STACK_BY_TYPE",      kind = "tickbox", group = "style",
       nameKey = "IGUI_ComfyGrid_OptStackByType",
       tipKey = "IGUI_ComfyGrid_OptStackByTypeTip",
       tooltip = "Identical items share a tile whatever their state." },
 
-    { key = "STATUS_BAR",         kind = "tickbox", group = "tiles",
+    { key = "STATUS_BAR",         kind = "tickbox", group = "style",
       nameKey = "IGUI_ComfyGrid_OptStatusBar",
       tipKey = "IGUI_ComfyGrid_OptStatusBarTip",
       tooltip = "The bar at a tile's edge: condition, charge, what's left and reading progress." },
-    { key = "INSTANT_TRANSFER",   kind = "tickbox", group = "advanced",
+
+    { key = "TRANSFER_GESTURE",   kind = "choice", group = "controls",
+
+      values = { "shift", "doubleclick", "ctrl", "alt" },
+      labelKeys = { "IGUI_ComfyGrid_GestureShift",
+                    "IGUI_ComfyGrid_GestureDouble",
+                    "IGUI_ComfyGrid_GestureCtrl",
+                    "IGUI_ComfyGrid_GestureAlt" },
+      labels = { "Shift and click",
+                 "Double click",
+                 "Ctrl and click",
+                 "Alt and click" },
+      nameKey = "IGUI_ComfyGrid_OptTransferGesture",
+      tipKey = "IGUI_ComfyGrid_OptTransferGestureTip",
+      tooltip = "How an item moves to the other inventory.",
+
+      padOffKey = "IGUI_ComfyGrid_PadInsteadTransfer",
+      padOff = "The pad uses X",
+      padOffTipKey = "IGUI_ComfyGrid_PadInsteadTransferTip",
+      padOffTip = "A joypad always moves items with X. Turn the joypad off to pick a mouse gesture again." },
+
+    { key = "MULTISELECT_MOD",    kind = "choice", group = "controls",
+      values = { "ctrl", "shift", "alt" },
+      labelKeys = { "IGUI_ComfyGrid_ModCtrl",
+                    "IGUI_ComfyGrid_ModShift",
+                    "IGUI_ComfyGrid_ModAlt" },
+      labels = { "Ctrl", "Shift", "Alt" },
+      nameKey = "IGUI_ComfyGrid_OptMultiSelectMod",
+      tipKey = "IGUI_ComfyGrid_OptMultiSelectModTip",
+      tooltip = "Held with a click to mark several tiles, or dragged to rubber-band them.",
+
+      padOffKey = "IGUI_ComfyGrid_PadInsteadMultiSelect",
+      padOff = "The pad uses L3",
+      padOffTipKey = "IGUI_ComfyGrid_PadInsteadMultiSelectTip",
+      padOffTip = "A joypad marks tiles with the left stick button. Turn the joypad off to pick a modifier again." },
+    { key = "QUICK_EQUIP_KEY",    kind = "keybind", group = "controls",
+      bind = "ComfyGrid_QuickEquip",
+      nameKey = "IGUI_ComfyGrid_OptQuickEquipKey",
+      tipKey = "IGUI_ComfyGrid_OptQuickEquipKeyTip",
+      tooltip = "Acts on whatever is under the cursor: wear, wield, eat, open, smoke, read.",
+
+      padOffKey = "IGUI_ComfyGrid_PadInsteadQuickEquip",
+      padOff = "The pad uses Y",
+      padOffTipKey = "IGUI_ComfyGrid_PadInsteadQuickEquipTip",
+      padOffTip = "A joypad uses and equips from the Y menu. Turn the joypad off to bind a key again." },
+
+    { key = "INSTANT_TRANSFER",   kind = "tickbox", group = "controls",
       nameKey = "IGUI_ComfyGrid_OptInstantTransfer",
       tipKey = "IGUI_ComfyGrid_OptInstantTransferTip",
       tooltip = "Items move with no transfer time." },
@@ -147,6 +204,15 @@ local OPTION_DEFS = {
 
 Settings.GROUPS = GROUPS
 Settings.OPTION_DEFS = OPTION_DEFS
+
+function Settings.defsInGroup(groupKey, out)
+    out = out or {}
+    for i = 1, #OPTION_DEFS do
+        local def = OPTION_DEFS[i]
+        if def.group == groupKey then out[#out + 1] = def end
+    end
+    return out
+end
 
 local function choiceLabel(def, i)
     local fallback = def.labels and def.labels[i] or tostring(def.values[i])
@@ -182,9 +248,77 @@ function Settings.labelFor(def)
         or titleFor(def.key)
 end
 
+function Settings.transferIsDoubleClick()
+    local ok, v = pcall(Settings.get, "TRANSFER_GESTURE")
+    if not ok then return false end
+    return v == "doubleclick"
+end
+
+function Settings.transferModifier()
+    local ok, v = pcall(Settings.get, "TRANSFER_GESTURE")
+    if not ok or v == nil or v == "doubleclick" then return nil end
+    return v
+end
+
+function Settings.multiSelectModifier()
+    local ok, v = pcall(Settings.get, "MULTISELECT_MOD")
+    if not ok or v == nil then return "ctrl" end
+    return v
+end
+
+local function modifierHeld(name)
+    if name == "shift" then
+        return isShiftKeyDown ~= nil and isShiftKeyDown() == true
+    end
+    if name == "ctrl" then
+        return isCtrlKeyDown ~= nil and isCtrlKeyDown() == true
+    end
+    if name == "alt" then
+        if Keyboard == nil or Keyboard.isKeyDown == nil then return false end
+        return Keyboard.isKeyDown(Keyboard.KEY_LMENU) == true
+            or Keyboard.isKeyDown(Keyboard.KEY_RMENU) == true
+    end
+    return false
+end
+
+function Settings.multiSelectHeld()
+    local mine = Settings.multiSelectModifier()
+    if not modifierHeld(mine) then return false end
+    local other = Settings.transferModifier()
+    if other ~= nil and other ~= mine and modifierHeld(other) then
+        return false
+    end
+    return true
+end
+
+function Settings.transferModifierHeld()
+    local mine = Settings.transferModifier()
+    if mine == nil then return false end
+    return modifierHeld(mine)
+end
+
 function Settings.tipFor(def)
     if def == nil then return nil end
     return def.tipKey and Text.tr(def.tipKey, def.tooltip) or def.tooltip
+end
+
+function Settings.appliesNow(def, playerNum)
+    if def == nil or def.padOffKey == nil then return true end
+    local Input = ComfyGrid.Core and ComfyGrid.Core.Input
+    if Input == nil or Input.padOwns == nil then return true end
+    local ok, owned = pcall(Input.padOwns, playerNum)
+    if not ok then return true end
+    return not owned
+end
+
+function Settings.padNoteFor(def)
+    if def == nil or def.padOffKey == nil then return nil end
+    return Text.tr(def.padOffKey, def.padOff)
+end
+
+function Settings.padTipFor(def)
+    if def == nil or def.padOffTipKey == nil then return nil end
+    return Text.tr(def.padOffTipKey, def.padOffTip)
 end
 
 function Settings.choiceLabel(def, i)
@@ -280,29 +414,42 @@ function Settings.buildOptions()
         and PZAPI.ModOptions:getOptions(ComfyGrid.MOD_ID) or nil
     if not instance then
         instance = PZAPI.ModOptions:create(ComfyGrid.MOD_ID, "Comfy Grid settings")
-        local lastGroup = nil
-        for i = 1, #OPTION_DEFS do
-            local def = OPTION_DEFS[i]
 
-            if def.group ~= lastGroup then
-                lastGroup = def.group
-                instance:addTitle(Settings.groupLabel(def.group))
-            end
+        local groupDefs = {}
+        for g = 1, #GROUPS do
+            local groupKey = GROUPS[g].key
+            for k = #groupDefs, 1, -1 do groupDefs[k] = nil end
+            Settings.defsInGroup(groupKey, groupDefs)
 
-            local title = Settings.labelFor(def)
-            local tip = Settings.tipFor(def)
-            if def.kind == "tickbox" then
-                instance:addTickBox(def.key, title, Settings.defaults[def.key], tip)
-            elseif def.kind == "choice" then
-                local combo = instance:addComboBox(def.key, title, tip)
-                local selected = choiceIndexOf(def, Settings.defaults[def.key]) or 1
-                for v = 1, #def.values do
+            if #groupDefs > 0 then
 
-                    combo:addItem(choiceLabel(def, v), v == selected)
+                instance:addTitle(Settings.groupLabel(groupKey))
+                for i = 1, #groupDefs do
+                    local def = groupDefs[i]
+
+                    local title = Settings.labelFor(def)
+                    local tip = Settings.tipFor(def)
+                    if def.kind == "tickbox" then
+                        instance:addTickBox(def.key, title, Settings.defaults[def.key], tip)
+                    elseif def.kind == "choice" then
+                        local combo = instance:addComboBox(def.key, title, tip)
+                        local selected = choiceIndexOf(def, Settings.defaults[def.key]) or 1
+                        for v = 1, #def.values do
+
+                            combo:addItem(choiceLabel(def, v), v == selected)
+                        end
+                    elseif def.kind == "slider" then
+                        instance:addSlider(def.key, title, def.min, def.max, def.step,
+                            Settings.defaults[def.key], tip)
+                    elseif def.kind == "keybind" then
+
+                        _ = def
+                    else
+
+                        Log.warn("option '" .. tostring(def.key) .. "' has unknown kind '"
+                            .. tostring(def.kind) .. "'; not shown on the options screen")
+                    end
                 end
-            else
-                instance:addSlider(def.key, title, def.min, def.max, def.step,
-                    Settings.defaults[def.key], tip)
             end
         end
     end
@@ -328,6 +475,39 @@ function Settings.buildOptions()
     end
 end
 
+local swapping = false
+local function keepModifiersDistinct(changedKey, previous)
+    if swapping then return end
+    if changedKey ~= "MULTISELECT_MOD" and changedKey ~= "TRANSFER_GESTURE" then
+        return
+    end
+    local gesture = values.TRANSFER_GESTURE
+    local multi = values.MULTISELECT_MOD
+    if gesture == nil or multi == nil or gesture ~= multi then return end
+
+    local otherKey = "TRANSFER_GESTURE"
+    if changedKey == "TRANSFER_GESTURE" then otherKey = "MULTISELECT_MOD" end
+    local otherDef = Settings.defOf(otherKey)
+    if otherDef == nil then return end
+
+    local target = nil
+    if previous ~= nil and choiceIndexOf(otherDef, previous) ~= nil
+            and previous ~= values[changedKey] then
+        target = previous
+    else
+        for i = 1, #otherDef.values do
+            if otherDef.values[i] ~= values[changedKey] then
+                target = otherDef.values[i]
+                break
+            end
+        end
+    end
+    if target == nil then return end
+    swapping = true
+    pcall(Settings.set, otherKey, target)
+    swapping = false
+end
+
 function Settings.set(key, value)
     local def = nil
     for i = 1, #OPTION_DEFS do
@@ -337,8 +517,10 @@ function Settings.set(key, value)
         end
     end
     if def == nil or value == nil then return false end
-    local changed = values[key] ~= value
+    local previous = values[key]
+    local changed = previous ~= value
     setValue(key, value)
+    keepModifiersDistinct(key, previous)
 
     local opt = instance and instance.getOption and instance:getOption(key) or nil
     if opt ~= nil and opt.setValue ~= nil then
@@ -354,6 +536,21 @@ end
 function Settings.save()
     if PZAPI and PZAPI.ModOptions and PZAPI.ModOptions.save then
         pcall(PZAPI.ModOptions.save, PZAPI.ModOptions)
+    end
+end
+
+function Settings.syncPadAvailability(playerNum)
+    if instance == nil or instance.getOption == nil then return end
+    for i = 1, #OPTION_DEFS do
+        local def = OPTION_DEFS[i]
+        if def.padOffKey ~= nil then
+            local opt = nil
+            local okGet, got = pcall(instance.getOption, instance, def.key)
+            if okGet then opt = got end
+            if opt ~= nil and opt.setEnabled ~= nil then
+                pcall(opt.setEnabled, opt, Settings.appliesNow(def, playerNum))
+            end
+        end
     end
 end
 
@@ -459,5 +656,19 @@ if not ComfyGrid._settingsApplyHooked then
         pcall(Settings.applyStoredTheme)
 
         pcall(runMigrations)
+
+        pcall(Settings.syncPadAvailability, 0)
     end)
+end
+
+if not ComfyGrid._settingsPadHooked then
+    ComfyGrid._settingsPadHooked = true
+    local function syncPad()
+        pcall(Settings.syncPadAvailability, 0)
+    end
+    for _, name in ipairs({ "OnJoypadActivate", "OnJoypadDeactivate",
+                            "OnGamepadConnect", "OnGamepadDisconnect" }) do
+        local ev = Events ~= nil and Events[name] or nil
+        if ev ~= nil and ev.Add ~= nil then pcall(ev.Add, syncPad) end
+    end
 end

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -65,7 +65,9 @@ local function labelFor(key)
     key = tostring(key)
     local label = labelCache[key]
     if label == nil then
-        label = Text.tr("IGUI_ComfyGrid_Slot" .. key, key)
+
+        label = Text.tr("IGUI_ComfyGrid_Slot" .. key,
+            Equipment.displayNameFor(key) or key)
         label = Text.fit(label, Style.FONT, Style.CELL - 6, 6)
         labelCache[key] = label
     end
@@ -77,7 +79,8 @@ local function hoverLabelFor(key)
     key = tostring(key)
     local info = hoverLabelCache[key]
     if info == nil then
-        local label = Text.tr("IGUI_ComfyGrid_Slot" .. key, key)
+        local label = Text.tr("IGUI_ComfyGrid_Slot" .. key,
+            Equipment.displayNameFor(key) or key)
         local width = 0
         local tm = getTextManager and getTextManager() or nil
         if tm ~= nil and Style.FONT ~= nil then
@@ -210,9 +213,12 @@ function EquipmentStrip.anchorsTop()
     return Style.CELL_STRIDE
 end
 
-function EquipmentStrip.anchorsHeight(figureH)
-    return EquipmentStrip.anchorsTop() + figureH + ROW_GAP + Style.FONT_H
-        + DRAWER_ROWS * Style.CELL_STRIDE + 1
+function EquipmentStrip.anchorsHeight(figureH, trayRows)
+    trayRows = trayRows or 0
+    local tray = trayRows * Style.CELL_STRIDE
+    if trayRows > 0 then tray = tray + ROW_GAP end
+    return EquipmentStrip.anchorsTop() + figureH + ROW_GAP + tray
+        + Style.FONT_H + DRAWER_ROWS * Style.CELL_STRIDE + 1
 end
 
 local function tileXY(self, idx)
@@ -378,6 +384,8 @@ local function layoutAnchors(self, playerObj)
         end
     end
     local trayRows = tray > 0 and math.ceil(tray / trayCols) or 0
+
+    self.trayRows = trayRows
     self.drawerY = trayY + trayRows * stride + (tray > 0 and ROW_GAP or 0)
 
     local shown = self.drawerKey ~= nil and groupFor(self, self.drawerKey)

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -108,6 +108,7 @@ function GridView:new(x, y, model, playerNum)
     o:setWidth(w)
     o:setHeight(h)
     o.hoverSlot = nil
+    o.pendingClick = nil
     o.lastAbsY = nil
 
     o.sizeDirty = false
@@ -235,8 +236,35 @@ local function prerenderImpl(self)
     syncSelection(self)
 end
 
+local CLICK_DELAY_MS = 260
+
+GridView.CLICK_DELAY_MS = CLICK_DELAY_MS
+
+local function gestureIsDoubleClick()
+    local S = ComfyGrid.Settings
+    if S == nil or S.transferIsDoubleClick == nil then return false end
+    local ok, v = pcall(S.transferIsDoubleClick)
+    return ok and v == true
+end
+
+local function multiSelectHeld()
+    local S = ComfyGrid.Settings
+    if S == nil or S.multiSelectHeld == nil then return false end
+    local ok, v = pcall(S.multiSelectHeld)
+    return ok and v == true
+end
+
+local function transferModifierHeld()
+    local S = ComfyGrid.Settings
+    if S == nil or S.transferModifierHeld == nil then return false end
+    local ok, v = pcall(S.transferModifierHeld)
+    return ok and v == true
+end
+
 function GridView:prerender()
     if self.model == nil or self.model.grid == nil then return end
+
+    if self.pendingClick ~= nil then self:flushPendingClick() end
 
     local ok, err = pcall(prerenderImpl, self)
     if not ok and err ~= lastPrerenderError then
@@ -469,6 +497,29 @@ local function renderAll(self)
         SlotRenderer.drawHover(ctx)
 
         PadCarry.renderAt(self, px, py)
+    end
+
+    local pending = self.pendingClick
+    if pending ~= nil and pending.shows and pending.slot ~= nil
+            and pending.slot < cols * rows then
+        local elapsed = getTimestampMs() - pending.atMs
+        local t = elapsed / CLICK_DELAY_MS
+        if t < 0 then t = 0 elseif t > 1 then t = 1 end
+        local bx, by = pixelForSlot(pending.slot, cols)
+        local cell = Style.CELL
+        local sf = Style.COLORS.SURFACE
+
+        local cxp = bx + cell * 0.5
+        local cyp = by + cell * 0.5
+        local r = cell * 0.34
+        if Draw ~= nil and Draw.disc ~= nil and Draw.pie ~= nil then
+
+            local d = math.floor(r * 2 + 4)
+            Draw.disc(self, math.floor(cxp - d * 0.5), math.floor(cyp - d * 0.5), d,
+                0.55, sf.bg)
+
+            Draw.pie(self, cxp, cyp, r, t * 6.2831853, 0.30, sf.accent)
+        end
     end
 
     if self.marqueeActive then
@@ -719,7 +770,7 @@ local function mouseDownImpl(self, x, y)
     self.dragDidStart = false
     local stack, slot = stackAtPixel(self, x, y)
 
-    if isCtrlKeyDown() and not isShiftKeyDown() then
+    if multiSelectHeld() then
         self.marqueeArmed = true
         self.marqueeActive = false
         self.marqueeX0, self.marqueeY0 = x, y
@@ -744,7 +795,7 @@ local function mouseDownImpl(self, x, y)
     local payload = payloadFor(self, stack)
     if payload == nil then return end
 
-    if isShiftKeyDown() then
+    if transferModifierHeld() then
 
         QuickMove.run(payload, self.model.inventory, self.playerNum)
         clearSelection(self)
@@ -755,9 +806,39 @@ local function mouseDownImpl(self, x, y)
     self.pressedSlot = slot
 end
 
+local function doubleClickTransfer(self, stack)
+    local now = getTimestampMs()
+    if self.lastDoubleMs ~= nil and now - self.lastDoubleMs < 150 then return end
+    self.lastDoubleMs = now
+    if self.model == nil then return end
+    local payload = payloadFor(self, stack)
+    if payload == nil then return end
+    QuickMove.run(payload, self.model.inventory, self.playerNum)
+    clearSelection(self)
+end
+
+local function doubleClickOnRelease(self, x, y)
+    if not gestureIsDoubleClick() then return false end
+    local pending = self.pendingClick
+    if pending == nil then return false end
+    if getTimestampMs() - pending.atMs > CLICK_DELAY_MS then return false end
+    local stack = stackAtPixel(self, x, y)
+    if stack == nil or stack.slot ~= pending.slot then return false end
+    self.pendingClick = nil
+    doubleClickTransfer(self, stack)
+
+    if DragAndDrop.isDragOwner(self) then DragAndDrop.endDrag() end
+    self.pressedStack = nil
+    self.pressedSlot = nil
+    self.dragDidStart = false
+    return true
+end
+
 local function mouseUpImpl(self, x, y)
 
     if self.marqueeArmed then endMarquee(self, true); return end
+
+    if not self.dragDidStart and doubleClickOnRelease(self, x, y) then return end
     if DragAndDrop.isDragging() then
 
         local poked = x == 0 and y == 0 and DragAndDrop.isDragOwner(self)
@@ -776,7 +857,9 @@ local function mouseUpImpl(self, x, y)
         DragAndDrop.endDrag()
         if stack ~= nil and not self.dragDidStart then
 
-            clearSelection(self)
+            if not (gestureIsDoubleClick() and isSelected(self, stack)) then
+                clearSelection(self)
+            end
             self:onStackClicked(stack, x, y)
         end
     end
@@ -821,12 +904,123 @@ local function rightMouseUpImpl(self, x, y)
     ContextMenu.open(self.playerNum, { stack }, self)
 end
 
-function GridView:onStackClicked(stack, _x, _y)
-    if stack == nil or stack.count == nil or stack.count < 2 then return end
-    local StackPopup = ComfyGrid.UI.StackPopup
-    if StackPopup == nil or StackPopup.openFor == nil then return end
-    local ok, err = pcall(StackPopup.openFor, self, stack)
+local function alreadyShown(inv)
+    if inv == nil then return false end
+    for n = 0, 1 do
+        for _, get in ipairs({ getPlayerInventory, getPlayerLoot }) do
+            local okP, page = pcall(get, n)
+            local pane = okP and page ~= nil and page.inventoryPane or nil
+            local host = pane ~= nil and pane.comfyHost or nil
+            if host ~= nil and host.showsInventory ~= nil then
+                local okS, shown = pcall(host.showsInventory, host, inv)
+                if okS and shown then return true end
+            end
+        end
+    end
+    return false
+end
+
+local function openStackSurface(self, stack)
+    if stack == nil or stack.count == nil then return end
+
+    if stack.count >= 2 then
+        local StackPopup = ComfyGrid.UI.StackPopup
+        if StackPopup == nil or StackPopup.openFor == nil then return end
+
+        local ok, popup = pcall(StackPopup.openFor, self, stack)
+        if not ok then reportMouseError(popup) return end
+        return popup
+    end
+
+    local CW = ComfyGrid.UI.ContainerWindow
+    if CW == nil or CW.openFor == nil then return end
+    local ItemStack = ComfyGrid.Model.ItemStack
+    if ItemStack == nil or ItemStack.frontItem == nil then return end
+    local okI, item = pcall(ItemStack.frontItem, stack, self.model.inventory)
+    if not okI or item == nil then return end
+    local inv = CW.inventoryOf(item)
+    if inv == nil then return end
+
+    local open = CW.windowFor ~= nil and CW.windowFor(self.playerNum) or nil
+    if open ~= nil and open:getIsVisible() and open.item == item then
+        CW.closeFor(self.playerNum)
+        return
+    end
+
+    local okE, equipped = pcall(item.isEquipped, item)
+    if okE and equipped then return end
+    if alreadyShown(inv) then return end
+
+    local cx, cy = Style.pixelForSlot(stack.slot, self.cols or 1)
+    local x = self:getAbsoluteX() + cx + Style.CELL + 2
+    local y = self:getAbsoluteY() + cy + Style.CELL + 2
+    local ok, err = pcall(CW.openFor, self.playerNum, item, x, y)
     if not ok then reportMouseError(err) end
+end
+
+local function wouldOpenSomething(self, stack)
+    if stack == nil or stack.count == nil then return false end
+    if stack.count >= 2 then return true end
+    local CW = ComfyGrid.UI.ContainerWindow
+    if CW == nil or CW.inventoryOf == nil then return false end
+    local ItemStack = ComfyGrid.Model.ItemStack
+    if ItemStack == nil or self.model == nil then return false end
+    local okI, item = pcall(ItemStack.frontItem, stack, self.model.inventory)
+    if not okI or item == nil then return false end
+    local inv = CW.inventoryOf(item)
+    if inv == nil then return false end
+    local okE, equipped = pcall(item.isEquipped, item)
+    if okE and equipped then return false end
+    return not alreadyShown(inv)
+end
+
+function GridView:onStackClicked(stack, x, y)
+    if stack == nil then return end
+    local now = getTimestampMs()
+    local pending = self.pendingClick
+    local samePending = pending ~= nil and pending.slot == stack.slot
+        and now - pending.atMs <= CLICK_DELAY_MS
+    if samePending and not gestureIsDoubleClick() then
+
+        return
+    end
+
+    if samePending then
+        self.pendingClick = nil
+        doubleClickTransfer(self, stack)
+        return
+    end
+
+    self.pendingClick = { stack = stack, slot = stack.slot, atMs = now,
+        shows = wouldOpenSomething(self, stack) }
+end
+
+function GridView:flushPendingClick()
+    local pending = self.pendingClick
+    if pending == nil then return end
+    if getTimestampMs() - pending.atMs < CLICK_DELAY_MS then return end
+    self.pendingClick = nil
+
+    clearSelection(self)
+    openStackSurface(self, pending.stack)
+end
+
+function GridView:openSurfaceFor(stack)
+    return openStackSurface(self, stack)
+end
+
+function GridView:wouldOpenSurface(stack)
+    return wouldOpenSomething(self, stack) == true
+end
+
+function GridView:onMouseDoubleClick(x, y)
+    self.pendingClick = nil
+    if not gestureIsDoubleClick() then return true end
+    if self.model == nil then return true end
+    local stack = stackAtPixel(self, x, y)
+    if stack == nil then return true end
+    doubleClickTransfer(self, stack)
+    return true
 end
 
 function GridView:onMouseMove(_dx, _dy)

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -12,6 +12,7 @@ require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/Model/ContainerModel"
 require "ComfyGrid/Model/Equipment"
 require "ComfyGrid/Interact/Tooltip"
+require "ComfyGrid/Interact/Consume"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Interact = ComfyGrid.Interact or {}
 local QuickEquip = {}
@@ -31,6 +32,93 @@ local function isWearable(item)
         if ok and loc ~= nil and tostring(loc) ~= "" then return true end
     end
     return false
+end
+
+local function canEquip(item)
+    if item == nil then return false end
+    if isWearable(item) then
+        local ok, broken = pcall(item.isBroken, item)
+        if ok and broken == true then return false end
+        return true
+    end
+    if instanceof(item, "HandWeapon") then
+
+        local ok, condition = pcall(item.getCondition, item)
+        if ok and type(condition) == "number" and condition <= 0 then
+            return false
+        end
+        return true
+    end
+
+    return false
+end
+
+local function queueLength(playerObj)
+    if ISTimedActionQueue == nil then return 0 end
+    local ok, q = pcall(ISTimedActionQueue.getTimedActionQueue, playerObj)
+    if not ok or q == nil or q.queue == nil then return 0 end
+    return #q.queue
+end
+
+local function isHandEquippable(item)
+    if item == nil then return false end
+    if instanceof(item, "HandWeapon") then
+        local ok, condition = pcall(item.getCondition, item)
+        return not (ok and type(condition) == "number" and condition <= 0)
+    end
+    if not instanceof(item, "InventoryItem") then return false end
+    if instanceof(item, "Clothing") then return false end
+    if instanceof(item, "Food") then return false end
+    return true
+end
+
+local function capacityOf(item)
+    if item == nil or not instanceof(item, "InventoryContainer") then return nil end
+    if item.getInventory == nil then return nil end
+    local ok, inv = pcall(item.getInventory, item)
+    if not ok or inv == nil then return nil end
+    local Capacity = ComfyGrid.Model and ComfyGrid.Model.Capacity
+    if Capacity == nil or Capacity.effectiveFor == nil then return nil end
+    return Capacity.effectiveFor(inv, 0)
+end
+
+local function holdsMoreThan(item, other)
+    local mine = capacityOf(item)
+    local theirs = capacityOf(other)
+    if mine == nil or theirs == nil then return false end
+    return mine > theirs
+end
+
+local function equipInHand(playerObj, item)
+    local two = false
+    local okT, isTwo = pcall(item.isTwoHandWeapon, item)
+    if okT and isTwo then two = true end
+    local okR, forcesTwo = pcall(item.isRequiresEquippedBothHands, item)
+    if okR and forcesTwo then two = true end
+
+    local primary = true
+    if not two then
+        local okP, held = pcall(playerObj.getPrimaryHandItem, playerObj)
+        local okS, off = pcall(playerObj.getSecondaryHandItem, playerObj)
+        if okP and held ~= nil and okS and off == nil then primary = false end
+    end
+    pcall(ISInventoryPaneContextMenu.equipWeapon, item, primary, two, 0)
+end
+
+local function isEquippableKind(item)
+    if item == nil then return false end
+    return isWearable(item) or instanceof(item, "HandWeapon")
+end
+
+local function equippableIn(stack, inventory)
+    local front = ItemStack.frontItem(stack, inventory)
+    if front == nil then return nil end
+    if canEquip(front) then return front end
+    local items = ItemStack.getItems(stack, inventory)
+    for i = 1, #items do
+        if canEquip(items[i]) then return items[i] end
+    end
+    return nil
 end
 
 local function equipHovered()
@@ -56,20 +144,49 @@ local function equipHovered()
         end
     end
     if stack == nil or inventory == nil then return end
-    local front = ItemStack.frontItem(stack, inventory)
-    if front == nil then return end
+    local front = equippableIn(stack, inventory)
+    if front == nil then
+
+        local item = ItemStack.frontItem(stack, inventory)
+        if item == nil or isEquippableKind(item) then return end
+
+        local Consume = ComfyGrid.Interact and ComfyGrid.Interact.Consume
+        if Consume ~= nil and Consume.tryUse ~= nil then
+            local okC, owned = pcall(Consume.tryUse, playerObj, item, 0)
+            if okC and owned then return end
+        end
+
+        local queued = queueLength(playerObj)
+        if pane ~= nil and pane.doContextualDblClick ~= nil then
+            local okAct, errAct = pcall(pane.doContextualDblClick, pane, item)
+            if not okAct and errAct ~= lastError then
+                lastError = errAct
+                Log.error("QuickEquip contextual action failed: "
+                    .. tostring(errAct))
+            end
+        end
+        if queueLength(playerObj) > queued then return end
+
+        local okMap, isMap = pcall(item.IsMap, item)
+        if okMap and isMap then return end
+
+        if isHandEquippable(item) then equipInHand(playerObj, item) end
+        return
+    end
 
     local displaced
     if isWearable(front) then
         displaced = Equipment.findDisplacedWorn(playerObj, front)
+
+        if displaced ~= nil and isHandEquippable(front)
+                and not holdsMoreThan(front, displaced) then
+            equipInHand(playerObj, front)
+            return
+        end
         ISInventoryPaneContextMenu.onWearItems({ front }, 0)
 
     elseif instanceof(front, "HandWeapon") then
 
-        local okCond, condition = pcall(front.getCondition, front)
-        if okCond and type(condition) == "number" and condition <= 0 then
-            return
-        end
         local okH, held = pcall(playerObj.getPrimaryHandItem, playerObj)
         displaced = okH and held or nil
         local twoHands = front.isTwoHandWeapon ~= nil
@@ -150,15 +267,51 @@ local function overAnyBoard()
     return false
 end
 
-function QuickEquip._onKey(key)
-    local target = nil
+local function targetKey()
+    local KeyBinds = ComfyGrid.Interact and ComfyGrid.Interact.KeyBinds
+    if KeyBinds ~= nil and KeyBinds.isRegistered ~= nil
+            and KeyBinds.isRegistered(KeyBinds.QUICK_EQUIP) then
+
+        return KeyBinds.keyFor(KeyBinds.QUICK_EQUIP)
+    end
+
     local core = getCore and getCore() or nil
     if core ~= nil and core.getKey ~= nil then
         local ok, k = pcall(core.getKey, core, "Interact")
-        if ok and type(k) == "number" then target = k end
+        if ok and type(k) == "number" and k > 0 then return k end
     end
-    if target == nil and Keyboard ~= nil then target = Keyboard.KEY_E end
-    if key ~= target then return end
+    return Keyboard ~= nil and Keyboard.KEY_E or nil
+end
+
+local function modifiersHeld()
+    local KeyBinds = ComfyGrid.Interact and ComfyGrid.Interact.KeyBinds
+    if KeyBinds == nil or KeyBinds.modifiersFor == nil then return true end
+    local ok, shift, ctrl, alt = pcall(KeyBinds.modifiersFor,
+        KeyBinds.QUICK_EQUIP)
+    if not ok then return true end
+    if not (shift or ctrl or alt) then return true end
+    if Keyboard == nil then return true end
+    if shift and not (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)
+            or Keyboard.isKeyDown(Keyboard.KEY_RSHIFT)) then
+        return false
+    end
+    if ctrl and not (Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)
+            or Keyboard.isKeyDown(Keyboard.KEY_RCONTROL)) then
+        return false
+    end
+    if alt and not (Keyboard.isKeyDown(Keyboard.KEY_LMENU)
+            or Keyboard.isKeyDown(Keyboard.KEY_RMENU)) then
+        return false
+    end
+    return true
+end
+
+function QuickEquip._onKey(key)
+    local target = targetKey()
+    if target == nil or key ~= target then return end
+
+    local okMods, held = pcall(modifiersHeld)
+    if okMods and not held then return end
 
     local okB, over = pcall(overAnyBoard)
     if okB and over then

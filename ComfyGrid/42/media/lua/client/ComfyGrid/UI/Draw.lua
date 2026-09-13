@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -17,6 +17,10 @@ ComfyGrid.UI.Draw = Draw
 local TextureCache = ComfyGrid.Core.TextureCache
 local floor = math.floor
 local min = math.min
+
+local sqrt = math.sqrt
+local sin = math.sin
+local cos = math.cos
 
 local corners = nil
 local cornersMissing = false
@@ -120,6 +124,41 @@ function Draw.disc(el, x, y, d, a, c)
         el:drawTextureScaled(t, x, y, d, d, a, c.r, c.g, c.b)
     else
         Draw.roundRect(el, x, y, d, d, floor(d * 0.5), a, c)
+    end
+end
+
+function Draw.pie(el, cx, cy, r, sweep, a, c)
+    if r < 1 or sweep <= 0 then return end
+    if sweep >= 6.2831853 then
+        Draw.disc(el, floor(cx - r), floor(cy - r), floor(r * 2), a, c)
+        return
+    end
+    local wide = sweep > 3.1415927
+    local d1x, d1y = sin(sweep), -cos(sweep)
+    local ri = floor(r)
+    for dy = -ri, ri do
+        local half = sqrt(r * r - dy * dy)
+        local x0 = -floor(half)
+        local x1 = floor(half)
+        local runStart = nil
+        for dx = x0, x1 + 1 do
+            local inside = false
+            if dx <= x1 then
+                local c1 = d1x * dy - d1y * dx
+                if wide then
+                    inside = dx >= 0 or c1 <= 0
+                else
+                    inside = dx >= 0 and c1 <= 0
+                end
+            end
+            if inside and runStart == nil then
+                runStart = dx
+            elseif not inside and runStart ~= nil then
+                el:drawRect(floor(cx + runStart), floor(cy + dy),
+                    dx - runStart, 1, a, c.r, c.g, c.b)
+                runStart = nil
+            end
+        end
     end
 end
 

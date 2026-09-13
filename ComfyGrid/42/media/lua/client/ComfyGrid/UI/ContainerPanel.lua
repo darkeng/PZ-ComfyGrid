@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -107,6 +107,8 @@ local function syncPreview(self)
 end
 
 local function drawChips(self, rightX, y, h)
+
+    if self.noChips then return 0 end
     local row = self.chips
     row:reset(rightX, y, h)
     for i = 1, #CHIPS do
@@ -195,6 +197,8 @@ local function chipIdFor(key)
 end
 
 local function drawActions(self, transferLeft, y, h)
+
+    if self.noChips then return nil end
     local OV = ComfyGrid.Interact and ComfyGrid.Interact.ObjectVerbs
     if OV == nil or self.model == nil then return nil end
     local verbs = OV.of(self.model.inventory, self.playerNum)
@@ -304,12 +308,13 @@ local function applyModel(self, model)
     end
 end
 
-function ContainerPanel:new(x, y, model, playerNum)
+function ContainerPanel:new(x, y, model, playerNum, noChips)
 
     local o = ISPanel:new(x, y, 1, headerHeight() + 1)
     setmetatable(o, self)
     self.__index = self
     o.playerNum = playerNum
+    o.noChips = noChips == true
     o.gridView = nil
 
     o.background = false

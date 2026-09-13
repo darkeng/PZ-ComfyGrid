@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -26,6 +26,9 @@ local OTHER_REFRESH_MS = 600
 
 local modelCache = {}
 local modelCacheLastAccess = {}
+
+local PUBLISH_ON_ARRIVAL_TTL_MS = 10000
+
 local CACHE_IDLE_EVICT_MS = 10000
 local CACHE_SWEEP_MS = 1000
 local lastSweepMs = 0
@@ -71,6 +74,23 @@ function ContainerModel:refresh(force)
     end
     self.grid:validate()
     self.grid:reconcile()
+
+    if self.grid.claimLanded then
+        self.grid.claimLanded = false
+        Persistence.queueSync(self.inventory)
+    end
+
+    local pending = self.publishOnArrival
+    if pending ~= nil then
+        local okItem, item = pcall(self.inventory.getItemWithID, self.inventory,
+            pending.id)
+        if okItem and item ~= nil then
+            self.publishOnArrival = nil
+            Persistence.queueSync(self.inventory)
+        elseif getTimestampMs() - pending.ms > PUBLISH_ON_ARRIVAL_TTL_MS then
+            self.publishOnArrival = nil
+        end
+    end
     self.needsImmediateRefresh = false
     self.lastRefreshMs = getTimestampMs()
 end

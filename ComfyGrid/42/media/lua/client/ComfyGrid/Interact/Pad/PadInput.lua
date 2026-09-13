@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -158,6 +158,17 @@ local function verbB(page, seat)
     if PadCarry.cancel(seat) then return true end
 
     if PadFocus.clearSelections(page) then return true end
+
+    local CW = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
+    if CW ~= nil and CW.gridFor ~= nil and CW.closeFor ~= nil then
+        local _, el = PadFocus.peek(page)
+        if el ~= nil and el == CW.gridFor(seat) then
+            CW.closeFor(seat)
+            local p = getSpecificPlayer(seat)
+            if p ~= nil then PadFocus.focusInventory(page, p:getInventory()) end
+            return true
+        end
+    end
     setJoypadFocus(seat, nil)
     return true
 end
@@ -193,11 +204,20 @@ local function verbInspect(page, seat)
         end
     elseif kind == "grid" or kind == "pocket" then
 
-        if (occupant.count or 0) > 1 then
-            local StackPopup = ComfyGrid.UI and ComfyGrid.UI.StackPopup
-            local popup = StackPopup ~= nil and StackPopup.openFor ~= nil
-                and StackPopup.openFor(el, occupant) or nil
-            if popup ~= nil then PadPopup.focus(popup, page) end
+        if el.openSurfaceFor ~= nil then
+            local ok, popup = pcall(el.openSurfaceFor, el, occupant)
+            if ok and popup ~= nil then
+
+                PadPopup.focus(popup, page)
+            elseif ok then
+
+                local CW = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
+                local g = CW ~= nil and CW.gridFor ~= nil and CW.gridFor(seat)
+                    or nil
+                local inv = g ~= nil and g.model ~= nil and g.model.inventory
+                    or nil
+                if inv ~= nil then PadFocus.focusInventory(page, inv) end
+            end
         end
     end
     return true
@@ -284,6 +304,11 @@ function PadInput.promptFor(page, slotKey)
         if kind == "grid" or kind == "pocket" then
 
             if (occupant.count or 0) > 1 then return label("Inspect") end
+
+            if el.wouldOpenSurface ~= nil then
+                local okW, opens = pcall(el.wouldOpenSurface, el, occupant)
+                if okW and opens then return label("OpenBag") end
+            end
             return nil
         end
         if kind == "equip" then

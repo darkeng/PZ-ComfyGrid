@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -86,6 +86,8 @@ function QuickMove.destinationFor(sourceInventory, playerObj, playerNum)
 
         return selectedContainer(getPlayerInventory(playerNum)) or playerInv
     end
+
+    if sourceInventory ~= playerInv then return playerInv end
     return selectedContainer(getPlayerLoot(playerNum))
 end
 
@@ -151,18 +153,30 @@ function QuickMove.run(stacks, sourceInventory, playerNum)
             playerObj)
         if #liveItems == 0 then return carried > 0 end
     end
-    local queued
-    if carried > 0 then
+    local function handTo(target)
+        if carried > 0 then
 
-        queued = Transfer.moveItems(liveItems, dest, playerObj, nil)
-    elseif Transfer.moveStacks ~= nil then
+            return Transfer.moveItems(liveItems, target, playerObj, nil)
+        elseif Transfer.moveStacks ~= nil then
 
-        queued = Transfer.moveStacks(vanillaList, dest, playerObj, nil)
-    else
+            return Transfer.moveStacks(vanillaList, target, playerObj, nil)
+        end
 
-        queued = Transfer.moveItems(liveItems, dest, playerObj, nil)
+        return Transfer.moveItems(liveItems, target, playerObj, nil)
     end
 
-    if type(queued) == "number" then return queued > 0 end
-    return queued ~= false
+    local function movedAny(q)
+        if type(q) == "number" then return q > 0 end
+        return q ~= false
+    end
+
+    local queued = handTo(dest)
+
+    if not movedAny(queued) and not isPlayerSide(sourceInventory, playerObj) then
+        local main = playerObj:getInventory()
+        if main ~= nil and dest ~= main and main ~= sourceInventory then
+            queued = handTo(main)
+        end
+    end
+    return movedAny(queued)
 end

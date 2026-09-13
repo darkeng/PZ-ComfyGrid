@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.6.0
+    Version: 1.7.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -25,7 +25,36 @@ local function isDragActive()
     return ISMouseDrag.dragging ~= nil
 end
 
+local function containerWindowGrid(pane)
+    local page = pane ~= nil and pane.parent or nil
+    if page == nil or page.onCharacter ~= true then return nil end
+    local CW = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
+    if CW == nil or CW.gridFor == nil then return nil end
+    return CW.gridFor(page.player)
+end
+
+local function overContainerWindow(pane)
+    local page = pane ~= nil and pane.parent or nil
+    if page == nil or page.onCharacter ~= true then return false end
+    local CW = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
+    if CW == nil or CW.isMouseOverIt == nil then return false end
+    local ok, over = pcall(CW.isMouseOverIt, page.player)
+    return ok and over == true
+end
+
 local function hoveredStack(pane)
+
+    if overContainerWindow(pane) then
+        local gv = containerWindowGrid(pane)
+        if gv ~= nil then
+            local slot = gv.hoverSlot
+            if slot ~= nil and gv:isMouseOver() and gv.model ~= nil
+                    and gv.model.grid ~= nil then
+                return gv.model.grid:stackAt(slot), gv.model.inventory
+            end
+        end
+        return nil, nil
+    end
     local host = pane.comfyHost
     if host == nil or not host.panelShown then return nil, nil end
 
@@ -73,6 +102,13 @@ end
 
 function Tooltip.isOverBoard(pane)
     if pane == nil then return false end
+
+    if overContainerWindow(pane) then
+        local gv = containerWindowGrid(pane)
+        if gv ~= nil and gv.isMouseOver ~= nil and gv:isMouseOver() then
+            return true
+        end
+    end
     local host = pane.comfyHost
     if host == nil or not host.panelShown then return false end
     local panels = host.panels
