@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.2
+    Version: 1.7.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -28,6 +28,8 @@ local ContainerPanel = ComfyGrid.UI.ContainerPanel
 local PlayerStrips = ComfyGrid.UI.PlayerStrips
 
 local SCROLLBAR_ALLOWANCE = 17
+
+local CONTENT_INSET = 6
 
 function PaneHost:showsInventory(inv)
     if inv == nil then return false end
@@ -58,9 +60,10 @@ end
 local SECTION_GAP = 6
 
 function PaneHost:new(pane)
-    local w = math.max(1, (pane.width or 1) - SCROLLBAR_ALLOWANCE)
+    local w = math.max(1,
+        (pane.width or 1) - SCROLLBAR_ALLOWANCE - CONTENT_INSET)
     local h = math.max(1, pane.height or 1)
-    local o = ISUIElement:new(0, 0, w, h)
+    local o = ISUIElement:new(CONTENT_INSET, 0, w, h)
     setmetatable(o, self)
     self.__index = self
     o.pane = pane
@@ -93,10 +96,11 @@ local function layout(self)
     local pane = self.pane
     if not pane then return end
 
-    local w = (pane.width or 1) - SCROLLBAR_ALLOWANCE
+    local w = (pane.width or 1) - SCROLLBAR_ALLOWANCE - CONTENT_INSET
     if w < 1 then w = 1 end
     local h = pane.height or 1
     if h < 1 then h = 1 end
+    if self.x ~= CONTENT_INSET then self:setX(CONTENT_INSET) end
     if self.width ~= w then self:setWidth(w) end
     if self.height ~= h then self:setHeight(h) end
 

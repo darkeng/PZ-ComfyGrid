@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.2
+    Version: 1.7.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -545,7 +545,8 @@ local function prerenderImpl(self)
     if Draw ~= nil and Draw.shadow ~= nil and not self.docked then
         local spread = math.max(6,
             math.floor(SHADOW_SPREAD * (Style.SCALE or 1)))
-        Draw.shadow(self, 0, 0, self.width, self.height, spread, SHADOW_ALPHA)
+        local shadowH = self.isCollapsed and bandH or self.height
+        Draw.shadow(self, 0, 0, self.width, shadowH, spread, SHADOW_ALPHA)
     end
 
     local sf = Style.COLORS and Style.COLORS.SURFACE

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.2
+    Version: 1.7.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -26,6 +26,8 @@ local Style = ComfyGrid.UI.Style
 local GridView = ComfyGrid.UI.GridView
 
 local SECTION_PAD = 4
+
+local PLATE_BLEED = 3
 
 local SECTION_TEXT = { r = 0.66, g = 0.66, b = 0.72, a = 0.95 }
 local SECTION_LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.55 }
@@ -167,7 +169,8 @@ local function prerenderImpl(self)
     local stride = Style.CELL_STRIDE
     local sectionH = Style.FONT_H
     local labelH = labelHeight()
-    local x = 0
+
+    local x = PLATE_BLEED
     local y = sectionH
     local lineH = 0
     for i = 1, #islands do
@@ -175,11 +178,14 @@ local function prerenderImpl(self)
         local grid = gv.model ~= nil and gv.model.grid or nil
         local sc = grid ~= nil and grid:slotCount() or 2
         local natural = sc * stride + 1
-        gv:setAvailableWidth(natural <= w and natural or w)
+        local room = w - PLATE_BLEED * 2
+        if room < 1 then room = 1 end
+        gv:setAvailableWidth(natural <= room and natural or room)
         local gw = gv.width
         local gh = gv.height
-        if x > 0 and x + gw > w then
-            x = 0
+
+        if x > PLATE_BLEED and x + gw + PLATE_BLEED > w then
+            x = PLATE_BLEED
             y = y + lineH + GAP_Y
             lineH = 0
         end
@@ -201,9 +207,9 @@ local function prerenderImpl(self)
         local labelHp = labelHeight()
         for i = 1, #islands do
             local gv = islands[i].gv
-            local px = gv.x - 3
+            local px = gv.x - PLATE_BLEED
             local py = gv.y - ACCENT_H - 1 - labelHp - 2
-            local pw = gv.width + 6
+            local pw = gv.width + PLATE_BLEED * 2
             local ph = labelHp + ACCENT_H + 1 + gv.height + 5
             Draw.roundFrame(self, px, py, pw, ph, 6, 0.45, surf.line,
                 surf.panel, 0.55)
