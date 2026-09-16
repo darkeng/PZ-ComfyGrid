@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.0
+    Version: 1.8.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,6 +11,7 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/SlotRenderer"
+require "ComfyGrid/UI/Icons"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 local StackRenderer = {}
@@ -19,6 +20,7 @@ ComfyGrid.UI.StackRenderer = StackRenderer
 local Log = ComfyGrid.Core.Log
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
+local Icons = ComfyGrid.UI.Icons
 local floor = math.floor
 
 local showStatusBar = ComfyGrid.Settings.get("STATUS_BAR")
@@ -572,18 +574,20 @@ function StackRenderer.draw(ctx)
                 end
             end
             local box = TEXTURE_SIZE * wmul
+
+            local hi = Icons.hiRes(tex)
             if not nearestUnsupported then
 
-                if not pcall(applyNearest, tex) then
+                if not pcall(applyNearest, hi or tex) then
                     nearestUnsupported = true
                     Log.warn("nearest-neighbor icon filtering unavailable; falling back to linear")
                 end
             end
 
-            view:drawItemIcon(item,
+            Icons.draw(view, item,
                 x + 1 + PAD + (TEXTURE_SIZE - box) * 0.5,
                 y + 1 + PAD + (TEXTURE_SIZE - box) * 0.5,
-                1, box, box)
+                1, box, box, hi)
         else
             tex = nil
         end

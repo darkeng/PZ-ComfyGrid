@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.0
+    Version: 1.8.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,6 +10,7 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Model/ItemStack"
+require "ComfyGrid/UI/Icons"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/Interact/DragAndDrop"
 require "ComfyGrid/Interact/DropHandler"
@@ -163,7 +164,8 @@ function PadCarry.renderAt(view, px, py)
     if tex == nil then return end
     local cell = Style.CELL or 45
 
-    view:drawItemIcon(o.renderItem, px + 3, py + 3, 0.85, cell - 6, cell - 6)
+    ComfyGrid.UI.Icons.draw(view, o.renderItem, px + 3, py + 3, 0.85,
+        cell - 6, cell - 6)
 end
 
 return PadCarry

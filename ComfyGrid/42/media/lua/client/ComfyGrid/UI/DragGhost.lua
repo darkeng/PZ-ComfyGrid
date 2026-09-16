@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.0
+    Version: 1.8.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,6 +9,7 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/UI/Style"
+require "ComfyGrid/UI/Icons"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
 ComfyGrid = ComfyGrid or {}
@@ -17,6 +18,7 @@ ComfyGrid.UI = ComfyGrid.UI or {}
 local Log = ComfyGrid.Core.Log
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
+local Icons = ComfyGrid.UI.Icons
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
 
 local DragGhost = ISUIElement:derive("ComfyDragGhost")
@@ -123,7 +125,7 @@ local function renderImpl(self)
         local texH = tex:getHeight()
         if texW and texH and texW > 0 and texH > 0 then
 
-            self:drawItemIcon(front, floor(x), floor(y), GHOST_ALPHA, size, size)
+            Icons.draw(self, front, floor(x), floor(y), GHOST_ALPHA, size, size)
             drew = true
         end
     end

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.0
+    Version: 1.8.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,6 +11,7 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/HotbarGhosts"
+require "ComfyGrid/UI/Icons"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
 
@@ -116,7 +117,7 @@ local function drawSlotBody(self, x, y, size, item, hot, refused, slot)
 
     local pad = math.max(2, math.floor(size * 0.14 + 0.5))
     local box = size - pad * 2
-    self:drawItemIcon(item, x + pad, y + pad, 1, box, box)
+    ComfyGrid.UI.Icons.draw(self, item, x + pad, y + pad, 1, box, box)
 end
 
 local function drawReadouts(self, x, y, size, item)
