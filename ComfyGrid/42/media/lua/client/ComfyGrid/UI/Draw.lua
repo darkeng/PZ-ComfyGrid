@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.3
+    Version: 1.8.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -201,6 +201,10 @@ end
 
 function Draw.spreadTexture()
     return Draw.glyphTexture("spread")
+end
+
+function Draw.layersTexture()
+    return Draw.glyphTexture("layers")
 end
 
 function Draw.floorTexture()

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.3
+    Version: 1.8.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -35,6 +35,7 @@ local KeyBinds = ComfyGrid.Interact ~= nil
 local instance = nil
 
 local lastClosedMs = 0
+
 local REOPEN_GUARD_MS = 250
 
 local lastTab = 1
@@ -231,6 +232,9 @@ function SettingsPopup:new(x, y, host)
     o.hotTab = nil
     o.hotReset = false
     o.dragRow = nil
+
+    o.moving = false
+    o.moved = false
     o.pendingKey = nil
     o.pendingValue = nil
     relayout(o)
@@ -644,6 +648,16 @@ function SettingsPopup:onMouseDown(x, y)
 
     self:bringToTop()
 
+    if y < self.titleH then
+        local cs = self._closeS
+        local onClose = cs ~= nil and x >= self._closeX and x < self._closeX + cs
+            and y >= self._closeY and y < self._closeY + cs
+        if not onClose then
+            self.moving = true
+            self.moved = false
+        end
+    end
+
     if y > self.titleH + self.tabH then
         for i = 1, #self.rows do
             local ry, rh = rowBounds(self, i)
@@ -659,7 +673,23 @@ function SettingsPopup:onMouseDown(x, y)
     return true
 end
 
+function SettingsPopup:onMouseMove(dx, dy)
+    if not self.moving then return true end
+    if dx ~= 0 or dy ~= 0 then self.moved = true end
+    self:setX(self.x + dx)
+    self:setY(self.y + dy)
+    self:clampToScreen()
+    return true
+end
+
 function SettingsPopup:onMouseUp(x, y)
+
+    if self.moving then
+        local travelled = self.moved
+        self.moving = false
+        self.moved = false
+        if travelled then return true end
+    end
     if self.dragRow ~= nil then
         self:commitDrag()
         return true
@@ -698,19 +728,15 @@ function SettingsPopup:onMouseUp(x, y)
 end
 
 function SettingsPopup:onMouseUpOutside(_x, _y)
+    self.moving = false
+    self.moved = false
     if self.dragRow ~= nil then self:commitDrag() end
 end
 
-function SettingsPopup:onMouseDownOutside(_x, _y)
-
-    if KeyCapture ~= nil and KeyCapture.isOpen ~= nil and KeyCapture.isOpen() then
-        return
-    end
-    self:close()
+function SettingsPopup.onMouseDownOutside(_self, _x, _y)
 end
 
-function SettingsPopup:onRightMouseDownOutside(_x, _y)
-    self:close()
+function SettingsPopup.onRightMouseDownOutside(_self, _x, _y)
 end
 
 function SettingsPopup:onRightMouseDown(_x, _y)
@@ -912,4 +938,5 @@ function SettingsPopup.toggleFor(toolbar)
     return popup
 end
 
-PopupRegistry.register("SettingsPopup", SettingsPopup.current)
+PopupRegistry.register("SettingsPopup", SettingsPopup.current,
+    { dismissable = false })

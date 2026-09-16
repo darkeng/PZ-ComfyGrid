@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.3
+    Version: 1.8.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -79,9 +79,10 @@ Events.OnGameBoot.Add(function()
             and ComfyGrid.UI.EquipWindow or nil
         if EquipWindow ~= nil then pcall(EquipWindow.follow, self) end
 
-        local ContainerWindow = ComfyGrid.UI ~= nil
-            and ComfyGrid.UI.ContainerWindow or nil
-        if ContainerWindow ~= nil then pcall(ContainerWindow.follow, self) end
+        local ZOrder = Chrome ~= nil and Chrome.ZOrder or nil
+        if ZOrder ~= nil and ZOrder.enforce ~= nil then
+            pcall(ZOrder.enforce, self.player)
+        end
 
         local mute = self.inventoryPane ~= nil
             and self.inventoryPane.mode == "comfy"
@@ -92,7 +93,22 @@ Events.OnGameBoot.Add(function()
             self.drawText = noop
             self.drawTextRight = noop
         end
+
+        local mirrorPlate = mute and WindowChrome ~= nil
+            and WindowChrome.onLeft ~= nil and WindowChrome.onLeft()
+            and self.buttonSize ~= nil
+        local savedRect
+        if mirrorPlate then
+            savedRect = rawget(self, "drawRect")
+            local ogRect = self.drawRect
+            local bs = self.buttonSize
+            self.drawRect = function(sel, x, y, w, h, ...)
+                if w == bs and x == sel:getWidth() - bs then x = 0 end
+                return ogRect(sel, x, y, w, h, ...)
+            end
+        end
         local ok, err = pcall(og_pagePrerender, self)
+        if mirrorPlate then self.drawRect = savedRect end
         if mute then
             self.drawText = savedText
             self.drawTextRight = savedRight
@@ -104,6 +120,10 @@ Events.OnGameBoot.Add(function()
             if WindowChrome ~= nil and WindowChrome.resync ~= nil then
                 pcall(WindowChrome.resync, self)
             end
+        end
+
+        if WindowChrome ~= nil and WindowChrome.side ~= nil then
+            pcall(WindowChrome.side, self)
         end
         if not ok then error(err) end
     end
@@ -119,11 +139,21 @@ Events.OnGameBoot.Add(function()
             savedBorder = rawget(self, "drawRectBorder")
             local ogBorder = self.drawRectBorder
             local height = self:getHeight()
+
+            local chr = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
+            local wc = chr ~= nil and chr.WindowChrome or nil
+            local bs = nil
+            if wc ~= nil and wc.onLeft ~= nil and wc.onLeft() then
+                bs = self.buttonSize
+            end
             self.drawRectBorder = function(sel, x, y, w, h, ...)
 
                 if x == 0 and y > 0 and w == sel:getWidth()
                         and (y + h) == height then
                     return
+                end
+                if bs ~= nil and w == bs and x == sel:getWidth() - bs then
+                    x = 0
                 end
                 return ogBorder(sel, x, y, w, h, ...)
             end
@@ -145,6 +175,29 @@ Events.OnGameBoot.Add(function()
         if pane == nil or pane.mode ~= "comfy" then return nil end
         local Interact = ComfyGrid.Interact
         return Interact ~= nil and Interact[name] or nil
+    end
+
+    local og_pageWheel = ISInventoryPage.onMouseWheel
+    function ISInventoryPage:onMouseWheel(del)
+        local pane = self.inventoryPane
+        local Chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
+        local WindowChrome = Chrome ~= nil and Chrome.WindowChrome or nil
+        local bs = self.buttonSize
+        local mirror = pane ~= nil and pane.mode == "comfy" and bs ~= nil
+            and WindowChrome ~= nil and WindowChrome.onLeft ~= nil
+            and WindowChrome.onLeft()
+        if not mirror then return og_pageWheel(self, del) end
+        local over = self:getMouseX() < bs
+        local saved = rawget(self, "getMouseX")
+        self.getMouseX = function(sel)
+
+            if over then return sel:getWidth() end
+            return 0
+        end
+        local ok, res = pcall(og_pageWheel, self, del)
+        self.getMouseX = saved
+        if not ok then error(res) end
+        return res
     end
 
     local function raiseHintBar(page)

@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.3
+    Version: 1.8.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/Chrome/WindowStrip"
@@ -78,6 +79,29 @@ function WindowChrome.resync(page)
     if bs == nil or page.onInventoryContainerSizeChanged == nil then return end
     if pane.width == page.width - bs then return end
     pcall(page.onInventoryContainerSizeChanged, page)
+end
+
+function WindowChrome.onLeft()
+    local S = ComfyGrid.Settings
+    if S == nil or S.get == nil then return false end
+    return S.get("CONTAINERS_LEFT") == true
+end
+
+function WindowChrome.side(page)
+    local panel = page.containerButtonPanel
+    local pane = page.inventoryPane
+    if panel == nil or pane == nil or page.width == nil then return end
+    local bs = page.buttonSize
+    if bs == nil or bs <= 0 then return end
+    local left = pane.mode == "comfy" and WindowChrome.onLeft()
+    local px, vx = page.width - bs, 0
+    if left then px, vx = 0, bs end
+    if panel.x ~= px then panel:setX(px) end
+    if pane.x ~= vx then pane:setX(vx) end
+
+    local wantRight = not left
+    if panel.anchorLeft ~= left then panel.anchorLeft = left end
+    if panel.anchorRight ~= wantRight then panel.anchorRight = wantRight end
 end
 
 function WindowChrome.seam(page)

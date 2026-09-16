@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.3
+    Version: 1.8.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -211,13 +211,6 @@ function ContainerWindow:clampToScreen()
     if y < 0 then y = 0 end
     if x ~= self.x then self:setX(x) end
     if y ~= self.y then self:setY(y) end
-end
-
-function ContainerWindow.follow(page)
-    local win = windows[page ~= nil and page.player or 0]
-    if win == nil or not win:getIsVisible() then return end
-    local Z = ComfyGrid.UI.Chrome and ComfyGrid.UI.Chrome.ZOrder
-    if Z ~= nil and Z.enforce ~= nil then pcall(Z.enforce, win.playerNum) end
 end
 
 local function prerenderImpl(self)

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.3
+    Version: 1.8.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -31,6 +31,8 @@ Settings.defaults = {
     STACK_BY_TYPE = true,
 
     STATUS_BAR = true,
+
+    CONTAINERS_LEFT = false,
     HOTBAR_SECTION = false,
     HOTBAR_BAR = true,
     EQUIPMENT_VIEW = "window",
@@ -123,6 +125,11 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptEquipmentAvatar",
       tipKey = "IGUI_ComfyGrid_OptEquipmentAvatarTip",
       tooltip = "How your character is drawn." },
+
+    { key = "CONTAINERS_LEFT",    kind = "tickbox", group = "general",
+      nameKey = "IGUI_ComfyGrid_OptContainersLeft",
+      tipKey = "IGUI_ComfyGrid_OptContainersLeftTip",
+      tooltip = "The column of container buttons moves to the left edge of the window." },
     { key = "HOTBAR_SECTION",     kind = "tickbox", group = "general",
       nameKey = "IGUI_ComfyGrid_OptHotbarSection",
       tipKey = "IGUI_ComfyGrid_OptHotbarSectionTip",

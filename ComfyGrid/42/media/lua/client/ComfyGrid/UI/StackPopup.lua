@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.3
+    Version: 1.8.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Core/Text"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/UI/Style"
@@ -25,6 +26,7 @@ ComfyGrid.UI = ComfyGrid.UI or {}
 
 local Log = ComfyGrid.Core.Log
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
+local Text = ComfyGrid.Core.Text
 local ItemStack = ComfyGrid.Model.ItemStack
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
@@ -45,6 +47,14 @@ local MIN_COLS = 2
 local MAX_COLS = 6
 local MAX_VISIBLE_ROWS = 6
 local PAD_X = 4
+
+local function closeChip()
+    return math.max(14, math.floor(Style.FONT_H * 0.9 + 0.5))
+end
+
+local function closeZoneLeft(w)
+    return w - (closeChip() + 12)
+end
 
 local MARQUEE_THRESHOLD = 6
 local DRAG_SOURCE_WASH_ALPHA = 0.6
@@ -342,19 +352,37 @@ local function renderImpl(self)
     local font = Style.FONT
 
     local front = ItemStack.frontItem(stack, inventory)
-    local title = (front ~= nil and front:getName() or self.itemType)
-        .. " x" .. tostring(stack.count)
+    local name = front ~= nil and front:getName() or self.itemType
+    local suffix = " x" .. tostring(stack.count)
     if font ~= nil then
 
         local titleY = math.floor((self.titleH - 1 - Style.FONT_H) * 0.5)
         if titleY < 2 then titleY = 2 end
-        self:drawText(title, PAD_X + 2, titleY, text.r, text.g, text.b,
+
+        local tm = getTextManager and getTextManager() or nil
+        local suffixW = 0
+        if tm ~= nil then
+            local okm, m = pcall(tm.MeasureStringX, tm, font, suffix)
+            if okm then suffixW = m end
+        end
+        local budget = closeZoneLeft(w) - (PAD_X + 2) - 6 - suffixW
+        if budget < 1 then budget = 1 end
+        local fitGen = Style.FONT_H * 100000 + math.floor(w)
+        if self._titleFit == nil or self._titleFitGen ~= fitGen
+                or self._titleFitSrc ~= name or self._titleFitSuffix ~= suffix
+                then
+            self._titleFitGen = fitGen
+            self._titleFitSrc = name
+            self._titleFitSuffix = suffix
+            self._titleFit = Text.fitEllipsis(name, font, budget, 60) .. suffix
+        end
+        self:drawText(self._titleFit, PAD_X + 2, titleY, text.r, text.g, text.b,
             text.a or 1, font)
 
         local closeTex = Draw ~= nil and Draw.closeTexture ~= nil
             and Draw.closeTexture() or nil
         if closeTex ~= nil and sf ~= nil then
-            local chip = math.max(14, math.floor(Style.FONT_H * 0.9 + 0.5))
+            local chip = closeChip()
             local cxr = w - 6 - chip
             local cyr = math.floor((self.titleH - 1 - chip) * 0.5)
             Draw.disc(self, cxr, cyr, chip, 1, sf.line)
@@ -829,9 +857,7 @@ local function mouseUpImpl(self, x, y)
         end
 
         if not self.dragDidStart and y < self.titleH
-                and x > self.width
-                    - (math.max(14, math.floor(Style.FONT_H * 0.9 + 0.5))
-                        + 12) then
+                and x > closeZoneLeft(self.width) then
             self:close()
         end
     end

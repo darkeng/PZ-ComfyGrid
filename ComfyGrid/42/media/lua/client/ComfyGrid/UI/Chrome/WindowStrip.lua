@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.7.3
+    Version: 1.8.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -37,6 +37,27 @@ local RIGHT_CHIPS = {
       tipKey = "IGUI_ComfyGrid_ChipPinTip",
       tipEN = "Keep this window open.",
       active = function(page) return page.pin == true end },
+
+    { id = "layout", tex = function() return Draw.layersTexture() end,
+      tipKey = "IGUI_ComfyGrid_ChipLayoutSectionsTip",
+      tipEN = "Show every container within reach.",
+      tipFor = function(_page)
+          local S = ComfyGrid.Settings
+          local v = S ~= nil and S.get ~= nil and S.get("LOOT_LAYOUT") or nil
+          if v == "sections" then
+              return "IGUI_ComfyGrid_ChipLayoutSingleTip",
+                  "Show one container at a time."
+          end
+          return "IGUI_ComfyGrid_ChipLayoutSectionsTip",
+              "Show every container within reach."
+      end,
+
+      when = function(page) return page.onCharacter ~= true end,
+
+      active = function(_page)
+          local S = ComfyGrid.Settings
+          return S ~= nil and S.get ~= nil and S.get("LOOT_LAYOUT") == "sections"
+      end },
 
     { id = "equip", tex = function() return Draw.personTexture() end,
       tipKey = "IGUI_ComfyGrid_ChipEquipTip",
@@ -183,6 +204,16 @@ function ACTIONS.pin(self)
     if fn == nil then return end
     local ok, err = pcall(fn, page)
     if not ok then Log.warn("WindowStrip: pin failed: " .. tostring(err)) end
+end
+
+function ACTIONS.layout(_self)
+    local S = ComfyGrid.Settings
+    if S == nil or S.get == nil or S.set == nil then return end
+
+    local want = "sections"
+    if S.get("LOOT_LAYOUT") == "sections" then want = "single" end
+    local ok, err = pcall(S.set, "LOOT_LAYOUT", want)
+    if not ok then Log.warn("WindowStrip: layout failed: " .. tostring(err)) end
 end
 
 function ACTIONS.equip(self)

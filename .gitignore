@@ -1,0 +1,6 @@
+# El pack de iconos son ~4,7 MB de binario DERIVADOS de los propios
+# UI.pack/UI2.pack del juego: lo genera dev/icon-pipeline/build_pack.py en
+# el repo de desarrollo antes de cada publicacion. Guardarlo aqui meteria
+# una copia nueva en la historia por version, para siempre, y este espejo
+# es el registro del CODIGO. Quien clone puede regenerarlo.
+ComfyGrid/42/media/texturepacks/*.pack
