@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.1
+    Version: 1.8.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -12,6 +12,7 @@ require "ComfyGrid/Core/Prefs"
 require "ComfyGrid/Compat/Warnings"
 require "ComfyGrid/UI/Themes"
 require "ComfyGrid/UI/Draw"
+require "ComfyGrid/UI/IconWarmup"
 require "ComfyGrid/UI/Chrome/PopupRegistry"
 require "ComfyGrid/UI/Chrome/HoverTip"
 require "ComfyGrid/UI/Chrome/WindowChrome"
@@ -46,5 +47,7 @@ if not ComfyGrid._bootHooked then
 
     Events.OnGameStart.Add(function()
         Log.info("Comfy Grid active in this session (OnGameStart)")
+
+        ComfyGrid.UI.IconWarmup.start()
     end)
 end
