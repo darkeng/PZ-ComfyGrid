@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.4
+    Version: 1.8.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -124,6 +124,21 @@ local metricsGen = 0
 Style.onScaleChanged(function()
     metricsGen = metricsGen + 1
 end)
+
+local nameGen = 0
+
+function ContainerPanel.invalidateNames()
+    nameGen = nameGen + 1
+end
+
+if not ComfyGrid._containerNamesHooked then
+    ComfyGrid._containerNamesHooked = true
+    Events.OnRefreshInventoryWindowContainers.Add(function(_page, stage)
+        if stage ~= "end" then return end
+        local CP = ComfyGrid.UI and ComfyGrid.UI.ContainerPanel
+        if CP ~= nil and CP.invalidateNames ~= nil then CP.invalidateNames() end
+    end)
+end
 
 local WEIGHT_TEMPLATE = "999.9/999"
 local WEIGHT_MARGIN = 12
@@ -285,6 +300,12 @@ local function resolveDisplayName(inventory, playerNum)
     end
 
     local invType = inventory:getType()
+
+    local okParent, parent = pcall(inventory.getParent, inventory)
+    if okParent and parent ~= nil and inventory.getCustomName ~= nil then
+        local okC, custom = pcall(inventory.getCustomName, inventory)
+        if okC and custom ~= nil and custom ~= "" then return custom end
+    end
     return getTextOrNull("IGUI_ContainerTitle_" .. invType) or invType
 end
 
@@ -305,6 +326,7 @@ local function applyModel(self, model)
 
         local ok, name = pcall(resolveDisplayName, model.inventory, self.playerNum)
         self.headerName = (ok and name) or "?"
+        self._nameGen = nameGen
     end
 end
 
@@ -423,6 +445,14 @@ function ContainerPanel:prerender()
         local actionsLeft = drawActions(self, transferLeft, 0, headerH)
         if actionsLeft ~= nil then budgetRight = actionsLeft - 6 end
 
+        if self._nameGen ~= nameGen then
+            self._nameGen = nameGen
+            if self.model ~= nil then
+                local okN, freshName = pcall(resolveDisplayName,
+                    self.model.inventory, self.playerNum)
+                if okN and freshName ~= nil then self.headerName = freshName end
+            end
+        end
         local shown = self.headerName
         local status = ContainerStatus ~= nil and self.model ~= nil
             and ContainerStatus.of(self.model.inventory) or nil

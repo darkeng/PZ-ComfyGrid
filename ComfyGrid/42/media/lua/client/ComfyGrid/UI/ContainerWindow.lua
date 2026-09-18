@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.4
+    Version: 1.8.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -95,12 +95,35 @@ local function pageShowing(playerNum, cont)
     return nil
 end
 
-local function itemIsGone(item)
+local function sourceStillOnScreen(self)
+    local inv = self.openedIn
+    if inv == nil then return true end
+    local seat = self.playerNum or 0
+    for _, get in ipairs({ getPlayerInventory, getPlayerLoot }) do
+        local okP, page = pcall(get, seat)
+        local pane = okP and page ~= nil and page.inventoryPane or nil
+        local host = pane ~= nil and pane.comfyHost or nil
+        if host ~= nil and host.showsInventory ~= nil then
+            local okS, shown = pcall(host.showsInventory, host, inv)
+            if okS and shown then return true end
+        end
+    end
+    if ContainerWindow.showsInventory ~= nil then
+        local okC, shown = pcall(ContainerWindow.showsInventory, seat, inv)
+        if okC and shown then return true end
+    end
+    return false
+end
+
+local function itemIsGone(item, playerNum)
     if item == nil then return true end
     local okC, cont = pcall(item.getContainer, item)
     if not okC or cont == nil then return true end
-    local okE, eq = pcall(item.isEquipped, item)
-    if okE and eq then return true end
+    local playerObj = playerNum ~= nil and getSpecificPlayer(playerNum) or nil
+    if playerObj ~= nil then
+        local okE, eq = pcall(playerObj.isEquipped, playerObj, item)
+        if okE and eq then return true end
+    end
     return false
 end
 
@@ -253,8 +276,17 @@ local function prerenderImpl(self)
 
     local inv = inventoryOf(self.item)
     if inv == nil then return ContainerWindow.closeFor(self.playerNum) end
-    if itemIsGone(self.item) then
+    if itemIsGone(self.item, self.playerNum) then
         return ContainerWindow.closeFor(self.playerNum)
+    end
+
+    if sourceStillOnScreen(self) then
+        self._offScreenFrames = nil
+    else
+        self._offScreenFrames = (self._offScreenFrames or 0) + 1
+        if self._offScreenFrames >= 2 then
+            return ContainerWindow.closeFor(self.playerNum)
+        end
     end
 
     local okC, cont = pcall(self.item.getContainer, self.item)

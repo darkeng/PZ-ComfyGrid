@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.4
+    Version: 1.8.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -947,8 +947,11 @@ local function openStackSurface(self, stack)
         return
     end
 
-    local okE, equipped = pcall(item.isEquipped, item)
-    if okE and equipped then return end
+    local playerObj = getSpecificPlayer(self.playerNum)
+    if playerObj ~= nil then
+        local okE, equipped = pcall(playerObj.isEquipped, playerObj, item)
+        if okE and equipped then return end
+    end
     if alreadyShown(inv) then return end
 
     local cx, cy = Style.pixelForSlot(stack.slot, self.cols or 1)
@@ -969,8 +972,12 @@ local function wouldOpenSomething(self, stack)
     if not okI or item == nil then return false end
     local inv = CW.inventoryOf(item)
     if inv == nil then return false end
-    local okE, equipped = pcall(item.isEquipped, item)
-    if okE and equipped then return false end
+
+    local playerObj = getSpecificPlayer(self.playerNum)
+    if playerObj ~= nil then
+        local okE, equipped = pcall(playerObj.isEquipped, playerObj, item)
+        if okE and equipped then return false end
+    end
     return not alreadyShown(inv)
 end
 

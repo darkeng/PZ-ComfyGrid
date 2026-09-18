@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.4
+    Version: 1.8.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -91,6 +91,21 @@ Style.onScaleChanged(function()
     titleInfo = nil
 end)
 
+local nameGen = 0
+
+function PocketsPanel.invalidateNames()
+    nameGen = nameGen + 1
+end
+
+if not ComfyGrid._pocketNamesHooked then
+    ComfyGrid._pocketNamesHooked = true
+    Events.OnRefreshInventoryWindowContainers.Add(function(_page, stage)
+        if stage ~= "end" then return end
+        local PP = ComfyGrid.UI and ComfyGrid.UI.PocketsPanel
+        if PP ~= nil and PP.invalidateNames ~= nil then PP.invalidateNames() end
+    end)
+end
+
 local lastPrerenderError = nil
 local lastRenderError = nil
 
@@ -162,6 +177,20 @@ local function prerenderImpl(self)
             islands[i] = { inv = liveInv[i], gv = gv,
                 label = resolveLabel(liveInv[i]), fitFor = nil, fitName = nil }
             gridViews[i] = gv
+        end
+    end
+
+    if self._nameGen ~= nameGen then
+        self._nameGen = nameGen
+        for i = 1, #islands do
+            local isl = islands[i]
+            if isl ~= nil and isl.inv ~= nil then
+                local fresh = resolveLabel(isl.inv)
+                if fresh ~= nil and fresh ~= isl.label then
+                    isl.label = fresh
+                    isl.fitFor = nil
+                end
+            end
         end
     end
 

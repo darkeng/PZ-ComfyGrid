@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.4
+    Version: 1.8.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -17,6 +17,7 @@ require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
 require "ComfyGrid/Interact/Transfer"
+require "ComfyGrid/Interact/Unequip"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -30,6 +31,7 @@ local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local StackRenderer = ComfyGrid.UI.StackRenderer
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
 local Transfer = ComfyGrid.Interact.Transfer
+local Unequip = ComfyGrid.Interact.Unequip
 
 local EquipmentStrip = ISUIElement:derive("ComfyEquipStrip")
 ComfyGrid.UI.EquipmentStrip = EquipmentStrip
@@ -718,6 +720,8 @@ local function mouseDownImpl(self, x, y)
     local top = entry ~= nil and entry.items[1] or nil
     if top == nil then return end
 
+    if Unequip.pressClaims(top, self.playerNum, "unequip") then return end
+
     local payload = { VanillaStacks.fromItems({ top }) }
     if payload[1] == nil then return end
     DragAndDrop.prepareDrag(self, payload, x, y)
@@ -726,6 +730,19 @@ local function mouseDownImpl(self, x, y)
 end
 
 local function mouseUpImpl(self, x, y)
+
+    if not DragAndDrop.isDragging() then
+        local upIdx = tileAt(self, x, y)
+        local upEntry = upIdx ~= nil and self.entries[upIdx + 1] or nil
+        local upTop = upEntry ~= nil and upEntry.items[1] or nil
+        if upTop ~= nil
+                and Unequip.releaseClaims(self, upTop, self.playerNum, "unequip") then
+            if DragAndDrop.isDragOwner(self) then DragAndDrop.endDrag() end
+            self.pressedIdx = nil
+            self.pressedId = nil
+            return
+        end
+    end
     if DragAndDrop.isDragging() then
         local poked = x == 0 and y == 0 and DragAndDrop.isDragOwner(self)
             and (self:getMouseX() ~= 0 or self:getMouseY() ~= 0)

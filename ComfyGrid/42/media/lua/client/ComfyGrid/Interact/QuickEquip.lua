@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.4
+    Version: 1.8.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -137,12 +137,60 @@ local function hoveredInInspector()
         popup.model.inventory, popup.hostPane
 end
 
+local function hoveredInEquipment()
+    local LP = ComfyGrid.UI and ComfyGrid.UI.LayersPopup
+    local popup = LP ~= nil and LP.current ~= nil and LP.current() or nil
+    if popup ~= nil and popup.isMouseOver ~= nil and popup:isMouseOver()
+            and popup.hoveredItem ~= nil then
+        local layer = popup:hoveredItem()
+        if layer ~= nil then return layer, "unequip" end
+    end
+    local Tooltip = ComfyGrid.Interact and ComfyGrid.Interact.Tooltip
+    if Tooltip == nil or Tooltip.hoveredEquipment == nil then return nil end
+    local page = getPlayerInventory(0)
+    local pane = page ~= nil and page.inventoryPane or nil
+    if pane == nil then return nil end
+    return Tooltip.hoveredEquipment(pane)
+end
+
+local function dryOffWith(playerObj, item)
+    local okType, itemType = pcall(item.getType, item)
+    if not okType or (itemType ~= "BathTowel" and itemType ~= "DishCloth") then
+        return false
+    end
+    if CharacterStat == nil then return false end
+    local okWet, wetness = pcall(function()
+        return playerObj:getStats():get(CharacterStat.WETNESS)
+    end)
+    if not okWet or type(wetness) ~= "number" or wetness <= 0 then
+        return false
+    end
+
+    local ok, err = pcall(ISInventoryPaneContextMenu.dryMyself, item, 0)
+    if not ok then
+        if err ~= lastError then
+            lastError = err
+            Log.error("QuickEquip dry-off failed: " .. tostring(err))
+        end
+        return false
+    end
+    return true
+end
+
 local function equipHovered()
     local playerObj = getSpecificPlayer(0)
     if playerObj == nil then return false end
 
     local dd = ComfyGrid.Interact.DragAndDrop
     if dd ~= nil and dd.isDragging ~= nil and dd.isDragging() then return false end
+
+    local wornItem, verb = hoveredInEquipment()
+    if wornItem ~= nil then
+        local Unequip = ComfyGrid.Interact and ComfyGrid.Interact.Unequip
+        if Unequip == nil or Unequip.sendBack == nil then return false end
+        return Unequip.sendBack({ wornItem }, 0, verb) > 0
+    end
+
     local Tooltip = ComfyGrid.Interact.Tooltip
     if Tooltip == nil or Tooltip.hoveredStackOf == nil then return false end
 
@@ -189,6 +237,8 @@ local function equipHovered()
 
         local okMap, isMap = pcall(item.IsMap, item)
         if okMap and isMap then return true end
+
+        if dryOffWith(playerObj, item) then return true end
 
         if isHandEquippable(item) then
             equipInHand(playerObj, item)

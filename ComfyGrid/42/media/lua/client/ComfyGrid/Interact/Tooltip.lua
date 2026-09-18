@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.4
+    Version: 1.8.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -98,6 +98,28 @@ local function equipWindowStrip(pane)
     local win = EquipWindow.windowFor(page.player)
     if win == nil or not win:getIsVisible() then return nil end
     return win.content
+end
+
+function Tooltip.hoveredEquipment(pane)
+    if pane == nil then return nil end
+    local host = pane.comfyHost
+    local strips = host ~= nil and host.strips or nil
+    local strip = strips ~= nil and strips.equipStrip or nil
+    if strip ~= nil and strip.hoveredItem ~= nil then
+        local it = strip:hoveredItem()
+        if it ~= nil then return it, "unequip" end
+    end
+    local hotbar = strips ~= nil and strips.hotbarStrip or nil
+    if hotbar ~= nil and hotbar.hoveredItem ~= nil then
+        local it = hotbar:hoveredItem()
+        if it ~= nil then return it, "detach" end
+    end
+    local zones = equipWindowStrip(pane)
+    if zones ~= nil and zones.hoveredItem ~= nil then
+        local it = zones:hoveredItem()
+        if it ~= nil then return it, "unequip" end
+    end
+    return nil
 end
 
 local function stackWeight(pane, stack, inventory)
@@ -202,24 +224,8 @@ local function updateImpl(pane)
         end
 
         if item == nil then
-            local host = pane.comfyHost
-            local strips = host ~= nil and host.strips or nil
-            local strip = strips ~= nil and strips.equipStrip or nil
-            if strip ~= nil and strip.hoveredItem ~= nil then
-                item = strip:hoveredItem()
-            end
-            if item == nil then
-                local hotbar = strips ~= nil and strips.hotbarStrip or nil
-                if hotbar ~= nil and hotbar.hoveredItem ~= nil then
-                    item = hotbar:hoveredItem()
-                end
-            end
-            if item == nil then
-                local zones = equipWindowStrip(pane)
-                if zones ~= nil and zones.hoveredItem ~= nil then
-                    item = zones:hoveredItem()
-                end
-            end
+
+            item = Tooltip.hoveredEquipment(pane)
         end
     end
 

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.4
+    Version: 1.8.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -16,6 +16,7 @@ require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
 require "ComfyGrid/Interact/Transfer"
+require "ComfyGrid/Interact/Unequip"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -27,6 +28,7 @@ local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local StackRenderer = ComfyGrid.UI.StackRenderer
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
 local Transfer = ComfyGrid.Interact.Transfer
+local Unequip = ComfyGrid.Interact.Unequip
 
 local HotbarStrip = ISUIElement:derive("ComfyHotbarStrip")
 ComfyGrid.UI.HotbarStrip = HotbarStrip
@@ -407,6 +409,8 @@ local function mouseDownImpl(self, x, y)
         and hotbar.attachedItems[idx + 1] or nil
     if item == nil then return end
 
+    if Unequip.pressClaims(item, self.playerNum, "detach") then return end
+
     local payload = { VanillaStacks.fromItems({ item }) }
     if payload[1] == nil then return end
     DragAndDrop.prepareDrag(self, payload, x, y)
@@ -465,6 +469,20 @@ function HotbarStrip:resolvePadReslot(fromIdx, toIdx, itemId)
 end
 
 local function mouseUpImpl(self, x, y)
+
+    if not DragAndDrop.isDragging() then
+        local upIdx = tileAt(self, x, y)
+        local upBar = upIdx ~= nil and hotbarOf(self) or nil
+        local upItem = upBar ~= nil and upBar.attachedItems ~= nil
+            and upBar.attachedItems[upIdx + 1] or nil
+        if upItem ~= nil
+                and Unequip.releaseClaims(self, upItem, self.playerNum, "detach") then
+            if DragAndDrop.isDragOwner(self) then DragAndDrop.endDrag() end
+            self.pressedIdx = nil
+            self.pressedId = nil
+            return
+        end
+    end
     if DragAndDrop.isDragging() then
         local poked = x == 0 and y == 0 and DragAndDrop.isDragOwner(self)
             and (self:getMouseX() ~= 0 or self:getMouseY() ~= 0)

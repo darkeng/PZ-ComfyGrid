@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.4
+    Version: 1.8.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -17,6 +17,7 @@ require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
 require "ComfyGrid/Interact/Transfer"
+require "ComfyGrid/Interact/Unequip"
 require "ComfyGrid/Interact/Pad/PadPopup"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
@@ -29,6 +30,7 @@ local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local StackRenderer = ComfyGrid.UI.StackRenderer
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
+local Unequip = ComfyGrid.Interact.Unequip
 local PadPopup = ComfyGrid.Interact.PadPopup
 
 local LayersPopup = ISPanel:derive("ComfyLayersPopup")
@@ -329,6 +331,8 @@ local function renderImpl(self)
     local pixelForSlot = Style.pixelForSlot
     ctx.view = self
     ctx.playerNum = self.playerNum
+
+    local currentAction = StackRenderer.currentActionOf(self.playerNum)
     for i = 1, #tiles do
         local tile = tiles[i]
         local item = tile.item
@@ -341,6 +345,10 @@ local function renderImpl(self)
             ctx.x = bx + tx
             ctx.y = by + ty
             StackRenderer.draw(ctx)
+            local jd = StackRenderer.jobDeltaOf(item, currentAction)
+            if jd ~= nil then
+                StackRenderer.drawJobOverlay(self, bx + tx, by + ty, jd)
+            end
         end
     end
 
@@ -420,6 +428,8 @@ local function mouseDownImpl(self, x, y)
     local item = liveTileItem(self, idx)
     if item == nil then return end
 
+    if Unequip.pressClaims(item, self.playerNum, "unequip") then return end
+
     local payload = { VanillaStacks.fromItems({ item }) }
     if payload[1] == nil then return end
     DragAndDrop.prepareDrag(self, payload, x, y)
@@ -427,6 +437,17 @@ local function mouseDownImpl(self, x, y)
 end
 
 local function mouseUpImpl(self, x, y)
+
+    if not DragAndDrop.isDragging() then
+        local upIdx = tileAt(self, x, y)
+        local upItem = upIdx ~= nil and liveTileItem(self, upIdx) or nil
+        if upItem ~= nil
+                and Unequip.releaseClaims(self, upItem, self.playerNum, "unequip") then
+            if DragAndDrop.isDragOwner(self) then DragAndDrop.endDrag() end
+            self.pressedId = nil
+            return
+        end
+    end
     if DragAndDrop.isDragging() then
         if DragAndDrop.isDragOwner(self) then
             DragAndDrop.endDrag()
