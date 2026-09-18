@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.3
+    Version: 1.8.4
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -16,6 +16,7 @@ require "ComfyGrid/UI/Chrome/PopupRegistry"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
+require "ComfyGrid/Interact/Transfer"
 require "ComfyGrid/Interact/Pad/PadPopup"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
@@ -100,6 +101,11 @@ function LayersPopup:new(x, y, strip, groupKey)
             break
         end
         node = node.parent
+    end
+
+    if o.hostPane == nil then
+        local okP, page = pcall(getPlayerInventory, o.playerNum)
+        if okP and page ~= nil then o.hostPane = page.inventoryPane end
     end
     o.titleH = math.max(18, Style.FONT_H + 4, math.floor(Style.CELL / 2))
 
@@ -438,8 +444,24 @@ local function mouseUpImpl(self, x, y)
     self.pressedId = nil
 end
 
-function LayersPopup:onComfyDragCancelled()
+local function dragCancelImpl(self)
+    local id = self.pressedId
     self.pressedId = nil
+    if id == nil then return end
+    if not DragAndDrop.releaseDropsToFloor(self.playerNum) then return end
+    local playerObj = getSpecificPlayer(self.playerNum)
+    if playerObj == nil then return end
+    local Transfer = ComfyGrid.Interact and ComfyGrid.Interact.Transfer
+    if Transfer == nil or Transfer.dropToFloor == nil then return end
+    local item = playerObj:getInventory():getItemWithID(id)
+    if item ~= nil then
+        Transfer.dropToFloor({ item }, playerObj)
+    end
+end
+
+function LayersPopup:onComfyDragCancelled()
+    local ok, err = pcall(dragCancelImpl, self)
+    if not ok then reportMouseError(err) end
 end
 
 local function mouseUpOutsideImpl(self, _x, _y)
