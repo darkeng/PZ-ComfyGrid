@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.2
+    Version: 1.8.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -275,6 +275,27 @@ local function syncSelection(self, stack)
     if self.selectionCount <= 0 then clearSelection(self) end
 end
 
+local function stillOnScreen(self)
+    local inv = self.model ~= nil and self.model.inventory or nil
+    if inv == nil then return false end
+    local seat = self.playerNum or 0
+    for _, get in ipairs({ getPlayerInventory, getPlayerLoot }) do
+        local okP, page = pcall(get, seat)
+        local pane = okP and page ~= nil and page.inventoryPane or nil
+        local host = pane ~= nil and pane.comfyHost or nil
+        if host ~= nil and host.showsInventory ~= nil then
+            local okS, shown = pcall(host.showsInventory, host, inv)
+            if okS and shown then return true end
+        end
+    end
+    local CW = ComfyGrid.UI ~= nil and ComfyGrid.UI.ContainerWindow or nil
+    if CW ~= nil and CW.showsInventory ~= nil then
+        local okC, shown = pcall(CW.showsInventory, seat, inv)
+        if okC and shown then return true end
+    end
+    return false
+end
+
 local function prerenderImpl(self)
 
     self:flushPendingClick()
@@ -287,6 +308,16 @@ local function prerenderImpl(self)
     if (stack.count or 0) < 2 then
         self:close()
         return
+    end
+
+    if stillOnScreen(self) then
+        self._offScreenFrames = nil
+    else
+        self._offScreenFrames = (self._offScreenFrames or 0) + 1
+        if self._offScreenFrames >= 2 then
+            self:close()
+            return
+        end
     end
 
     local Draw = ComfyGrid.UI.Draw

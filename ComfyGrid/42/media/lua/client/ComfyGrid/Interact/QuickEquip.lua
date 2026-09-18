@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.2
+    Version: 1.8.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -121,39 +121,59 @@ local function equippableIn(stack, inventory)
     return nil
 end
 
+local function hoveredInInspector()
+    local ui = ComfyGrid.UI
+    if ui == nil then return nil, nil, nil end
+    local popup = nil
+    local sp = ui.StackPopup
+    if sp ~= nil and sp.current ~= nil then popup = sp.current() end
+    if popup == nil then return nil, nil, nil end
+    if popup.hoveredItem == nil or popup.model == nil then return nil, nil, nil end
+    local okI, item = pcall(popup.hoveredItem, popup)
+    if not okI or item == nil then return nil, nil, nil end
+    local okId, id = pcall(item.getID, item)
+    if not okId or id == nil then return nil, nil, nil end
+    return { count = 1, itemIDs = { [id] = true } },
+        popup.model.inventory, popup.hostPane
+end
+
 local function equipHovered()
     local playerObj = getSpecificPlayer(0)
-    if playerObj == nil then return end
+    if playerObj == nil then return false end
 
     local dd = ComfyGrid.Interact.DragAndDrop
-    if dd ~= nil and dd.isDragging ~= nil and dd.isDragging() then return end
+    if dd ~= nil and dd.isDragging ~= nil and dd.isDragging() then return false end
     local Tooltip = ComfyGrid.Interact.Tooltip
-    if Tooltip == nil or Tooltip.hoveredStackOf == nil then return end
+    if Tooltip == nil or Tooltip.hoveredStackOf == nil then return false end
 
-    local stack, inventory
-    local page = getPlayerInventory(0)
-    local pane = page ~= nil and page.inventoryPane or nil
-    if pane ~= nil then
-        stack, inventory = Tooltip.hoveredStackOf(pane)
-    end
+    local stack, inventory, pane = hoveredInInspector()
+    local page
     if stack == nil then
-        page = getPlayerLoot(0)
+
+        page = getPlayerInventory(0)
         pane = page ~= nil and page.inventoryPane or nil
         if pane ~= nil then
             stack, inventory = Tooltip.hoveredStackOf(pane)
         end
+        if stack == nil then
+            page = getPlayerLoot(0)
+            pane = page ~= nil and page.inventoryPane or nil
+            if pane ~= nil then
+                stack, inventory = Tooltip.hoveredStackOf(pane)
+            end
+        end
     end
-    if stack == nil or inventory == nil then return end
+    if stack == nil or inventory == nil then return false end
     local front = equippableIn(stack, inventory)
     if front == nil then
 
         local item = ItemStack.frontItem(stack, inventory)
-        if item == nil or isEquippableKind(item) then return end
+        if item == nil or isEquippableKind(item) then return false end
 
         local Consume = ComfyGrid.Interact and ComfyGrid.Interact.Consume
         if Consume ~= nil and Consume.tryUse ~= nil then
             local okC, owned = pcall(Consume.tryUse, playerObj, item, 0)
-            if okC and owned then return end
+            if okC and owned then return true end
         end
 
         local queued = queueLength(playerObj)
@@ -165,13 +185,17 @@ local function equipHovered()
                     .. tostring(errAct))
             end
         end
-        if queueLength(playerObj) > queued then return end
+        if queueLength(playerObj) > queued then return true end
 
         local okMap, isMap = pcall(item.IsMap, item)
-        if okMap and isMap then return end
+        if okMap and isMap then return true end
 
-        if isHandEquippable(item) then equipInHand(playerObj, item) end
-        return
+        if isHandEquippable(item) then
+            equipInHand(playerObj, item)
+            return true
+        end
+
+        return false
     end
 
     local displaced
@@ -181,7 +205,7 @@ local function equipHovered()
         if displaced ~= nil and isHandEquippable(front)
                 and not holdsMoreThan(front, displaced) then
             equipInHand(playerObj, front)
-            return
+            return true
         end
         ISInventoryPaneContextMenu.onWearItems({ front }, 0)
 
@@ -193,7 +217,7 @@ local function equipHovered()
             and front:isTwoHandWeapon() or false
         ISInventoryPaneContextMenu.equipWeapon(front, true, twoHands, 0)
     else
-        return
+        return false
     end
 
     if displaced ~= nil and displaced ~= front
@@ -205,6 +229,7 @@ local function equipHovered()
             grid:claimSlotForItem(displaced:getID(), stack.slot)
         end
     end
+    return true
 end
 
 local SHIELD_MAX_MS = 1500
@@ -254,19 +279,6 @@ function QuickEquip._onTick()
     end
 end
 
-local function overAnyBoard()
-    local Tooltip = ComfyGrid.Interact.Tooltip
-    if Tooltip == nil or Tooltip.isOverBoard == nil then return false end
-    for _, getter in ipairs({ getPlayerInventory, getPlayerLoot }) do
-        local ok, page = pcall(getter, 0)
-        local pane = ok and page ~= nil and page.inventoryPane or nil
-        if pane ~= nil and pane.mode == "comfy" and Tooltip.isOverBoard(pane) then
-            return true
-        end
-    end
-    return false
-end
-
 local function targetKey()
     local KeyBinds = ComfyGrid.Interact and ComfyGrid.Interact.KeyBinds
     if KeyBinds ~= nil and KeyBinds.isRegistered ~= nil
@@ -313,18 +325,19 @@ function QuickEquip._onKey(key)
     local okMods, held = pcall(modifiersHeld)
     if okMods and not held then return end
 
-    local okB, over = pcall(overAnyBoard)
-    if okB and over then
-        local okS, err = pcall(shieldUp, key)
-        if not okS and err ~= lastError then
-            lastError = err
-            Log.error("QuickEquip shield failed: " .. tostring(err))
+    local ok, acted = pcall(equipHovered)
+    if not ok then
+        if acted ~= lastError then
+            lastError = acted
+            Log.error("QuickEquip failed: " .. tostring(acted))
         end
+        return
     end
-    local ok, err = pcall(equipHovered)
-    if not ok and err ~= lastError then
+    if not acted then return end
+    local okS, err = pcall(shieldUp, key)
+    if not okS and err ~= lastError then
         lastError = err
-        Log.error("QuickEquip failed: " .. tostring(err))
+        Log.error("QuickEquip shield failed: " .. tostring(err))
     end
 end
 

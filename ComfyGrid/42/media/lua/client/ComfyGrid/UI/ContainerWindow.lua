@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.2
+    Version: 1.8.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -76,6 +76,20 @@ function ContainerWindow.slotOf(playerNum, item)
     for i = 1, #stacks do
         if stacks[i].itemIDs ~= nil and stacks[i].itemIDs[id] then
             return stacks[i].slot
+        end
+    end
+    return nil
+end
+
+local function pageShowing(playerNum, cont)
+    if cont == nil then return nil end
+    for _, get in ipairs({ getPlayerInventory, getPlayerLoot }) do
+        local okP, pg = pcall(get, playerNum)
+        local pane = okP and pg ~= nil and pg.inventoryPane or nil
+        local host = pane ~= nil and pane.comfyHost or nil
+        if host ~= nil and host.showsInventory ~= nil then
+            local okS, shown = pcall(host.showsInventory, host, cont)
+            if okS and shown then return pg end
         end
     end
     return nil
@@ -162,6 +176,7 @@ function ContainerWindow.closeFor(playerNum)
     local win = windows[playerNum or 0]
     if win == nil then return end
     win.item = nil
+    win.ownerPage = nil
     win:setVisible(false)
 end
 
@@ -187,6 +202,12 @@ function ContainerWindow.openFor(playerNum, item, anchorX, anchorY)
     local okC, cont = pcall(item.getContainer, item)
     win.openedIn = okC and cont or nil
     win.openedSlot = ContainerWindow.slotOf(playerNum, item)
+
+    local okPg, owner = pcall(pageShowing, playerNum, win.openedIn)
+    local fallback = nil
+    local okF, pg = pcall(getPlayerInventory, playerNum)
+    if okF then fallback = pg end
+    win.ownerPage = (okPg and owner) or fallback
     win:setWidth(widthFor(inv))
     win:setVisible(true)
     win:bringToTop()
@@ -217,8 +238,12 @@ local function prerenderImpl(self)
     local panel = self.content
     if panel == nil then return end
 
-    local okP, page = pcall(getPlayerInventory, self.playerNum)
-    if not okP or page == nil or not page:getIsVisible() then
+    local page = self.ownerPage
+    if page == nil then
+        local okP, pg = pcall(getPlayerInventory, self.playerNum)
+        page = okP and pg or nil
+    end
+    if page == nil or not page:getIsVisible() then
         return ContainerWindow.closeFor(self.playerNum)
     end
 

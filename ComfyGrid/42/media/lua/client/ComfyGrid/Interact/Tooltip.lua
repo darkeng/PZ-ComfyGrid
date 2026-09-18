@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.2
+    Version: 1.8.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -98,44 +98,6 @@ local function equipWindowStrip(pane)
     local win = EquipWindow.windowFor(page.player)
     if win == nil or not win:getIsVisible() then return nil end
     return win.content
-end
-
-function Tooltip.isOverBoard(pane)
-    if pane == nil then return false end
-
-    if overContainerWindow(pane) then
-        local gv = containerWindowGrid(pane)
-        if gv ~= nil and gv.isMouseOver ~= nil and gv:isMouseOver() then
-            return true
-        end
-    end
-    local host = pane.comfyHost
-    if host == nil or not host.panelShown then return false end
-    local panels = host.panels
-    local single = panels == nil and host.containerPanel or nil
-    local count = panels ~= nil and #panels or (single ~= nil and 1 or 0)
-    local function over(el)
-        return el ~= nil and el.isMouseOver ~= nil and el:isMouseOver() == true
-    end
-    if over(equipWindowStrip(pane)) then return true end
-    local strips = host.strips
-    if strips ~= nil then
-        if over(strips.equipStrip) or over(strips.hotbarStrip) then
-            return true
-        end
-        local pocketsPanel = strips.pocketsPanel
-        local islandGrids = pocketsPanel ~= nil and pocketsPanel.gridViews or nil
-        if islandGrids ~= nil then
-            for j = 1, #islandGrids do
-                if over(islandGrids[j]) then return true end
-            end
-        end
-    end
-    for i = 1, count do
-        local panel = panels ~= nil and panels[i] or single
-        if panel ~= nil and over(panel.gridView) then return true end
-    end
-    return false
 end
 
 local function stackWeight(pane, stack, inventory)
