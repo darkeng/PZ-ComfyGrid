@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.5
+    Version: 1.8.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,6 +11,7 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
 require "ComfyGrid/Core/Notify"
 require "ComfyGrid/Model/Capacity"
+require "ComfyGrid/Model/ContainerName"
 require "ComfyGrid/Model/ContainerStatus"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
@@ -28,6 +29,7 @@ ComfyGrid.UI.ContainerPanel = ContainerPanel
 local Capacity = ComfyGrid.Model.Capacity
 local Log = ComfyGrid.Core.Log
 local Notify = ComfyGrid.Core.Notify
+local ContainerName = ComfyGrid.Model.ContainerName
 local ContainerStatus = ComfyGrid.Model.ContainerStatus
 local Style = ComfyGrid.UI.Style
 local Draw = ComfyGrid.UI.Draw
@@ -306,7 +308,8 @@ local function resolveDisplayName(inventory, playerNum)
         local okC, custom = pcall(inventory.getCustomName, inventory)
         if okC and custom ~= nil and custom ~= "" then return custom end
     end
-    return getTextOrNull("IGUI_ContainerTitle_" .. invType) or invType
+
+    return ContainerName.titleForType(invType)
 end
 
 local function applyModel(self, model)

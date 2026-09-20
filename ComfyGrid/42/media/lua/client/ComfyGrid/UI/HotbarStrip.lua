@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.5
+    Version: 1.8.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -17,6 +17,7 @@ require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
 require "ComfyGrid/Interact/Transfer"
 require "ComfyGrid/Interact/Unequip"
+require "ComfyGrid/Interact/HotbarAttach"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -29,6 +30,7 @@ local StackRenderer = ComfyGrid.UI.StackRenderer
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
 local Transfer = ComfyGrid.Interact.Transfer
 local Unequip = ComfyGrid.Interact.Unequip
+local HotbarAttach = ComfyGrid.Interact.HotbarAttach
 
 local HotbarStrip = ISUIElement:derive("ComfyHotbarStrip")
 ComfyGrid.UI.HotbarStrip = HotbarStrip
@@ -369,24 +371,18 @@ local function resolveAttachDrop(self, idx)
                     local ok, can = pcall(hotbar.canBeAttached, hotbar,
                         slot, item)
                     if ok and can then
-                        local displaced = hotbar.attachedItems[idx + 1]
 
-                        local okA, err = pcall(hotbar.attachItem, hotbar,
-                            item,
-                            slot.def.attachments[item:getAttachmentType()],
-                            idx + 1, slot.def, true)
-                        if not okA then
-                            Log.warn("HotbarStrip attach failed: "
-                                .. tostring(err))
-                        elseif displaced ~= nil and displaced ~= item then
-
-                            local srcSlot, mainGrid =
-                                sourceGridSlotOf(dragged[i], self.playerNum)
-                            if srcSlot ~= nil then
-                                mainGrid:claimSlotForItem(
-                                    displaced:getID(), srcSlot)
+                        local srcSlot, mainGrid =
+                            sourceGridSlotOf(dragged[i], self.playerNum)
+                        local onDisplaced = nil
+                        if srcSlot ~= nil and mainGrid ~= nil then
+                            onDisplaced = function(prev)
+                                mainGrid:claimSlotForItem(prev:getID(), srcSlot)
                             end
                         end
+
+                        HotbarAttach.attach(self.playerNum, item, idx + 1,
+                            slot.def, onDisplaced)
                         return
                     end
                 end

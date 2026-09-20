@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.5
+    Version: 1.8.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -81,10 +81,14 @@ function WindowChrome.resync(page)
     pcall(page.onInventoryContainerSizeChanged, page)
 end
 
-function WindowChrome.onLeft()
+function WindowChrome.onLeft(page)
     local S = ComfyGrid.Settings
     if S == nil or S.get == nil then return false end
-    return S.get("CONTAINERS_LEFT") == true
+    local key = "CONTAINERS_LEFT_PLAYER"
+    if page ~= nil and page.onCharacter == false then
+        key = "CONTAINERS_LEFT_LOOT"
+    end
+    return S.get(key) == true
 end
 
 function WindowChrome.side(page)
@@ -93,7 +97,7 @@ function WindowChrome.side(page)
     if panel == nil or pane == nil or page.width == nil then return end
     local bs = page.buttonSize
     if bs == nil or bs <= 0 then return end
-    local left = pane.mode == "comfy" and WindowChrome.onLeft()
+    local left = pane.mode == "comfy" and WindowChrome.onLeft(page)
     local px, vx = page.width - bs, 0
     if left then px, vx = 0, bs end
     if panel.x ~= px then panel:setX(px) end
@@ -113,6 +117,39 @@ function WindowChrome.seam(page)
 
     page:drawRect(0, math.floor(page.height - rw.height), page.width, 1, 0.85,
         sf.line.r, sf.line.g, sf.line.b)
+end
+
+function WindowChrome.selection(page)
+    if page.isCollapsed then return end
+    local pane = page.inventoryPane
+    if pane == nil or pane.mode ~= "comfy" then return end
+    local panel = page.containerButtonPanel
+    local buttons = page.backpacks
+    if panel == nil or type(buttons) ~= "table" or #buttons == 0 then return end
+    local sf = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
+    if sf == nil or sf.accent == nil then return end
+
+    local selected = page.inventory
+    if selected == nil then return end
+
+    local bs = page.buttonSize
+    if bs == nil or bs <= 0 then return end
+    local bar = math.max(2, math.floor(bs * 0.075 + 0.5))
+    local px = panel.x or 0
+
+    local left = px == 0
+    local x = left and (px + bs - bar) or px
+
+    for i = 1, #buttons do
+        local b = buttons[i]
+        if b ~= nil and b.inventory == selected and b.getY ~= nil then
+            local by = (panel.y or 0) + b:getY()
+            local bh = b:getHeight()
+
+            page:drawRect(x, by + 1, bar, math.max(1, bh - 2), 1,
+                sf.accent.r, sf.accent.g, sf.accent.b)
+        end
+    end
 end
 
 local styled = {}

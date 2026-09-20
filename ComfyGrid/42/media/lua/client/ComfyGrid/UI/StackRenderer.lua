@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.5
+    Version: 1.8.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -39,6 +39,13 @@ local FALLBACK_BROKEN = { r = 0.92, g = 0.16, b = 0.13 }
 local FALLBACK_BROKEN_LINE = { r = 0.10, g = 0.05, b = 0.05 }
 
 local BROKEN_OVERLAY_ALPHA = 0.35
+
+local UNWANTED_CELL = { r = 0.115, g = 0.115, b = 0.120, a = 0.72 }
+
+local UNWANTED_ALPHA = 0.40
+
+local UNWANTED_MARK_FRAC = 0.66
+local UNWANTED_MARK_ALPHA = 0.22
 
 local countStrings = {}
 
@@ -496,7 +503,9 @@ local function markTextures(name, vanillaPath)
         m = { fill = fill, ours = true,
               line = getTexture("media/textures/comfy_" .. name .. "_line.png") }
     else
-        local van = getTexture and getTexture(vanillaPath) or nil
+
+        local van = (vanillaPath ~= nil and getTexture)
+            and getTexture(vanillaPath) or nil
         m = van ~= nil and { fill = van, ours = false } or false
     end
     marks[name] = m
@@ -552,7 +561,13 @@ function StackRenderer.draw(ctx)
         tint = (tints and (tints[stack.category] or tints.default))
             or FALLBACK_TINT
     end
-    SlotRenderer.drawCell(ctx, tint)
+
+    local unwanted = false
+    if item ~= nil and item.isUnwanted ~= nil and ctx.playerNum ~= nil then
+        local who = getSpecificPlayer(ctx.playerNum)
+        if who ~= nil then unwanted = item:isUnwanted(who) == true end
+    end
+    SlotRenderer.drawCell(ctx, unwanted and UNWANTED_CELL or tint)
 
     local tex = item and item:getTex() or nil
     local bulky = false
@@ -584,10 +599,23 @@ function StackRenderer.draw(ctx)
                 end
             end
 
+            local faded = unwanted and UNWANTED_ALPHA or 1
+
             Icons.draw(view, item,
                 x + 1 + PAD + (TEXTURE_SIZE - box) * 0.5,
                 y + 1 + PAD + (TEXTURE_SIZE - box) * 0.5,
-                1, box, box, hi)
+                faded, box, box, hi)
+
+            if unwanted then
+                local mk = markTextures("unwanted", nil)
+                if mk then
+                    local sz = floor(CELL * UNWANTED_MARK_FRAC + 0.5)
+                    local mw, mh = markFit(mk.fill, sz)
+                    view:drawTextureScaled(mk.fill,
+                        x + (CELL - mw) * 0.5, y + (CELL - mh) * 0.5,
+                        mw, mh, UNWANTED_MARK_ALPHA, 1, 1, 1)
+                end
+            end
         else
             tex = nil
         end

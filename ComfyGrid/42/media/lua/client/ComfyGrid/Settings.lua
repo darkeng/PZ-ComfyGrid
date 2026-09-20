@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.5
+    Version: 1.8.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -32,7 +32,8 @@ Settings.defaults = {
 
     STATUS_BAR = true,
 
-    CONTAINERS_LEFT = false,
+    CONTAINERS_LEFT_PLAYER = false,
+    CONTAINERS_LEFT_LOOT = false,
     HOTBAR_SECTION = false,
     HOTBAR_BAR = true,
     EQUIPMENT_VIEW = "window",
@@ -126,10 +127,14 @@ local OPTION_DEFS = {
       tipKey = "IGUI_ComfyGrid_OptEquipmentAvatarTip",
       tooltip = "How your character is drawn." },
 
-    { key = "CONTAINERS_LEFT",    kind = "tickbox", group = "general",
-      nameKey = "IGUI_ComfyGrid_OptContainersLeft",
-      tipKey = "IGUI_ComfyGrid_OptContainersLeftTip",
-      tooltip = "The column of container buttons moves to the left edge of the window." },
+    { key = "CONTAINERS_LEFT_PLAYER", kind = "tickbox", group = "general",
+      nameKey = "IGUI_ComfyGrid_OptContainersLeftPlayer",
+      tipKey = "IGUI_ComfyGrid_OptContainersLeftPlayerTip",
+      tooltip = "In your inventory window, the column of container buttons moves to the left edge." },
+    { key = "CONTAINERS_LEFT_LOOT", kind = "tickbox", group = "general",
+      nameKey = "IGUI_ComfyGrid_OptContainersLeftLoot",
+      tipKey = "IGUI_ComfyGrid_OptContainersLeftLootTip",
+      tooltip = "In the nearby-containers window, the column of container buttons moves to the left edge." },
     { key = "HOTBAR_SECTION",     kind = "tickbox", group = "general",
       nameKey = "IGUI_ComfyGrid_OptHotbarSection",
       tipKey = "IGUI_ComfyGrid_OptHotbarSectionTip",
@@ -567,6 +572,11 @@ local LEGACY = {
         key = "LOOT_LAYOUT",
         map = function(raw) return raw == "true" and "sections" or "single" end,
     },
+
+    CONTAINERS_LEFT = {
+        keys = { "CONTAINERS_LEFT_PLAYER", "CONTAINERS_LEFT_LOOT" },
+        map = function(raw) return raw == "true" end,
+    },
 }
 
 local MIGRATIONS = {}
@@ -637,9 +647,14 @@ local function migrateLegacyOptions()
             if rule ~= nil then
                 local ok, mapped = pcall(rule.map, raw)
                 if ok and mapped ~= nil then
-                    Settings.set(rule.key, mapped)
-                    Log.info("migrated option " .. optId .. "=" .. tostring(raw)
-                        .. " -> " .. rule.key .. "=" .. tostring(mapped))
+
+                    local targets = rule.keys or { rule.key }
+                    for t = 1, #targets do
+                        Settings.set(targets[t], mapped)
+                        Log.info("migrated option " .. optId .. "="
+                            .. tostring(raw) .. " -> " .. targets[t] .. "="
+                            .. tostring(mapped))
+                    end
                 end
                 table.remove(other, i)
                 migrated = true

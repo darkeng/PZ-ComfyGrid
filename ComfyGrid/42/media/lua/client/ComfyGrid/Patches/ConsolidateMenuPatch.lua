@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.5
+    Version: 1.8.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,11 +9,13 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
+require "ComfyGrid/Model/ContainerName"
 require "ComfyGrid/Interact/ItemApply"
 
 ComfyGrid = ComfyGrid or {}
 local Log = ComfyGrid.Core.Log
 local Text = ComfyGrid.Core.Text
+local ContainerName = ComfyGrid.Model.ContainerName
 
 local function containerLabel(inv, playerObj)
     if inv == nil then return nil end
@@ -25,7 +27,7 @@ local function containerLabel(inv, playerObj)
     end
     local okT, invType = pcall(inv.getType, inv)
     if not okT or invType == nil then return nil end
-    return getTextOrNull("IGUI_ContainerTitle_" .. invType) or invType
+    return ContainerName.titleForType(invType)
 end
 
 local function entryLabel(item, playerObj)

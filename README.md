@@ -39,7 +39,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 ## Set up in game
 
-The gear in the title bar opens the mod's own panel, **split into tabs**: **five colour themes** — Comfy Grid, Dark, Slate, Olive and Sakura — plus interface scale, grid density, stacking by type or state, instant transfers, and where the equipment lives. The equipment and the on-screen hotbar can be turned off altogether. The panel is a **window you can move and leave open**, so you can change a setting and watch the inventory change behind it. The column of container buttons can sit on the **left** of the window instead of the right. Every option applies live, a tooltip says what it does, and the foot of the panel shows which version of the mod you are running.
+The gear in the title bar opens the mod's own panel, **split into tabs**: **five colour themes** — Comfy Grid, Dark, Slate, Olive and Sakura — plus interface scale, grid density, stacking by type or state, instant transfers, and where the equipment lives. The equipment and the on-screen hotbar can be turned off altogether. The panel is a **window you can move and leave open**, so you can change a setting and watch the inventory change behind it. The column of container buttons can sit on the **left** instead of the right, with its own switch for each window. Every option applies live, a tooltip says what it does, and the foot of the panel shows which version of the mod you are running.
 
 ![Themes](workshop/card_14_themes.png)
 

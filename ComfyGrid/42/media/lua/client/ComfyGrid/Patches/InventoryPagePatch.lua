@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.5
+    Version: 1.8.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -95,7 +95,7 @@ Events.OnGameBoot.Add(function()
         end
 
         local mirrorPlate = mute and WindowChrome ~= nil
-            and WindowChrome.onLeft ~= nil and WindowChrome.onLeft()
+            and WindowChrome.onLeft ~= nil and WindowChrome.onLeft(self)
             and self.buttonSize ~= nil
         local savedRect
         if mirrorPlate then
@@ -143,7 +143,7 @@ Events.OnGameBoot.Add(function()
             local chr = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
             local wc = chr ~= nil and chr.WindowChrome or nil
             local bs = nil
-            if wc ~= nil and wc.onLeft ~= nil and wc.onLeft() then
+            if wc ~= nil and wc.onLeft ~= nil and wc.onLeft(self) then
                 bs = self.buttonSize
             end
             self.drawRectBorder = function(sel, x, y, w, h, ...)
@@ -168,6 +168,10 @@ Events.OnGameBoot.Add(function()
         if WindowChrome ~= nil and WindowChrome.seam ~= nil then
             pcall(WindowChrome.seam, self)
         end
+
+        if WindowChrome ~= nil and WindowChrome.selection ~= nil then
+            pcall(WindowChrome.selection, self)
+        end
     end
 
     local function padModule(page, name)
@@ -185,7 +189,7 @@ Events.OnGameBoot.Add(function()
         local bs = self.buttonSize
         local mirror = pane ~= nil and pane.mode == "comfy" and bs ~= nil
             and WindowChrome ~= nil and WindowChrome.onLeft ~= nil
-            and WindowChrome.onLeft()
+            and WindowChrome.onLeft(self)
         if not mirror then return og_pageWheel(self, del) end
         local over = self:getMouseX() < bs
         local saved = rawget(self, "getMouseX")
