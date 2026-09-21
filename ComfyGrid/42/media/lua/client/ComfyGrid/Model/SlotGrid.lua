@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.6
+    Version: 1.8.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -12,12 +12,14 @@ require "ComfyGrid/Model/StackRules"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/Model/Capacity"
 require "ComfyGrid/Model/Persistence"
+require "ComfyGrid/Model/ReflowPlan"
 
 local Log = ComfyGrid.Core.Log
 local StackRules = ComfyGrid.Model.StackRules
 local ItemStack = ComfyGrid.Model.ItemStack
 local Capacity = ComfyGrid.Model.Capacity
 local Persistence = ComfyGrid.Model.Persistence
+local ReflowPlan = ComfyGrid.Model.ReflowPlan
 
 local SlotGrid = {}
 SlotGrid.__index = SlotGrid
@@ -346,6 +348,66 @@ function SlotGrid:applyLayout(plan)
     self:_rebuildSlotMap()
     self:_recomputeSlotCount()
     return true
+end
+
+function SlotGrid:placeStacks(plan)
+    if plan == nil or type(plan.n) ~= "number" or plan.n <= 0 then
+        return false
+    end
+    if self.pendingClaims ~= nil then return false end
+    local stacks = self.data.stacks
+    if type(stacks) ~= "table" then return false end
+
+    local map = self.slotMap
+    local bySlot, planned = {}, {}
+    for i = 1, plan.n do
+        local entry = plan[i]
+        local stack = type(entry) == "table" and entry.stack or nil
+        local slot = type(entry) == "table" and entry.slot or nil
+        if type(stack) ~= "table" or type(slot) ~= "number"
+                or slot < 0 or slot ~= math.floor(slot) then
+            Log.warn("SlotGrid.placeStacks: malformed entry " .. tostring(i)
+                .. "; placement refused")
+            return false
+        end
+        if bySlot[slot] ~= nil then
+            Log.warn("SlotGrid.placeStacks: two stacks on slot "
+                .. tostring(slot) .. "; placement refused")
+            return false
+        end
+
+        if map[stack.slot] ~= stack then
+            Log.warn("SlotGrid.placeStacks: stale plan (stack no longer at its"
+                .. " slot); placement refused")
+            return false
+        end
+        bySlot[slot] = stack
+        planned[stack] = true
+    end
+
+    for i = 1, #stacks do
+        local stack = stacks[i]
+        if type(stack) == "table" and not planned[stack]
+                and bySlot[stack.slot] ~= nil then
+            Log.warn("SlotGrid.placeStacks: slot " .. tostring(stack.slot)
+                .. " is held by a stack outside the plan; placement refused")
+            return false
+        end
+    end
+
+    for i = 1, plan.n do
+        plan[i].stack.slot = plan[i].slot
+    end
+    self:_rebuildSlotMap()
+    self:_recomputeSlotCount()
+    return true
+end
+
+function SlotGrid:reflowColumns(oldCols, newCols)
+    if ReflowPlan == nil then return true end
+    local plan = ReflowPlan.build(self.data.stacks, oldCols, newCols)
+    if plan == nil then return true end
+    return self:applyLayout(plan) == true
 end
 
 function SlotGrid:splitToSlot(stack, ids, slot)

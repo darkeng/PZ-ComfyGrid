@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.6
+    Version: 1.8.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -39,6 +39,8 @@ local GridView = ComfyGrid.UI.GridView
 
 local SECTION_TEXT = SectionRule.TEXT
 local SECTION_LINE = SectionRule.LINE
+local SECTION_TEXT_HI = SectionRule.TEXT_HI
+local SECTION_LINE_HI = SectionRule.LINE_HI
 
 local Text = ComfyGrid.Core.Text
 
@@ -168,6 +170,49 @@ local function fmtWeight(cur, max)
     return c .. "/" .. tostring(math.floor(max + 0.5))
 end
 
+local function isActiveSection(self)
+    local model = self.model
+    local inv = model ~= nil and model.inventory or nil
+    if inv == nil then return false end
+    local host = self.parent
+    local pane = host ~= nil and host.pane or nil
+    if pane == nil then return false end
+    local page = pane.inventoryPage
+    local selected = page ~= nil and page.inventory or pane.inventory
+    return selected ~= nil and selected == inv
+end
+
+local function selectableSection(self)
+    local model = self.model
+    local inv = model ~= nil and model.inventory or nil
+    if inv == nil then return nil end
+    local host = self.parent
+    local pane = host ~= nil and host.pane or nil
+    local page = pane ~= nil and pane.inventoryPage or nil
+    local buttons = page ~= nil and page.backpacks or nil
+    if type(buttons) ~= "table" then return nil end
+    for i = 1, #buttons do
+        local b = buttons[i]
+        if b ~= nil and b.inventory == inv then return page, b end
+    end
+    return nil
+end
+
+local function selectZoneAt(self, x, y)
+    local w = self._selectZoneW
+    local h = self._selectZoneH
+    if w == nil or h == nil or w <= 0 then return false end
+    return x >= 0 and x < w and y >= 0 and y < h
+end
+
+local function selectZoneHot(self)
+    if self.isMouseOver == nil or not self:isMouseOver() then return false end
+    if not isActiveSection(self) and selectableSection(self) then
+        return selectZoneAt(self, self:getMouseX(), self:getMouseY())
+    end
+    return false
+end
+
 local function headerHeight()
     return math.max(18, Style.FONT_H + 4, math.floor(Style.CELL / 2))
 end
@@ -240,8 +285,9 @@ local function drawActions(self, transferLeft, y, h)
     end
 
     local gg = groupGap()
+    local lpad = SectionRule.pad()
 
-    local avail = transferLeft - gg - HEADER_PAD
+    local avail = transferLeft - gg - lpad
     local extra = (trash and 1 or 0)
     local total = n + ((overflow > 0) and 1 or 0) + extra
     while n > 0 and Chip.groupWidth(total, h) > avail do
@@ -253,10 +299,10 @@ local function drawActions(self, transferLeft, y, h)
     local w = Chip.groupWidth(total, h)
 
     local maxLeft = transferLeft - gg - w
-    if maxLeft < HEADER_PAD then return nil end
+    if maxLeft < lpad then return nil end
 
-    local centre = math.floor((HEADER_PAD + nameMin() + transferLeft) / 2)
-    local left = math.max(HEADER_PAD,
+    local centre = math.floor((lpad + nameMin() + transferLeft) / 2)
+    local left = math.max(lpad,
         math.min(centre - math.floor(w / 2), maxLeft))
 
     local row = self.actions
@@ -433,11 +479,21 @@ function ContainerPanel:prerender()
         local fontHgt = tm:getFontHeight(Style.FONT)
         local textY = math.floor((headerH - fontHgt) / 2)
 
+        local active = isActiveSection(self)
+        local tCol = active and SECTION_TEXT_HI or SECTION_TEXT
+        local lCol = active and SECTION_LINE_HI or SECTION_LINE
+        if active then
+            SectionRule.plate(self, 0, headerH, true)
+            SectionRule.activeBar(self, 0, headerH)
+        elseif selectZoneHot(self) then
+            SectionRule.plate(self, 0, headerH, false)
+        end
+        local lpad = SectionRule.pad()
+
         local gutter = wtText ~= nil and weightGutter() or 0
         if wtText ~= nil then
             self:drawTextRight(wtText, self.width - HEADER_PAD,
-                textY, SECTION_TEXT.r, SECTION_TEXT.g, SECTION_TEXT.b,
-                SECTION_TEXT.a, Style.FONT)
+                textY, tCol.r, tCol.g, tCol.b, tCol.a, Style.FONT)
         end
         local rightPad = gutter + (wtText ~= nil and weightMargin() or 0)
         rightPad = rightPad + drawChips(self,
@@ -472,23 +528,24 @@ function ContainerPanel:prerender()
                 self._nameFitGen = metricsGen
                 self._nameFitText = shown
                 self._nameFit = Text.fitEllipsis(shown, Style.FONT,
-                    budgetRight - HEADER_PAD, 60)
+                    budgetRight - lpad, 60)
                 local okW, npx = pcall(tm.MeasureStringX, tm, Style.FONT,
                     self._nameFit)
                 self._nameFitW = okW and npx or 0
             end
-            self:drawText(self._nameFit, HEADER_PAD, textY,
-                SECTION_TEXT.r, SECTION_TEXT.g, SECTION_TEXT.b,
-                SECTION_TEXT.a, Style.FONT)
+            self:drawText(self._nameFit, lpad, textY,
+                tCol.r, tCol.g, tCol.b, tCol.a, Style.FONT)
             nameW = self._nameFitW or 0
         end
-        local lineX = HEADER_PAD + nameW + 6
+        local lineX = lpad + nameW + 6
         local lineW = budgetRight - lineX
         if lineW > 0 then
             self:drawRect(lineX, textY + math.floor(fontHgt / 2), lineW, 1,
-                SECTION_LINE.a, SECTION_LINE.r, SECTION_LINE.g,
-                SECTION_LINE.b)
+                lCol.a, lCol.r, lCol.g, lCol.b)
         end
+
+        self._selectZoneW = budgetRight
+        self._selectZoneH = headerH
     end
     syncPreview(self)
 end
@@ -597,6 +654,11 @@ function ContainerPanel:onMouseDown(_x, _y)
     return true
 end
 
+function ContainerPanel:render()
+    if self.model == nil or not isActiveSection(self) then return end
+    SectionRule.card(self, 0, 0, self.width, self.height)
+end
+
 local function openActions(self)
     local OV = ComfyGrid.Interact and ComfyGrid.Interact.ObjectVerbs
     if OV == nil or ISContextMenu == nil or self.model == nil then return end
@@ -679,9 +741,22 @@ function ContainerPanel:padActivateChip(slot)
     self:activateChip(self:padChipAt(slot))
 end
 
+function ContainerPanel:selectMe()
+    if isActiveSection(self) then return false end
+    local page, button = selectableSection(self)
+    if page == nil then return false end
+    page:selectContainer(button)
+    return true
+end
+
 function ContainerPanel:onMouseUp(x, y)
     if self.model ~= nil then
-        self:activateChip(self.chips:hit(x, y) or self.actions:hit(x, y))
+        local id = self.chips:hit(x, y) or self.actions:hit(x, y)
+        if id ~= nil then
+            self:activateChip(id)
+        elseif selectZoneAt(self, x, y) then
+            self:selectMe()
+        end
     end
     return true
 end

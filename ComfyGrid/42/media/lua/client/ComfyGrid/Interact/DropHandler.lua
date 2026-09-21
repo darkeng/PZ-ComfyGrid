@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.6
+    Version: 1.8.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,11 +11,13 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/Model/Persistence"
+require "ComfyGrid/Model/ReflowPlan"
 
 local Log = ComfyGrid.Core.Log
 local ItemStack = ComfyGrid.Model.ItemStack
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local Persistence = ComfyGrid.Model.Persistence
+local ReflowPlan = ComfyGrid.Model.ReflowPlan
 
 local DropHandler = {}
 ComfyGrid.Interact.DropHandler = DropHandler
@@ -80,6 +82,96 @@ local function collectDragged(dragged)
     return liveItems, comfyStacks, normalized
 end
 
+local function anchorOf(dragged)
+    if type(dragged) ~= "table" then return nil end
+    for i = 1, #dragged do
+        local entry = dragged[i]
+        if type(entry) == "table" and type(entry.comfyAnchorCols) == "number" then
+            local tag = entry.comfyStacks or entry.comfyStack
+            if type(tag) == "table" and type(tag.slot) == "number" then
+                return tag, entry.comfyAnchorCols
+            end
+        end
+    end
+    return nil
+end
+
+local function shapedSlots(grid, srcSlots, anchorIdx, anchorSlot, srcCols,
+        targetSlot, destCols, vacating)
+    if type(srcCols) ~= "number" or srcCols < 1 then return nil end
+    if type(destCols) ~= "number" or destCols < 1 then return nil end
+    local n = #srcSlots
+    if n < 2 or anchorIdx == nil then return nil end
+
+    local floor = math.floor
+    local taken, maxRow = {}, 0
+    local stacks = grid.data.stacks
+    for i = 1, #stacks do
+        local slot = stacks[i].slot
+        if type(slot) == "number" and (vacating == nil or not vacating[slot]) then
+            taken[slot] = true
+            local r = floor(slot / destCols)
+            if r > maxRow then maxRow = r end
+        end
+    end
+
+    local limit = maxRow + n + 1
+
+    local aRow = floor(anchorSlot / srcCols)
+    local aCol = anchorSlot - aRow * srcCols
+    local tRow = floor(targetSlot / destCols)
+    local tCol = targetSlot - tRow * destCols
+
+    local minDR, minDC, maxDC = 0, 0, 0
+    for i = 1, n do
+        local sRow = floor(srcSlots[i] / srcCols)
+        local dr = sRow - aRow
+        local dc = srcSlots[i] - sRow * srcCols - aCol
+        if dr < minDR then minDR = dr end
+        if dc < minDC then minDC = dc end
+        if dc > maxDC then maxDC = dc end
+    end
+    if tRow + minDR < 0 then tRow = -minDR end
+    if tCol + minDC < 0 then tCol = -minDC end
+    local overflow = (tCol + maxDC) - (destCols - 1)
+    if overflow > 0 then
+        tCol = tCol - overflow
+
+        if tCol + minDC < 0 then tCol = -minDC end
+    end
+
+    local out = {}
+    local function seat(i)
+        local src = srcSlots[i]
+        local wantRow, wantCol
+        if i == anchorIdx then
+            wantRow, wantCol = tRow, tCol
+        else
+            local sRow = floor(src / srcCols)
+            wantRow = tRow + (sRow - aRow)
+            wantCol = tCol + (src - sRow * srcCols - aCol)
+        end
+        local slot = nil
+        if wantRow >= 0 and wantCol >= 0 and wantCol < destCols then
+            local s = wantRow * destCols + wantCol
+            if not taken[s] then slot = s end
+        end
+        if slot == nil then
+            slot = ReflowPlan.homeFor(taken, destCols, wantRow, wantCol, limit)
+        end
+        if slot == nil then return false end
+        taken[slot] = true
+        out[i] = slot
+        return true
+    end
+
+    if not seat(anchorIdx) then return nil end
+    for i = 1, n do
+        if i ~= anchorIdx and not seat(i) then return nil end
+    end
+    return out
+end
+
 local function gridOwnsStack(grid, stack)
     local stacks = grid.data.stacks
     for i = 1, #stacks do
@@ -89,7 +181,7 @@ local function gridOwnsStack(grid, stack)
 end
 
 local function resolveSameContainer(grid, liveItems, taggedStacks, targetSlot,
-        playerNum)
+        playerNum, anchorStack, anchorCols, destCols)
 
     local stacksToMove = {}
     local coveredIds = {}
@@ -167,13 +259,35 @@ local function resolveSameContainer(grid, liveItems, taggedStacks, targetSlot,
             end
         end
     else
-        for i = 1, #stacksToMove do
-            local s = stacksToMove[i]
 
-            if grid:moveStack(s, targetSlot) then
-                changed = true
-            elseif grid:moveStack(s, grid:firstFreeSlot()) then
-                changed = true
+        local placed = false
+        if anchorStack ~= nil and #stacksToMove >= 2 then
+            local srcSlots, anchorIdx, vacating = {}, nil, {}
+            for i = 1, #stacksToMove do
+                srcSlots[i] = stacksToMove[i].slot
+                vacating[stacksToMove[i].slot] = true
+                if stacksToMove[i] == anchorStack then anchorIdx = i end
+            end
+            local slots = shapedSlots(grid, srcSlots, anchorIdx,
+                anchorStack.slot, anchorCols, targetSlot, destCols, vacating)
+            if slots ~= nil then
+                local plan = { n = #stacksToMove }
+                for i = 1, #stacksToMove do
+                    plan[i] = { stack = stacksToMove[i], slot = slots[i] }
+                end
+                placed = grid:placeStacks(plan)
+                if placed then changed = true end
+            end
+        end
+        if not placed then
+            for i = 1, #stacksToMove do
+                local s = stacksToMove[i]
+
+                if grid:moveStack(s, targetSlot) then
+                    changed = true
+                elseif grid:moveStack(s, grid:firstFreeSlot()) then
+                    changed = true
+                end
             end
         end
         for i = 1, #loose do
@@ -312,9 +426,12 @@ function DropHandler.resolve(gridView, localX, localY)
         end
     end
 
+    local anchorStack, anchorCols = anchorOf(dragged)
+
     if sameContainer then
         if resolveSameContainer(model.grid, liveItems, comfyStacks,
-                targetSlot, gridView.playerNum or model.playerNum or 0) then
+                targetSlot, gridView.playerNum or model.playerNum or 0,
+                anchorStack, anchorCols, gridView.cols) then
 
             model.needsImmediateRefresh = true
 
@@ -332,7 +449,29 @@ function DropHandler.resolve(gridView, localX, localY)
         elseif #normalized >= 2 and Transfer.moveStacksOrdered ~= nil then
 
             local srcInv = liveItems[1] and liveItems[1]:getContainer() or nil
-            local slots = assignOrderedSlots(model.grid, targetSlot, #normalized)
+
+            local slots = nil
+            if anchorStack ~= nil then
+                local srcSlots, anchorIdx = {}, nil
+                for i = 1, #normalized do
+                    local tag = normalized[i].comfyStacks
+                        or normalized[i].comfyStack
+                    if type(tag) ~= "table" or type(tag.slot) ~= "number" then
+                        srcSlots = nil
+                        break
+                    end
+                    srcSlots[i] = tag.slot
+                    if tag == anchorStack then anchorIdx = i end
+                end
+                if srcSlots ~= nil then
+                    slots = shapedSlots(model.grid, srcSlots, anchorIdx,
+                        anchorStack.slot, anchorCols, targetSlot,
+                        gridView.cols, nil)
+                end
+            end
+            if slots == nil then
+                slots = assignOrderedSlots(model.grid, targetSlot, #normalized)
+            end
             Transfer.moveStacksOrdered(normalized, inventory, playerObj, slots,
                 srcInv)
         elseif Transfer.moveStacks ~= nil then

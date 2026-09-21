@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.6
+    Version: 1.8.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -179,6 +179,66 @@ Events.OnGameBoot.Add(function()
         if pane == nil or pane.mode ~= "comfy" then return nil end
         local Interact = ComfyGrid.Interact
         return Interact ~= nil and Interact[name] or nil
+    end
+
+    local function seqOf(page)
+        local CO = ComfyGrid.Model and ComfyGrid.Model.ContainerOrder
+        if CO == nil or CO.sequenceFor == nil then return nil end
+        local ok, s = pcall(CO.sequenceFor, page)
+        if not ok or type(s) ~= "table" or #s < 2 then return nil end
+        return s
+    end
+
+    local function stepInVisualOrder(page, index, wrap, dir)
+        local s = seqOf(page)
+        if s == nil then return nil end
+        local list = page.backpacks
+
+        local at = nil
+        if index ~= nil and index >= 1 and list[index] ~= nil then
+            for i = 1, #s do
+                if s[i] == list[index] then at = i break end
+            end
+        end
+
+        if at == nil then
+            if not wrap then return -1 end
+            at = (dir > 0) and 0 or (#s + 1)
+            wrap = false
+        end
+        local playerObj = getSpecificPlayer(page.player)
+        local n = #s
+        for hop = 1, n do
+            local i = at + dir * hop
+            if i < 1 or i > n then
+                if not wrap then return -1 end
+                i = ((i - 1) % n) + 1
+            end
+            local button = s[i]
+            local object = button ~= nil and button.inventory ~= nil
+                and button.inventory:getParent() or nil
+            if button ~= nil and not (instanceof(object, "IsoThumpable")
+                    and object:isLockedToCharacter(playerObj)) then
+                for k = 1, #list do
+                    if list[k] == button then return k end
+                end
+            end
+        end
+        return -1
+    end
+
+    local og_nextUnlocked = ISInventoryPage.nextUnlockedContainer
+    function ISInventoryPage:nextUnlockedContainer(index, wrap)
+        local mine = stepInVisualOrder(self, index, wrap, 1)
+        if mine ~= nil then return mine end
+        return og_nextUnlocked(self, index, wrap)
+    end
+
+    local og_prevUnlocked = ISInventoryPage.prevUnlockedContainer
+    function ISInventoryPage:prevUnlockedContainer(index, wrap)
+        local mine = stepInVisualOrder(self, index, wrap, -1)
+        if mine ~= nil then return mine end
+        return og_prevUnlocked(self, index, wrap)
     end
 
     local og_pageWheel = ISInventoryPage.onMouseWheel

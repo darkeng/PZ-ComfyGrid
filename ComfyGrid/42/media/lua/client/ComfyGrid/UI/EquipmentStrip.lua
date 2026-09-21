@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.6
+    Version: 1.8.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -642,7 +642,7 @@ local function sourceGridSlotOf(entry, playerNum)
     return nil, nil
 end
 
-local function resolveEquipDrop(self, idx)
+local function resolveEquipDrop(self, idx, fromIdx)
     local entry = self.entries[idx + 1]
     if entry == nil then return end
     local dragged = DragAndDrop.getDraggedStacks()
@@ -690,10 +690,21 @@ local function resolveEquipDrop(self, idx)
                             self.playerNum)
                     end
                     if displaced ~= nil and displaced ~= item then
-                        local srcSlot, mainGrid =
-                            sourceGridSlotOf(dragged[i], self.playerNum)
-                        if srcSlot ~= nil then
-                            mainGrid:claimSlotForItem(displaced:getID(), srcSlot)
+                        local fromEntry = fromIdx ~= nil
+                            and self.entries[fromIdx + 1] or nil
+                        if fromEntry ~= nil and fromEntry.hand ~= nil
+                                and entry.hand ~= nil then
+
+                            local dTwo = displaced.isTwoHandWeapon ~= nil
+                                and displaced:isTwoHandWeapon() or false
+                            ISInventoryPaneContextMenu.equipWeapon(displaced,
+                                fromEntry.hand == "primary", dTwo, self.playerNum)
+                        else
+                            local srcSlot, mainGrid =
+                                sourceGridSlotOf(dragged[i], self.playerNum)
+                            if srcSlot ~= nil then
+                                mainGrid:claimSlotForItem(displaced:getID(), srcSlot)
+                            end
                         end
                     end
                     return
@@ -747,14 +758,16 @@ local function mouseUpImpl(self, x, y)
         local poked = x == 0 and y == 0 and DragAndDrop.isDragOwner(self)
             and (self:getMouseX() ~= 0 or self:getMouseY() ~= 0)
         if not poked and self:isMouseOver() then
-
+            local idx = tileAt(self, x, y)
             if not DragAndDrop.isDragOwner(self) then
-                local idx = tileAt(self, x, y)
+
                 if idx ~= nil then
                     resolveEquipDrop(self, idx)
                 end
-            end
+            elseif idx ~= nil and idx ~= self.pressedIdx then
 
+                resolveEquipDrop(self, idx, self.pressedIdx)
+            end
             DragAndDrop.endDrag()
         elseif DragAndDrop.isDragOwner(self) then
             DragAndDrop.endDrag()

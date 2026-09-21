@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.6
+    Version: 1.8.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -89,6 +89,28 @@ local function computeDims(self)
     return cols, rows
 end
 
+local function reflowColumns(self, cols)
+    local was = self.viewCols
+    if was == cols then return false end
+    if was == nil then
+        if self.colsSettle == cols then
+            self.viewCols = cols
+        else
+            self.colsSettle = cols
+        end
+        return false
+    end
+    local grid = self.model ~= nil and self.model.grid or nil
+    if grid == nil or grid.reflowColumns == nil then
+        self.viewCols = cols
+        return false
+    end
+
+    if not grid:reflowColumns(was, cols) then return false end
+    self.viewCols = cols
+    return true
+end
+
 function GridView:new(x, y, model, playerNum)
     if model == nil or model.grid == nil then
         error("ComfyGrid GridView:new requires a ContainerModel")
@@ -103,6 +125,9 @@ function GridView:new(x, y, model, playerNum)
     o.compactEligible = false
 
     o.availWidth = nil
+
+    o.viewCols = nil
+    o.colsSettle = nil
     o.cols, o.rows = computeDims(o)
     local w, h = Style.gridPixelSize(o.cols, o.rows)
     o:setWidth(w)
@@ -217,6 +242,10 @@ local function prerenderImpl(self)
     end
 
     local cols, rows = computeDims(self)
+
+    if reflowColumns(self, cols) then
+        cols, rows = computeDims(self)
+    end
     self.cols = cols
     self.rows = rows
     local w, h = Style.gridPixelSize(cols, rows)
@@ -601,6 +630,10 @@ local function payloadFor(self, stack)
     for i = 1, #ordered do
         local p = buildPayload(self, ordered[i])
         if p ~= nil then
+            if ordered[i] == stack then
+
+                p[1].comfyAnchorCols = self.cols
+            end
             out[#out + 1] = p[1]
         end
     end

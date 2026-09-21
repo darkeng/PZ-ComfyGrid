@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.6
+    Version: 1.8.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,7 +10,7 @@ ComfyGrid = ComfyGrid or {}
 
 ComfyGrid.MOD_ID = "ComfyGrid"
 
-ComfyGrid.VERSION = "1.8.6"
+ComfyGrid.VERSION = "1.8.7"
 
 ComfyGrid.Core = ComfyGrid.Core or {}
 ComfyGrid.Model = ComfyGrid.Model or {}
