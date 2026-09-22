@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.7
+    Version: 1.8.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -65,53 +65,27 @@ local function drinkableFluid(item)
     return nil
 end
 
-local function vanillaSaysEdible(playerObj, item)
-    if item == nil or not instanceof(item, "Food") then return false end
-    local okH, hung = pcall(item.getHungChange, item)
-    if not okH or type(hung) ~= "number" or hung >= 0 then return false end
-    local okS, script = pcall(item.getScriptItem, item)
-    if okS and script ~= nil and script:isCantEat() then return false end
-    if item:isBurnt() or item:isRotten() then return false end
-    local okP, poison = pcall(playerObj.isKnownPoison, playerObj, item)
-    if okP and poison then return false end
-    if item:isbDangerousUncooked() and not item:isCooked() then return false end
-    return true
-end
-
 local function isSealed(item)
     local ok, sealed = pcall(item.isSealed, item)
     if ok and sealed then return true end
     return false
 end
 
-function Consume.tryUse(playerObj, item, playerNum)
+function Consume.tryUse(playerObj, item)
     if playerObj == nil or item == nil then return false end
     if ISInventoryPaneContextMenu == nil then return false end
 
     local fc = drinkableFluid(item)
-    if fc ~= nil then
-        if isSealed(item) then return false end
-        local thirst = statOf(playerObj, CharacterStat.THIRST)
-        if thirst == nil or thirst <= NEED_FLOOR then return true end
-        local amount = amountIn(fc)
-        if amount == nil or amount <= 0 then return true end
+    if fc == nil then return false end
+    if isSealed(item) then return false end
+    local thirst = statOf(playerObj, CharacterStat.THIRST)
+    if thirst == nil or thirst <= NEED_FLOOR then return true, false end
+    local amount = amountIn(fc)
+    if amount == nil or amount <= 0 then return true, false end
 
-        local percent = clampPortion(math.min(thirst * 2, amount) / amount)
-        pcall(ISInventoryPaneContextMenu.onDrinkFluid, item, percent, playerObj)
-        return true
-    end
+    local percent = clampPortion(math.min(thirst * 2, amount) / amount)
 
-    if vanillaSaysEdible(playerObj, item) then
-        if isSealed(item) then return false end
-        local hunger = statOf(playerObj, CharacterStat.HUNGER)
-        if hunger == nil or hunger <= NEED_FLOOR then return true end
-
-        local worth = -item:getHungChange()
-        local percent = 1
-        if worth > 0 then percent = clampPortion(hunger / worth) end
-        pcall(ISInventoryPaneContextMenu.onEatItems, { item }, percent, playerNum)
-        return true
-    end
-
-    return false
+    local poured = pcall(ISInventoryPaneContextMenu.onDrinkFluid, item, percent,
+        playerObj)
+    return true, poured
 end

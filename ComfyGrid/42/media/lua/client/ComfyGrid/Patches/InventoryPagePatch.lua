@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.7
+    Version: 1.8.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -369,8 +369,17 @@ Events.OnGameBoot.Add(function()
         return overEquipWindow(page) or overContainerWindow(page)
     end
 
+    local function bandInProgress()
+        local GV = ComfyGrid.UI ~= nil and ComfyGrid.UI.GridView or nil
+        if GV == nil or GV.bandIsLive == nil then return false end
+        local ok, live = pcall(GV.bandIsLive)
+        return ok and live == true
+    end
+
     local function pinnedThrough(self, original, x, y)
-        if not overAnyComfyWindow(self) then return original(self, x, y) end
+        if not (overAnyComfyWindow(self) or bandInProgress()) then
+            return original(self, x, y)
+        end
         local saved = self.pin
         self.pin = true
         local ok, err = pcall(original, self, x, y)

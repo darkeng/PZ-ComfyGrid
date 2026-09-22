@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.7
+    Version: 1.8.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -171,7 +171,8 @@ local function fluidPairActionClass()
     if ISFluidPanelAction == nil or ISFluidPanelAction.derive == nil then
         return nil
     end
-    FluidPairAction = ISFluidPanelAction:derive("ComfyFluidPairAction")
+
+    FluidPairAction = ISFluidPanelAction:derive("ISFluidPanelAction")
     function FluidPairAction:perform()
         ISFluidPanelAction.perform(self)
         local ok, err = pcall(function()

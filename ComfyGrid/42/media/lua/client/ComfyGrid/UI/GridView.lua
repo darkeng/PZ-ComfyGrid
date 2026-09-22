@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.7
+    Version: 1.8.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -741,6 +741,8 @@ end
 
 local MARQUEE_THRESHOLD = 6
 
+local bandOwner = nil
+
 local function updateMarqueeSelection(self)
     local x0 = math.min(self.marqueeX0, self.marqueeX1)
     local y0 = math.min(self.marqueeY0, self.marqueeY1)
@@ -791,6 +793,15 @@ local function endMarquee(self, wasClickable)
     self.marqueeActive = false
     self.marqueePressStack = nil
     self.marqueeBase = nil
+    if bandOwner == self then bandOwner = nil end
+end
+
+function GridView.bandIsLive()
+    local owner = bandOwner
+    if owner == nil then return false end
+    if isMouseButtonDown(0) then return true end
+    endMarquee(owner, false)
+    return false
 end
 
 local function mouseDownImpl(self, x, y)
@@ -805,6 +816,7 @@ local function mouseDownImpl(self, x, y)
 
     if multiSelectHeld() then
         self.marqueeArmed = true
+        bandOwner = self
         self.marqueeActive = false
         self.marqueeX0, self.marqueeY0 = x, y
         self.marqueeX1, self.marqueeY1 = x, y

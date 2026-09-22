@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.7
+    Version: 1.8.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -220,8 +220,8 @@ local function equipHovered()
 
         local Consume = ComfyGrid.Interact and ComfyGrid.Interact.Consume
         if Consume ~= nil and Consume.tryUse ~= nil then
-            local okC, owned = pcall(Consume.tryUse, playerObj, item, 0)
-            if okC and owned then return true end
+            local okC, owned, acted = pcall(Consume.tryUse, playerObj, item)
+            if okC and owned then return acted == true end
         end
 
         local queued = queueLength(playerObj)
