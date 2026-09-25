@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.8
+    Version: 1.8.9
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -17,6 +17,29 @@ local PREFIX = "ComfyGrid_"
 local hiByTex = {}
 local hits, misses = 0, 0
 
+local GAME_PACKS = { UI = true, UI2 = true }
+
+local function gameNameOf(tex)
+    local name = tex:getName()
+    if name == nil or name == "" then return nil end
+    if name:find("[/\\]") ~= nil then
+        local path = name:gsub("\\", "/")
+        if path:lower():find("/mods/", 1, true) ~= nil then return nil end
+        local base = path:match("([^/]+)$")
+        if base == nil then return nil end
+        base = base:gsub("%.[Pp][Nn][Gg]$", "")
+        return base
+    end
+    if tex.getPath ~= nil then
+        local okP, p = pcall(tex.getPath, tex)
+        if okP and p ~= nil then
+            local pack = tostring(p):match("@pack/([^/]+)/")
+            if pack ~= nil and not GAME_PACKS[pack] then return nil end
+        end
+    end
+    return name
+end
+
 function Icons.hiRes(tex)
     if tex == nil then return false end
     local hi = hiByTex[tex]
@@ -31,6 +54,23 @@ function Icons.hiRes(tex)
     end
     hiByTex[tex] = hi
     if hi then hits = hits + 1 else misses = misses + 1 end
+    return hi
+end
+
+local gameArtByTex = {}
+
+function Icons.gameArt(tex)
+    if tex == nil then return false end
+    local hi = gameArtByTex[tex]
+    if hi ~= nil then return hi end
+    hi = false
+    if Texture ~= nil and Texture.trygetTexture ~= nil and tex.getName ~= nil then
+        local okN, name = pcall(gameNameOf, tex)
+        if okN and name ~= nil then
+            hi = Texture.trygetTexture(PREFIX .. name) or false
+        end
+    end
+    gameArtByTex[tex] = hi
     return hi
 end
 

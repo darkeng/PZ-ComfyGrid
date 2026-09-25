@@ -1,12 +1,13 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.8
+    Version: 1.8.9
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/UI/Icons"
 ComfyGrid = ComfyGrid or {}
@@ -36,6 +37,20 @@ local function collect()
         if tex ~= nil and not seen[tex] then
             seen[tex] = true
             local hi = Icons.hiRes(tex)
+            if hi then list[#list + 1] = hi end
+        end
+    end
+
+    local buttonArt = { getTexture("media/ui/Icon_InventoryBasic.png") }
+    if ContainerButtonIcons ~= nil then
+        for _, tex in pairs(ContainerButtonIcons) do buttonArt[#buttonArt + 1] = tex end
+    end
+
+    for i = 1, #buttonArt do
+        local tex = buttonArt[i]
+        if tex ~= nil and not seen[tex] then
+            seen[tex] = true
+            local hi = Icons.gameArt(tex)
             if hi then list[#list + 1] = hi end
         end
     end

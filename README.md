@@ -10,7 +10,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 - **Auto-stacking** — identical items share one tile with a counter whatever their state (fresh and stale food, a full and a half-used roll of tape); weapons, tools and heavy gear keep a tile of their own, while throwables pile up. An option restores strict grouping by state.
 - **Status at a glance** — a colour bar for freshness, condition, uses and fluid; rounds on guns and magazines; reading progress on books; a weight icon that reddens with the load; and a torn red cross over anything broken. The bar can be switched off.
 - **Marks that answer a question** — a star on your favourites, a tick on what you have already read, and the volume number on a skill book, dimmed while your level is too low to read it.
-- **Sharper icons** — the base game's item art is rebuilt at twice its size for the tiles, so a tile bigger than a vanilla list row stops magnifying a 32px sprite. The palette of the original art is kept exactly; icons added by other mods are left alone.
+- **Sharper icons** — the base game's item art is rebuilt at twice its size for the tiles and the container buttons, which scale with the interface too, so neither magnifies a 32px sprite. The palette of the original art is kept exactly; icons added by other mods are left alone.
 - **Your arrangement stays put** — widen or narrow the window and the tiles keep the places you gave them, instead of reflowing like text.
 - **Stack inspector** — left-click a stack to see every item on its own, and drag one onto another to top it up.
 

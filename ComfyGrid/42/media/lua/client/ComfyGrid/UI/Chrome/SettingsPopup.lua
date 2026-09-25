@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.8
+    Version: 1.8.9
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -806,7 +806,9 @@ local function padAdjust(self, dir)
     if def.kind == "choice" then
         local idx = Settings.choiceIndexOf(def, Settings.get(def.key)) or 1
         local n = #def.values
-        local nxt = (idx - 1 + dir) % n + 1
+
+        local nxt = idx + dir
+        if nxt < 1 then nxt = n elseif nxt > n then nxt = 1 end
         pcall(Settings.set, def.key, def.values[nxt])
     elseif def.kind == "slider" then
         local v = (Settings.get(def.key) or def.min) + dir * (def.step or 1)
@@ -866,7 +868,10 @@ end
 
 function SettingsPopup:onJoypadDirLeft(_joypadData)
     if self.padRow == PAD_TABS then
-        self:selectTab(((self.tab or 1) - 2) % #self.tabs + 1)
+
+        local prev = (self.tab or 1) - 1
+        if prev < 1 then prev = #self.tabs end
+        self:selectTab(prev)
     else
         padAdjust(self, -1)
     end

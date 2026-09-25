@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.8
+    Version: 1.8.9
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -27,7 +27,7 @@ Themes.byName.amber = {
         bg     = { r = 0.082, g = 0.074, b = 0.062 },
         panel  = { r = 0.110, g = 0.100, b = 0.085 },
         card   = { r = 0.148, g = 0.135, b = 0.116 },
-        cardHi = { r = 0.190, g = 0.174, b = 0.150 },
+        cardHi = { r = 0.246, g = 0.225, b = 0.194 },
         line   = { r = 0.44,  g = 0.39,  b = 0.29 },
         accent = { r = 0.85,  g = 0.74,  b = 0.51 },
     },
@@ -59,7 +59,7 @@ Themes.byName.slate = {
         bg     = { r = 0.048, g = 0.060, b = 0.086 },
         panel  = { r = 0.070, g = 0.088, b = 0.125 },
         card   = { r = 0.100, g = 0.126, b = 0.180 },
-        cardHi = { r = 0.140, g = 0.172, b = 0.238 },
+        cardHi = { r = 0.172, g = 0.211, b = 0.293 },
         line   = { r = 0.30,  g = 0.40,  b = 0.58 },
         accent = { r = 0.62,  g = 0.76,  b = 0.95 },
     },
@@ -75,7 +75,7 @@ Themes.byName.olive = {
         bg     = { r = 0.056, g = 0.066, b = 0.038 },
         panel  = { r = 0.082, g = 0.098, b = 0.056 },
         card   = { r = 0.116, g = 0.138, b = 0.078 },
-        cardHi = { r = 0.152, g = 0.182, b = 0.104 },
+        cardHi = { r = 0.186, g = 0.223, b = 0.127 },
         line   = { r = 0.40,  g = 0.47,  b = 0.24 },
         accent = { r = 0.76,  g = 0.85,  b = 0.48 },
     },
@@ -91,7 +91,7 @@ Themes.byName.sakura = {
         bg     = { r = 0.092, g = 0.052, b = 0.066 },
         panel  = { r = 0.130, g = 0.074, b = 0.094 },
         card   = { r = 0.180, g = 0.104, b = 0.130 },
-        cardHi = { r = 0.232, g = 0.136, b = 0.168 },
+        cardHi = { r = 0.293, g = 0.171, b = 0.212 },
         line   = { r = 0.62,  g = 0.34,  b = 0.44 },
         accent = { r = 0.96,  g = 0.66,  b = 0.76 },
     },

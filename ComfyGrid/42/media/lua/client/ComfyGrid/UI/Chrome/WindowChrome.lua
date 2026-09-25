@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.8
+    Version: 1.8.9
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -106,6 +106,126 @@ function WindowChrome.side(page)
     local wantRight = not left
     if panel.anchorLeft ~= left then panel.anchorLeft = left end
     if panel.anchorRight ~= wantRight then panel.anchorRight = wantRight end
+end
+
+local VANILLA_BUTTON_SIZES = { 32, 40, 48 }
+
+local MIN_BUTTON = 20
+
+local function vanillaButtonSize()
+    local core = getCore()
+    local opt = core ~= nil and core:getOptionInventoryContainerSize() or 2
+    return VANILLA_BUTTON_SIZES[opt] or 40
+end
+
+function WindowChrome.buttonSizeFor(page)
+    local base = vanillaButtonSize()
+    local pane = page ~= nil and page.inventoryPane or nil
+    if pane == nil or pane.mode ~= "comfy" then return base end
+    local bs = math.floor(base * (Style.SCALE or 1) + 0.5)
+    if bs < MIN_BUTTON then bs = MIN_BUTTON end
+    return bs
+end
+
+local function iconFor(bs)
+    local base = vanillaButtonSize()
+    local vIcon = base - 2
+    if vIcon > 32 then vIcon = 32 end
+    local icon = math.floor(bs * vIcon / base + 0.5)
+    if icon > bs - 2 then icon = bs - 2 end
+    if icon < 1 then icon = 1 end
+    return icon
+end
+
+local function fitArt(b, comfy)
+    local img = b.image
+    if img == nil then return end
+    if comfy then
+        if img == b._comfyArt then return end
+        local Icons = ComfyGrid.UI ~= nil and ComfyGrid.UI.Icons or nil
+        local hi = Icons ~= nil and Icons.gameArt ~= nil and Icons.gameArt(img) or false
+        if hi then
+            b._comfyArtVanilla = img
+            b._comfyArt = hi
+            b:setImage(hi)
+        end
+        return
+    end
+
+    if img == b._comfyArt and b._comfyArtVanilla ~= nil then
+        b:setImage(b._comfyArtVanilla)
+    end
+    b._comfyArt = nil
+    b._comfyArtVanilla = nil
+end
+
+local function fitButton(b, bs, icon, comfy)
+    if b == nil or b.setWidth == nil then return end
+    fitArt(b, comfy)
+    if b.anchorRight ~= false then b:setAnchorRight(false) end
+    if b.anchorLeft ~= true then b:setAnchorLeft(true) end
+    if b:getX() ~= 0 then b:setX(0) end
+    if b:getWidth() ~= bs then b:setWidth(bs) end
+    if b:getHeight() ~= bs then b:setHeight(bs) end
+    if b.forcedWidthImage ~= icon or b.forcedHeightImage ~= icon then
+        b:forceImageSize(icon, icon)
+    end
+end
+
+function WindowChrome.fitButton(page, b)
+    local bs = page ~= nil and page.buttonSize or nil
+    if bs == nil or bs <= 0 then return end
+    local pane = page.inventoryPane
+    fitButton(b, bs, iconFor(bs), pane ~= nil and pane.mode == "comfy")
+end
+
+function WindowChrome.fitButtons(page)
+    if page == nil then return end
+    local panel = page.containerButtonPanel
+    local pane = page.inventoryPane
+    if panel == nil or pane == nil or page.width == nil then return end
+    local bs = WindowChrome.buttonSizeFor(page)
+    page.buttonSize = bs
+    page.minimumWidth = 256 + bs
+    if pane.width ~= page.width - bs then pane:setWidth(page.width - bs) end
+    if panel.width ~= bs then panel:setWidth(bs) end
+
+    local icon = iconFor(bs)
+    local comfy = pane.mode == "comfy"
+
+    page._comfyButtonsComfy = comfy
+    local pool = page.buttonPool
+    if type(pool) == "table" then
+        for i = 1, #pool do fitButton(pool[i], bs, icon, comfy) end
+    end
+    local list = page.backpacks
+    if type(list) ~= "table" then return end
+    for i = 1, #list do fitButton(list[i], bs, icon, comfy) end
+
+    local CO = ComfyGrid.Model ~= nil and ComfyGrid.Model.ContainerOrder or nil
+    local laid = false
+    if pane.mode == "comfy" and CO ~= nil and CO.sequenceFor ~= nil
+            and CO.layout ~= nil then
+        local ok, s = pcall(CO.sequenceFor, page)
+        if ok and s ~= nil then
+            laid = pcall(CO.layout, page)
+        end
+    end
+    if not laid and #list > 0 then
+        local y = -1
+        for i = 1, #list do
+            local b = list[i]
+            if b ~= nil and b:getY() ~= y then b:setY(y) end
+            y = y + bs
+        end
+
+        local last = list[#list]
+        if last ~= nil and panel.setScrollHeight ~= nil then
+            panel:setScrollHeight(last:getBottom())
+        end
+    end
+
+    WindowChrome.side(page)
 end
 
 function WindowChrome.seam(page)

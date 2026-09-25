@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.8
+    Version: 1.8.9
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -24,6 +24,31 @@ Events.OnGameBoot.Add(function()
     function ISInventoryPage:createChildren()
         og_createChildren(self)
 
+    end
+
+    local og_containerSizeChanged = ISInventoryPage.onInventoryContainerSizeChanged
+    function ISInventoryPage:onInventoryContainerSizeChanged()
+        og_containerSizeChanged(self)
+        local Chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
+        local WC = Chrome ~= nil and Chrome.WindowChrome or nil
+
+        if WC ~= nil and WC.fitButtons ~= nil then
+            local ok, err = pcall(WC.fitButtons, self)
+            if not ok then
+                Log.warn("InventoryPagePatch: fitButtons failed: " .. tostring(err))
+            end
+        end
+    end
+
+    local og_addContainerButton = ISInventoryPage.addContainerButton
+    function ISInventoryPage:addContainerButton(...)
+        local button = og_addContainerButton(self, ...)
+        local Chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
+        local WC = Chrome ~= nil and Chrome.WindowChrome or nil
+        if button ~= nil and WC ~= nil and WC.fitButton ~= nil then
+            pcall(WC.fitButton, self, button)
+        end
+        return button
     end
 
     local og_refreshBackpacks = ISInventoryPage.refreshBackpacks
@@ -68,6 +93,12 @@ Events.OnGameBoot.Add(function()
             else
 
                 WindowChrome.restore(self)
+            end
+
+            if WindowChrome.buttonSizeFor ~= nil
+                    and (self.buttonSize ~= WindowChrome.buttonSizeFor(self)
+                    or self._comfyButtonsComfy ~= (pane ~= nil and pane.mode == "comfy")) then
+                pcall(WindowChrome.fitButtons, self)
             end
         end
 
@@ -212,7 +243,8 @@ Events.OnGameBoot.Add(function()
             local i = at + dir * hop
             if i < 1 or i > n then
                 if not wrap then return -1 end
-                i = ((i - 1) % n) + 1
+
+                if i < 1 then i = i + n else i = i - n end
             end
             local button = s[i]
             local object = button ~= nil and button.inventory ~= nil

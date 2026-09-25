@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.8
+    Version: 1.8.9
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -78,6 +78,39 @@ local function isOwnMainInventory(self)
     return player:getInventory() == self.inventory
 end
 
+local OWNER_KINDS = { "BaseVehicle", "IsoPlayer", "IsoZombie", "IsoDeadBody",
+                      "IsoAnimal", "IsoObject" }
+
+local function describeContainer(inventory)
+    if inventory == nil then return "?" end
+    local okType, invType = pcall(inventory.getType, inventory)
+    local name = (okType and invType ~= nil) and tostring(invType) or "?"
+
+    local okItem, item = pcall(inventory.getContainingItem, inventory)
+    if okItem and item ~= nil then
+        local okFull, full = pcall(item.getFullType, item)
+        if okFull and full ~= nil then
+            full = tostring(full)
+            if full ~= name and full ~= ("Base." .. name) then
+                return name .. "/" .. full
+            end
+        end
+        return name
+    end
+
+    local okParent, parent = pcall(inventory.getParent, inventory)
+    if okParent and parent ~= nil then
+        local okKind, kind = pcall(function()
+            for i = 1, #OWNER_KINDS do
+                if instanceof(parent, OWNER_KINDS[i]) then return OWNER_KINDS[i] end
+            end
+            return nil
+        end)
+        if okKind and kind ~= nil then return name .. "/" .. kind end
+    end
+    return name
+end
+
 function SlotGrid:new(inventory, persistentGridData, playerNum)
     local o = setmetatable({}, self)
     o.inventory = inventory
@@ -88,6 +121,9 @@ function SlotGrid:new(inventory, persistentGridData, playerNum)
     o.pendingClaims = nil
     o.claimLanded = false
     o.needsMoreReconcile = false
+
+    o.refusalLogged = false
+    o.refusalPasses = 0
 
     o.changeCount = 0
     o:_rebuildSlotMap()
@@ -762,9 +798,21 @@ function SlotGrid:reconcile()
             end
         end
     end
+
     if failed > 0 then
-        Log.warn("reconcile: " .. failed
-            .. " item(s) refused insertion (container mismatch); retry on next pass")
+        self.refusalPasses = self.refusalPasses + 1
+        if not self.refusalLogged then
+            self.refusalLogged = true
+            Log.warn("reconcile: " .. failed
+                .. " item(s) refused insertion (container mismatch) in "
+                .. describeContainer(self.inventory)
+                .. "; retrying every pass until they settle")
+        end
+    elseif self.refusalLogged then
+        Log.info("reconcile: " .. describeContainer(self.inventory)
+            .. " settled after " .. self.refusalPasses .. " pass(es)")
+        self.refusalLogged = false
+        self.refusalPasses = 0
     end
 end
 
