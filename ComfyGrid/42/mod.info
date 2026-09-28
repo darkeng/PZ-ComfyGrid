@@ -1,11 +1,10 @@
 name=Comfy Grid - Tile Inventory
 id=ComfyGrid
 author=Darkeng
-description=Replaces Project Zomboid's list inventory with a grid of square tiles (Build 42). Identical items auto-stack with a counter; left-click a stack to inspect each item. Every container within reach stacks as a section with its own verbs - sort, transfer, and the object's own controls. Your gear gets a docked window with a live 3D character. Settings panel in game, full controller support, full multiplayer support.
+description=Replaces Project Zomboid's list inventory with a grid of square tiles (Build 42), with the game's icons redrawn at twice the resolution. Identical items auto-stack with a counter, and a left-click on a stack shows each item. Every container within reach stacks as a section with its own buttons, and any bag opens in its own window. The equipment gets a docked window with a live 3D character. Five colour themes, settings panel in game, full controller support, full multiplayer support.
 poster=poster.png
-version=1.8.6
-modversion=1.8.9
-pzversion=42.20.0
+modversion=1.8.10
+pzversion=42.21.0
 versionMin=42.0.0
 icon=icon.png
 pack=ComfyGridIcons type=ui

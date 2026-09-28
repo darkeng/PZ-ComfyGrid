@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.9
+    Version: 1.8.10
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -38,6 +38,17 @@ local function isFloor(inventory)
     return ok and tostring(invType) == "floor"
 end
 
+local function isCorpseGrabFromVehicle(item, src, destInventory, playerObj)
+
+    if playerObj:getVehicle() == nil then return false end
+    if ISInventoryTransferUtil == nil
+            or ISInventoryTransferUtil.isCharacterGrabbingCorpseItem == nil then
+        return false
+    end
+    return ISInventoryTransferUtil.isCharacterGrabbingCorpseItem(playerObj, item,
+        src, destInventory) == true
+end
+
 local function transferSourceOf(item, destInventory, playerObj, destIsFloor)
     local src = item ~= nil and item:getContainer() or nil
     if src == nil or src == destInventory then return nil end
@@ -47,6 +58,9 @@ local function transferSourceOf(item, destInventory, playerObj, destIsFloor)
     end
     if item:isFavorite()
             and not destInventory:isInCharacterInventory(playerObj) then
+        return nil
+    end
+    if isCorpseGrabFromVehicle(item, src, destInventory, playerObj) then
         return nil
     end
     return src
@@ -103,13 +117,17 @@ function Transfer.escalateHeavyItems(items, destInventory, playerObj)
             destInventory, playerObj)
         own = okOwn and inChar == true
     end
+
+    local seated = playerObj:getVehicle() ~= nil
     for i = 1, #items do
         local item = items[i]
         local src = item ~= nil and item:getContainer() or nil
         if own and src ~= nil and src ~= destInventory
                 and isForceDropHeavyItem(item) then
-            ISInventoryPaneContextMenu.equipHeavyItem(playerObj, item)
-            carried = carried + 1
+            if not (seated and item:isHumanCorpse()) then
+                ISInventoryPaneContextMenu.equipHeavyItem(playerObj, item)
+                carried = carried + 1
+            end
         else
             remaining[#remaining + 1] = item
         end

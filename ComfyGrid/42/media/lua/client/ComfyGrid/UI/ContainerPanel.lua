@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.9
+    Version: 1.8.10
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -347,15 +347,13 @@ local function resolveDisplayName(inventory, playerNum)
         return getText("IGUI_InventoryTooltip")
     end
 
-    local invType = inventory:getType()
-
     local okParent, parent = pcall(inventory.getParent, inventory)
     if okParent and parent ~= nil and inventory.getCustomName ~= nil then
         local okC, custom = pcall(inventory.getCustomName, inventory)
         if okC and custom ~= nil and custom ~= "" then return custom end
     end
 
-    return ContainerName.titleForType(invType)
+    return ContainerName.titleFor(inventory)
 end
 
 local function applyModel(self, model)

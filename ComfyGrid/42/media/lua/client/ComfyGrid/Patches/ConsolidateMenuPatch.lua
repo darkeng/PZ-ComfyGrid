@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.9
+    Version: 1.8.10
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -25,9 +25,7 @@ local function containerLabel(inv, playerObj)
         local okN, name = pcall(containing.getName, containing)
         if okN and name ~= nil then return name end
     end
-    local okT, invType = pcall(inv.getType, inv)
-    if not okT or invType == nil then return nil end
-    return ContainerName.titleForType(invType)
+    return ContainerName.titleFor(inv)
 end
 
 local function entryLabel(item, playerObj)
