@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.0
+    Version: 1.9.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -153,7 +153,7 @@ function Style.gridPixelSize(cols, rows)
     return cols * stride + 1, rows * stride + 1
 end
 
-function Style.slotAtPixel(localX, localY, cols, rows)
+function Style.slotAtPixel(localX, localY, cols, rows, limit)
     if localX < 0 or localY < 0 then
         return nil
     end
@@ -163,7 +163,11 @@ function Style.slotAtPixel(localX, localY, cols, rows)
     if col >= cols or row >= rows then
         return nil
     end
-    return row * cols + col
+    local slot = row * cols + col
+    if limit ~= nil and slot >= limit then
+        return nil
+    end
+    return slot
 end
 
 function Style.pixelForSlot(slot, cols)
@@ -205,6 +209,9 @@ Style.COLORS = {
     READ_TICK_LINE  = { r = 0.05, g = 0.12, b = 0.07, a = 1.0 },
     FAVORITE        = { r = 0.98, g = 0.78, b = 0.25, a = 1.0 },
     FAVORITE_LINE   = { r = 0.12, g = 0.09, b = 0.02, a = 1.0 },
+
+    FROZEN          = { r = 0.88, g = 0.96, b = 1.00, a = 1.0 },
+    FROZEN_LINE     = { r = 0.04, g = 0.09, b = 0.14, a = 1.0 },
 
     BROKEN      = { r = 0.92, g = 0.16, b = 0.13, a = 0.82 },
     BROKEN_LINE = { r = 0.10, g = 0.05, b = 0.05, a = 0.74 },

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.0
+    Version: 1.9.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -127,6 +127,8 @@ local function countOf(node)
     if node.kind == "chip" then
         return el.padChipCount ~= nil and el:padChipCount() or 0
     end
+
+    if el.visibleSlots ~= nil then return el:visibleSlots() end
     local cols = el.cols or 0
     local rows = el.rows or 0
     return cols * rows

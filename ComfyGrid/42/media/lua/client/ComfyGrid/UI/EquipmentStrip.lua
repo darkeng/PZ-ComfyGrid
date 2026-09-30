@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.0
+    Version: 1.9.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -58,6 +58,7 @@ local ANCHORS = {
 local POPUP_SIDE = { l = "right", c = "right", r = "left" }
 
 local DRAWER_ROWS = 2
+local DRAWER_SLOTS = 10
 
 local DEFAULT_BG = { r = 0.09, g = 0.09, b = 0.11, a = 0.85 }
 local LABEL = { r = 0.62, g = 0.62, b = 0.68, a = 0.9 }
@@ -217,12 +218,40 @@ function EquipmentStrip.anchorsTop()
     return Style.CELL_STRIDE
 end
 
-function EquipmentStrip.anchorsHeight(figureH, trayRows)
+local function columnsFor(width)
+    return math.max(1, math.floor((width - 1) / Style.CELL_STRIDE))
+end
+
+function EquipmentStrip.drawerRows(width)
+    if width == nil then return DRAWER_ROWS end
+    return math.max(DRAWER_ROWS, math.ceil(DRAWER_SLOTS / columnsFor(width)))
+end
+
+function EquipmentStrip.anchorsHeight(figureH, trayRows, width)
     trayRows = trayRows or 0
     local tray = trayRows * Style.CELL_STRIDE
     if trayRows > 0 then tray = tray + ROW_GAP end
     return EquipmentStrip.anchorsTop() + figureH + ROW_GAP + tray
-        + Style.FONT_H + DRAWER_ROWS * Style.CELL_STRIDE + 1
+        + Style.FONT_H + EquipmentStrip.drawerRows(width) * Style.CELL_STRIDE + 1
+end
+
+function EquipmentStrip.minFigureHeight()
+    local stride = Style.CELL_STRIDE
+    local need = 0
+    for i = 1, #ANCHORS do
+        for j = 1, #ANCHORS do
+            local a, b = ANCHORS[i], ANCHORS[j]
+            if a.col == b.col and b.y > a.y then
+                local tiles = (b.dy or 0) - (a.dy or 0)
+                if tiles < 1 then
+                    local h = stride * (1 - tiles) / (b.y - a.y)
+                    if h > need then need = h end
+                end
+            end
+        end
+    end
+
+    return math.ceil(need) + 1
 end
 
 local function tileXY(self, idx)
@@ -406,9 +435,9 @@ local function layoutAnchors(self, playerObj)
     end
     self.drawerCount = 0
     if shown ~= nil then
-        local cols = math.max(1, math.floor((w - 1) / stride))
+        local cols = columnsFor(w)
         local top = self.drawerY + Style.FONT_H
-        local max = cols * DRAWER_ROWS
+        local max = cols * EquipmentStrip.drawerRows(w)
         for j = 1, #shown.items do
             if j > max then break end
             n = n + 1
@@ -422,7 +451,8 @@ local function layoutAnchors(self, playerObj)
     self.entryCount = n
     self.cols = math.max(1, math.floor((w - 1) / stride))
     self.rows = 1
-    local h = self.drawerY + Style.FONT_H + DRAWER_ROWS * stride + 1
+    local h = self.drawerY + Style.FONT_H
+        + EquipmentStrip.drawerRows(w) * stride + 1
 
     if self.width ~= w or self.height ~= h then
         self:setWidth(w)

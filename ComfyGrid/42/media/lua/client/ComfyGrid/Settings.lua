@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.0
+    Version: 1.9.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -25,7 +25,7 @@ Settings.defaults = {
 
     LOOT_LAYOUT = "sections",
 
-    COMPACT_ROWS = true,
+    SPARE_SLOTS = "row",
 
     SORT_ORDER = "category",
     STACK_BY_TYPE = true,
@@ -80,6 +80,18 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptSortOrder",
       tipKey = "IGUI_ComfyGrid_OptSortOrderTip",
       tooltip = "What the sort button arranges by." },
+
+    { key = "SPARE_SLOTS",        kind = "choice", group = "style",
+      values = { "all", "row", "two" },
+      labelKeys = { "IGUI_ComfyGrid_SpareAll",
+                    "IGUI_ComfyGrid_SpareRow",
+                    "IGUI_ComfyGrid_SpareTwo" },
+      labels = { "Whole capacity",
+                 "One free row",
+                 "Two free slots" },
+      nameKey = "IGUI_ComfyGrid_OptSpareSlots",
+      tipKey = "IGUI_ComfyGrid_OptSpareSlotsTip",
+      tooltip = "How many empty slots each container shows after its items." },
     { key = "SCALE",              kind = "slider", group = "style",
       min = 0.3, max = 4, step = 0.1,
       nameKey = "IGUI_ComfyGrid_OptScale",
@@ -149,10 +161,6 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptSlotsPerCapacity",
       tipKey = "IGUI_ComfyGrid_OptSlotsPerCapacityTip",
       tooltip = "Slots each point of container capacity is worth." },
-    { key = "COMPACT_ROWS",       kind = "tickbox", group = "style",
-      nameKey = "IGUI_ComfyGrid_OptCompactRows",
-      tipKey = "IGUI_ComfyGrid_OptCompactRowsTip",
-      tooltip = "Show one spare row instead of the whole capacity." },
     { key = "STACK_BY_TYPE",      kind = "tickbox", group = "style",
       nameKey = "IGUI_ComfyGrid_OptStackByType",
       tipKey = "IGUI_ComfyGrid_OptStackByTypeTip",
@@ -577,7 +585,13 @@ local LEGACY = {
         keys = { "CONTAINERS_LEFT_PLAYER", "CONTAINERS_LEFT_LOOT" },
         map = function(raw) return raw == "true" end,
     },
+
+    COMPACT_ROWS = {
+        key = "SPARE_SLOTS",
+        map = function(raw) return raw == "true" and "row" or "all" end,
+    },
 }
+Settings.LEGACY = LEGACY
 
 local MIGRATIONS = {}
 

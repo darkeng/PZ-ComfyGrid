@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.0
+    Version: 1.9.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -40,6 +40,12 @@ local FALLBACK_FAVORITE = { r = 0.98, g = 0.78, b = 0.25 }
 local FALLBACK_FAVORITE_LINE = { r = 0.12, g = 0.09, b = 0.02 }
 local FALLBACK_BROKEN = { r = 0.92, g = 0.16, b = 0.13 }
 local FALLBACK_BROKEN_LINE = { r = 0.10, g = 0.05, b = 0.05 }
+local FALLBACK_FROZEN = { r = 0.88, g = 0.96, b = 1.00 }
+local FALLBACK_FROZEN_LINE = { r = 0.04, g = 0.09, b = 0.14 }
+
+local FROZEN_CELL = { r = 0.17, g = 0.34, b = 0.46, a = 1.0 }
+local FROZEN_MARK_PX = 11
+local FROZEN_RESCAN_MS = 700
 
 local BROKEN_OVERLAY_ALPHA = 0.35
 
@@ -211,6 +217,54 @@ local function stackHasBroken(stack, inventory)
     end
     entry.count, entry.at, entry.broken = stack.count, now, broken
     return broken
+end
+
+local stackFrozen = {}
+local stackFrozenEntries = 0
+local MAX_FROZEN_ENTRIES = 512
+
+local function stackFrozenState(stack, inventory)
+    local now = getTimestampMs()
+    local entry = stackFrozen[stack]
+    if entry ~= nil and entry.count == stack.count
+            and (now - entry.at) < FROZEN_RESCAN_MS then
+        return entry.state
+    end
+    local frozenCount, seen = 0, 0
+    for id in pairs(stack.itemIDs) do
+        local member = inventory:getItemWithID(id)
+        if member ~= nil then
+            seen = seen + 1
+            if member.isFrozen ~= nil and member:isFrozen() then
+                frozenCount = frozenCount + 1
+            end
+        end
+    end
+
+    local state = 0
+    if frozenCount > 0 then
+        state = (frozenCount == seen) and 2 or 1
+    end
+    if entry == nil then
+        if stackFrozenEntries >= MAX_FROZEN_ENTRIES then
+            stackFrozen = {}
+            stackFrozenEntries = 0
+        end
+        entry = {}
+        stackFrozen[stack] = entry
+        stackFrozenEntries = stackFrozenEntries + 1
+    end
+    entry.count, entry.at, entry.state = stack.count, now, state
+    return state
+end
+
+local function frozenStateOf(stack, item, inventory)
+    if stack.count == nil or stack.count <= 1 or not inventory
+            or stack.itemIDs == nil then
+        if item.isFrozen ~= nil and item:isFrozen() then return 2 end
+        return 0
+    end
+    return stackFrozenState(stack, inventory)
 end
 
 local function totalStackWeight(stack, inventory)
@@ -390,6 +444,29 @@ local function statusBarFraction(item, td, playerObj)
         end
     end
     return nil
+end
+
+local NEVER_ROTS_DAYS = 1000000
+
+local function freshnessFraction(item)
+    if item.isRotten and item:isRotten() then return 0 end
+    if item.getAge and item.getOffAgeMax then
+        local age = item:getAge()
+        local rotDays = item:getOffAgeMax()
+        if type(age) == "number" and type(rotDays) == "number"
+                and rotDays > 0 and rotDays < NEVER_ROTS_DAYS and age >= 0 then
+            local frac = 1 - age / rotDays
+            if frac < 0 then return 0 end
+            if frac > 1 then return 1 end
+            return frac
+        end
+    end
+    return nil
+end
+
+function StackRenderer.freshnessOf(item)
+    if item == nil or not (item.IsFood and item:IsFood()) then return nil end
+    return freshnessFraction(item)
 end
 
 local function isReadDone(item, td, playerObj)
@@ -584,7 +661,24 @@ function StackRenderer.draw(ctx)
         local who = getSpecificPlayer(ctx.playerNum)
         if who ~= nil then unwanted = item:isUnwanted(who) == true end
     end
-    SlotRenderer.drawCell(ctx, unwanted and UNWANTED_CELL or tint)
+
+    local td = nil
+    local frozen = 0
+    if item then
+        td = typeDataFor(item,
+            stack.itemType or (item.getFullType and item:getFullType()) or "?")
+        if td.isFood then
+            frozen = frozenStateOf(stack, item, ctx.inventory)
+        end
+    end
+
+    local cellTint = tint
+    if unwanted then
+        cellTint = UNWANTED_CELL
+    elseif frozen == 2 then
+        cellTint = FROZEN_CELL
+    end
+    SlotRenderer.drawCell(ctx, cellTint)
 
     local tex = item and item:getTex() or nil
     local bulky = false
@@ -659,15 +753,16 @@ function StackRenderer.draw(ctx)
             brokenBadge = stackHasBroken(stack, ctx.inventory)
         end
 
-        local td = typeDataFor(item,
-            stack.itemType or (item.getFullType and item:getFullType()) or "?")
         local playerObj = nil
         if td.readable and ctx.playerNum ~= nil then
             playerObj = getSpecificPlayer(ctx.playerNum)
         end
 
         local frac = nil
-        if showStatusBar then
+        if ctx.freshnessBar and td.isFood then
+            frac = freshnessFraction(item)
+        end
+        if frac == nil and showStatusBar then
             frac = statusBarFraction(item, td, playerObj)
         end
         if frac then
@@ -712,6 +807,19 @@ function StackRenderer.draw(ctx)
                     (mc and mc.READ_TICK) or FALLBACK_READ_TICK,
                     (mc and mc.READ_TICK_LINE) or FALLBACK_READ_TICK_LINE)
                 textRight = clearRight - mw - 2
+            end
+        end
+
+        if frozen > 0 then
+            local mk = markTextures("frozen", "media/ui/icon_frozen.png")
+            if mk then
+                local sz = floor(FROZEN_MARK_PX * Style.SCALE + 0.5)
+                local mw, mh = markFit(mk.fill, sz)
+                local mc = Style.COLORS
+                drawMark(view, mk, textRight - mw, y + CELL - mh - 3, mw, mh,
+                    (mc and mc.FROZEN) or FALLBACK_FROZEN,
+                    (mc and mc.FROZEN_LINE) or FALLBACK_FROZEN_LINE)
+                textRight = textRight - mw - 2
             end
         end
 

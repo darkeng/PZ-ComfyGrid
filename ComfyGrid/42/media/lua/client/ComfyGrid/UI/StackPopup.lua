@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.0
+    Version: 1.9.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -66,7 +66,8 @@ local DEFAULT_TEXT = { r = 0.9, g = 0.9, b = 0.9, a = 1 }
 
 local CHROME = { r = 0.44, g = 0.39, b = 0.29, a = 0.8 }
 
-local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0, skipWeightMark = true }
+local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0,
+    playerNum = 0, skipWeightMark = true, freshnessBar = true }
 
 local lastPrerenderError = nil
 local lastRenderError = nil
@@ -76,23 +77,6 @@ local function reportMouseError(err)
         lastMouseError = err
         Log.error("StackPopup mouse handling failed: " .. tostring(err))
     end
-end
-
-local function freshFracFor(item)
-    if not instanceof(item, "Food") then return nil end
-    if item.isRotten and item:isRotten() then return 0 end
-    if item.getAge and item.getOffAgeMax then
-        local ok, age = pcall(item.getAge, item)
-        local ok2, offMax = pcall(item.getOffAgeMax, item)
-        if ok and ok2 and type(age) == "number" and type(offMax) == "number"
-                and offMax > 0 and age >= 0 then
-            local frac = 1 - age / offMax
-            if frac < 0 then frac = 0 end
-            if frac > 1 then frac = 1 end
-            return frac
-        end
-    end
-    return nil
 end
 
 local function paneOf(gridView)
@@ -515,27 +499,6 @@ local function renderImpl(self)
 
             local hit, best = StackRenderer.jobOverlayFor(tile.synth, item, jobs, currentAction)
             if hit then StackRenderer.drawJobOverlay(self, tx, ty, best) end
-
-            local frac = freshFracFor(item)
-            if frac ~= nil then
-                local bc = StackRenderer.rampColor(frac)
-                local bx0 = tx + 5
-                local by0 = ty + cell - 8
-                local trackW = cell - 13
-                self:drawRect(bx0 + 1, by0, trackW - 2, 3,
-                    0.3, 0.05, 0.05, 0.05)
-                local fillW = math.floor(trackW * frac + 0.5)
-                if fillW < 2 and frac > 0 then fillW = 2 end
-                if fillW > 0 then
-                    self:drawRect(bx0, by0 + 1, 1, 1, 0.95, bc.r, bc.g, bc.b)
-                    if fillW > 2 then
-                        self:drawRect(bx0 + 1, by0, fillW - 2, 3,
-                            0.95, bc.r, bc.g, bc.b)
-                    end
-                    self:drawRect(bx0 + fillW - 1, by0 + 1, 1, 1,
-                        0.95, bc.r, bc.g, bc.b)
-                end
-            end
 
             if isSelected(self, tile.id) then
                 SlotRenderer.drawSelection(self, tx, ty)

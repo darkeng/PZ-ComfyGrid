@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.0
+    Version: 1.9.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -378,7 +378,8 @@ function DropHandler.resolve(gridView, localX, localY)
     if localX == nil or localY == nil then return false end
 
     if tutorialMode() then return false end
-    local targetSlot = gridView:slotAt(localX, localY)
+
+    local targetSlot = gridView:dropSlotAt(localX, localY)
     if targetSlot == nil then return false end
 
     local DragAndDrop = ComfyGrid.Interact.DragAndDrop

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.0
+    Version: 1.9.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -65,27 +65,45 @@ local PAD = 6
 local SHADOW_SPREAD = 12
 local SHADOW_ALPHA = 0.45
 
-local function figureWidth()
-    return FIGURE_TILES * Style.CELL
+local PREF_KEY = "equipWindowScale"
+local MAX_FIGURE_SCALE = 3
+
+local SNAP = 0.03
+
+local function clampFigureScale(wanted)
+    if type(wanted) ~= "number" or wanted ~= wanted then wanted = 1 end
+    local natural = Avatar.heightFor(FIGURE_TILES * Style.CELL)
+    local floor = natural > 0 and EquipmentStrip.minFigureHeight() / natural or 1
+    if floor > 1 then floor = 1 end
+    if wanted < floor then wanted = floor end
+    if wanted > MAX_FIGURE_SCALE then wanted = MAX_FIGURE_SCALE end
+    return wanted
+end
+
+local function figureWidth(k)
+    return math.floor(FIGURE_TILES * Style.CELL * clampFigureScale(k) + 0.5)
 end
 
 local function sideColumn()
     return Style.CELL_STRIDE + COL_GAP
 end
 
-local function defaultWidth()
-    return figureWidth() + 2 * sideColumn() + 2 * PAD
+local function defaultWidth(k)
+    return figureWidth(k) + 2 * sideColumn() + 2 * PAD
 end
 
-local function defaultHeight(trayRows)
+local function defaultHeight(trayRows, stripWidth, k)
     return Style.headerHeight() + PAD
-        + EquipmentStrip.anchorsHeight(Avatar.heightFor(figureWidth()), trayRows)
+        + EquipmentStrip.anchorsHeight(Avatar.heightFor(figureWidth(k)), trayRows,
+            stripWidth or (defaultWidth(k) - PAD * 2))
         + PAD
 end
 
 local function wantedHeight(win)
     local strip = win ~= nil and win.content or nil
-    return defaultHeight(strip ~= nil and strip.trayRows or 0)
+    return defaultHeight(strip ~= nil and strip.trayRows or 0,
+        win ~= nil and win.width - PAD * 2 or nil,
+        win ~= nil and win.figureK or nil)
 end
 
 local lastError = nil
@@ -150,12 +168,19 @@ end
 local CHIP_SPEC = { left = CHIP_LEFT, right = CHIP_RIGHT,
     actions = CHIP_ACTIONS }
 
+local Grip
+
 function EquipWindow:new(playerNum)
-    local w, h = defaultWidth(), defaultHeight(0)
+
+    local k = Prefs ~= nil and Prefs.getNumber ~= nil
+        and Prefs.getNumber(PREF_KEY .. tostring(playerNum), 1) or 1
+    local w, h = defaultWidth(k), defaultHeight(0, nil, k)
     local o = ISPanel:new(0, 0, w, h)
     setmetatable(o, self)
     self.__index = self
     o.playerNum = playerNum
+    o.figureK = k
+    o.resize = nil
     o.pin = true
     o.isCollapsed = false
     o.collapseCounter = 0
@@ -195,6 +220,11 @@ function EquipWindow:createChildren()
     strip:initialise()
     self:addChild(strip)
     self.content = strip
+
+    local grip = Grip:new(self)
+    grip:initialise()
+    self:addChild(grip)
+    self.grip = grip
 
     local band = WindowStrip:new(self, CHIP_SPEC)
     band:initialise()
@@ -531,12 +561,151 @@ function EquipWindow.follow(page)
     if showing and win.docked and not split then dockTo(win, page) end
 end
 
+local function gripSide(self)
+    if self.docked and self.dockSide == "left" then return "left" end
+    return "right"
+end
+
+local function gripSize()
+    return math.max(12, math.floor(Style.headerHeight() * 0.55))
+end
+
+local function factorForWidth(w)
+    return (w - 2 * sideColumn() - 2 * PAD) / (FIGURE_TILES * Style.CELL)
+end
+
+local function factorForHeight(self, h)
+    local strip = self.content
+    local trayRows = strip ~= nil and strip.trayRows or 0
+    local fixed = Style.headerHeight() + PAD
+        + EquipmentStrip.anchorsHeight(0, trayRows, self.width - PAD * 2) + PAD
+    return Avatar.widthFor(h - fixed) / (FIGURE_TILES * Style.CELL)
+end
+
+local function applySize(self)
+    self.preferredWidth = defaultWidth(self.figureK)
+
+    if not self.docked then self:setWidth(self.preferredWidth) end
+    self:setHeight(wantedHeight(self))
+end
+
+function EquipWindow:beginResize()
+    if self.resize ~= nil then return end
+    self.resize = {
+        mouseX = getMouseX(), mouseY = getMouseY(),
+        k = clampFigureScale(self.figureK),
+        width = self.width, height = self.height,
+        side = gripSide(self),
+    }
+    self.resize.sign = self.resize.side == "left" and -1 or 1
+end
+
+function EquipWindow:endResize()
+    local r = self.resize
+    if r == nil then return end
+    self.resize = nil
+    if self.figureK ~= r.k and Prefs ~= nil and Prefs.set ~= nil then
+        Prefs.set(PREF_KEY .. tostring(self.playerNum),
+            string.format("%.3f", self.figureK))
+    end
+end
+
+local function updateResize(self)
+    local r = self.resize
+    local dx = (getMouseX() - r.mouseX) * r.sign
+    local dy = getMouseY() - r.mouseY
+    local byWidth = factorForWidth(r.width + dx)
+    local byHeight = factorForHeight(self, r.height + dy)
+    local k = byWidth
+    if math.abs(byHeight - r.k) > math.abs(byWidth - r.k) then k = byHeight end
+    k = clampFigureScale(k)
+    if math.abs(k - 1) < SNAP then k = 1 end
+    if k ~= self.figureK then
+        self.figureK = k
+        applySize(self)
+    end
+end
+
+Grip = ISUIElement:derive("ComfyEquipGrip")
+
+function Grip:new(owner)
+    local o = ISUIElement:new(0, 0, 1, 1)
+    setmetatable(o, self)
+    self.__index = self
+    o.owner = owner
+    o.side = "right"
+    return o
+end
+
+function Grip:onMouseDown(_x, _y)
+    self.owner:beginResize()
+    return true
+end
+
+function Grip:onMouseUp(_x, _y)
+    self.owner:endResize()
+    return true
+end
+
+function Grip:onMouseUpOutside(_x, _y)
+    self.owner:endResize()
+end
+
+function Grip:render()
+    local sf = Style.COLORS and Style.COLORS.SURFACE
+    if sf == nil then return end
+
+    local hot = self.owner.resize ~= nil or self:isMouseOver()
+    local a = hot and 1 or 0.85
+    local ink = sf.accent or sf.line
+    local dot, step = 2, 4
+    local span = 2 * step + dot
+    local oy = self.height - 2 - span
+    local ox = self.side == "left" and 2 or (self.width - 2 - span)
+    for row = 0, 2 do
+        for col = 0, 2 do
+            if col + row >= 2 then
+                local c = self.side == "left" and (2 - col) or col
+                self:drawRect(ox + c * step, oy + row * step, dot, dot, a,
+                    ink.r, ink.g, ink.b)
+            end
+        end
+    end
+end
+
+local function layoutGrip(self)
+    local grip = self.grip
+    if grip == nil then return end
+    local show = not padOwns(self.playerNum) and not self.isCollapsed
+    if grip:getIsVisible() ~= show then grip:setVisible(show) end
+    local size = gripSize()
+    if grip.width ~= size then
+        grip:setWidth(size)
+        grip:setHeight(size)
+    end
+
+    local side = self.resize ~= nil and self.resize.side or gripSide(self)
+    grip.side = side
+    local gx = side == "left" and 1 or (self.width - size - 1)
+    local gy = self.height - size - 1
+    if grip.x ~= gx then grip:setX(gx) end
+    if grip.y ~= gy then grip:setY(gy) end
+end
+
 local function prerenderImpl(self)
 
     local ok, page = pcall(getPlayerInventory, self.playerNum)
     if not ok or page == nil or not page:getIsVisible() then
         self:setVisible(false)
         return
+    end
+
+    if self.resize ~= nil then
+        if isMouseButtonDown == nil or not isMouseButtonDown(0) then
+            self:endResize()
+        else
+            updateResize(self)
+        end
     end
 
     local band = self.strip
@@ -565,7 +734,7 @@ local function prerenderImpl(self)
 
     local col = sideColumn()
     local span = innerW - col * 2
-    local figW = figureWidth()
+    local figW = figureWidth(self.figureK)
     if figW > span then figW = span end
     if figW < Style.CELL then figW = Style.CELL end
     local figX = math.floor((innerW - figW) / 2)
@@ -596,6 +765,8 @@ local function prerenderImpl(self)
 
     local wantH = wantedHeight(self)
     if wantH ~= nil and self.height ~= wantH then self:setHeight(wantH) end
+
+    layoutGrip(self)
 end
 
 function EquipWindow:prerender()
@@ -680,7 +851,7 @@ end
 function EquipWindow:RestoreLayout(_name, layout)
     ISLayoutManager.DefaultRestoreWindow(self, layout)
 
-    self.preferredWidth = defaultWidth()
+    self.preferredWidth = defaultWidth(self.figureK)
     self:setWidth(self.preferredWidth)
     self:setHeight(wantedHeight(self))
 
@@ -698,9 +869,5 @@ function EquipWindow:SaveLayout(_name, layout)
 end
 
 Style.onScaleChanged(function()
-    for _, win in pairs(windows) do
-        win.preferredWidth = defaultWidth()
-        if not win.docked then win:setWidth(win.preferredWidth) end
-        win:setHeight(wantedHeight(win))
-    end
+    for _, win in pairs(windows) do applySize(win) end
 end)

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.0
+    Version: 1.9.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -66,6 +66,8 @@ local isFoodType = {}
 local MIN_COLS = 2
 local MAX_COLS = 32
 
+local SPARE_TWO = 2
+
 local DIRTY_STORM_FRAMES = 3
 local DIRTY_STORM_GAP_MS = 100
 local DEFAULT_COLS = 8
@@ -83,18 +85,31 @@ local function computeDims(self)
     end
     local grid = self.model.grid
     local rows
-    if self.compactEligible and Settings.get("COMPACT_ROWS") then
+    local limit = nil
+    local spare = self.compactEligible and Settings.get("SPARE_SLOTS") or "all"
+    if spare == "row" then
 
         rows = math.ceil(grid:contentSlots() / cols)
         if not Capacity.isFull(self.model.inventory, self.playerNum,
                 grid.changeCount) then
             rows = rows + 1
         end
+    elseif spare == "two" then
+
+        limit = grid:contentSlots()
+        if not Capacity.isFull(self.model.inventory, self.playerNum,
+                grid.changeCount) then
+            limit = limit + SPARE_TWO
+        end
+        if limit < 1 then limit = 1 end
+        rows = math.ceil(limit / cols)
+
+        if limit == rows * cols then limit = nil end
     else
         rows = math.ceil(grid:slotCount() / cols)
     end
     if rows < 1 then rows = 1 end
-    return cols, rows
+    return cols, rows, limit
 end
 
 local function reflowColumns(self, cols)
@@ -136,7 +151,7 @@ function GridView:new(x, y, model, playerNum)
 
     o.viewCols = nil
     o.colsSettle = nil
-    o.cols, o.rows = computeDims(o)
+    o.cols, o.rows, o.slotLimit = computeDims(o)
     local w, h = Style.gridPixelSize(o.cols, o.rows)
     o:setWidth(w)
     o:setHeight(h)
@@ -230,7 +245,7 @@ local function updateHover(self)
         return
     end
     self.hoverSlot = Style.slotAtPixel(self:getMouseX(), self:getMouseY(),
-        self.cols, self.rows)
+        self.cols, self.rows, self.slotLimit)
 end
 
 function GridView:setAvailableWidth(px)
@@ -268,14 +283,18 @@ local function prerenderImpl(self)
         end
     end
 
-    local cols, rows = computeDims(self)
+    local cols, rows, limit = computeDims(self)
 
     if reflowColumns(self, cols) then
-        cols, rows = computeDims(self)
+        cols, rows, limit = computeDims(self)
     end
     self.cols = cols
     self.rows = rows
+
+    local limitMoved = self.slotLimit ~= limit
+    self.slotLimit = limit
     local w, h = Style.gridPixelSize(cols, rows)
+    if limitMoved then updateHover(self) end
     if w ~= self.width or h ~= self.height then
         self:setWidth(w)
         self:setHeight(h)
@@ -366,17 +385,33 @@ function GridView:renderBoard()
     local w, h = Style.gridPixelSize(cols, rows)
     local colors = Style.COLORS
     local bg = colors and colors.BOARD_BG or DEFAULT_BG
+    local stride = Style.CELL_STRIDE
 
-    self:drawRect(0, 0, w, h, bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
+    local limit = self.slotLimit
+    local lastRowCols = cols
+    if limit ~= nil then
+        lastRowCols = limit - (rows - 1) * cols
+        local upperH = (rows - 1) * stride
+        if upperH > 0 then
+            self:drawRect(0, 0, w, upperH, bg.a or 1, bg.r or 0, bg.g or 0,
+                bg.b or 0)
+        end
+        self:drawRect(0, upperH, lastRowCols * stride + 1, h - upperH,
+            bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
+    else
+        self:drawRect(0, 0, w, h, bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
+    end
 
     local cullTop, cullBottom = self:visibleBand()
-    local stride = Style.CELL_STRIDE
     local cell = Style.CELL
     boardCtx.view = self
     for row = 0, rows - 1 do
         local y = row * stride
         if cullTop == nil or (y + cell > cullTop and y < cullBottom) then
-            for col = 0, cols - 1 do
+
+            local lastCol = cols - 1
+            if row == rows - 1 then lastCol = lastRowCols - 1 end
+            for col = 0, lastCol do
                 boardCtx.x = col * stride
                 boardCtx.y = y
                 SlotRenderer.drawCell(boardCtx, nil)
@@ -392,6 +427,8 @@ local function renderAll(self)
     local inventory = model.inventory
     local cols = self.cols
     local rows = self.rows
+
+    local shown = self.slotLimit or (cols * rows)
     local cell = Style.CELL
     local cullTop, cullBottom = self:visibleBand()
     local pixelForSlot = Style.pixelForSlot
@@ -518,7 +555,7 @@ local function renderAll(self)
     end
 
     local hoverSlot = self.hoverSlot
-    if hoverSlot ~= nil and (hoverSlot < 0 or hoverSlot >= cols * rows
+    if hoverSlot ~= nil and (hoverSlot < 0 or hoverSlot >= shown
             or not self:isMouseOver()) then
         hoverSlot = nil
     end
@@ -538,7 +575,7 @@ local function renderAll(self)
                 ht[slot] = nil
             else
                 ht[slot] = heat
-                if slot < cols * rows then
+                if slot < shown then
                     local hx, hy = pixelForSlot(slot, cols)
                     ctx.stack = grid:stackAt(slot)
                     ctx.item = nil
@@ -560,7 +597,7 @@ local function renderAll(self)
     end
 
     local padSlot = PadFocus.cursorFor(self)
-    if padSlot ~= nil and padSlot < cols * rows then
+    if padSlot ~= nil and padSlot < shown then
         local px, py = pixelForSlot(padSlot, cols)
         SlotRenderer.drawSelection(self, px, py)
         ctx.stack = grid:stackAt(padSlot)
@@ -575,7 +612,7 @@ local function renderAll(self)
 
     local pending = self.pendingClick
     if pending ~= nil and pending.shows and pending.slot ~= nil
-            and pending.slot < cols * rows then
+            and pending.slot < shown then
         local elapsed = getTimestampMs() - pending.atMs
         local t = elapsed / CLICK_DELAY_MS
         if t < 0 then t = 0 elseif t > 1 then t = 1 end
@@ -619,7 +656,21 @@ end
 
 function GridView:slotAt(x, y)
     if self.model == nil or self.model.grid == nil then return nil end
-    return Style.slotAtPixel(x, y, self.cols, self.rows)
+    return Style.slotAtPixel(x, y, self.cols, self.rows, self.slotLimit)
+end
+
+function GridView:visibleSlots()
+    return self.slotLimit or (self.cols * self.rows)
+end
+
+function GridView:dropSlotAt(x, y)
+    if self.model == nil or self.model.grid == nil then return nil end
+    local slot = Style.slotAtPixel(x, y, self.cols, self.rows)
+    if slot == nil then return nil end
+    if self.slotLimit ~= nil and slot >= self.slotLimit then
+        return self.model.grid:contentSlots()
+    end
+    return slot
 end
 
 function GridView:isMouseOverSlot(slot)
