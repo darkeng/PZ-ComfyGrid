@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -369,6 +369,9 @@ local function modifiersHeld()
 end
 
 function QuickEquip._onKey(key)
+
+    local core = getCore()
+    if core ~= nil and core:isDoingTextEntry() then return end
     local target = targetKey()
     if target == nil or key ~= target then return end
 

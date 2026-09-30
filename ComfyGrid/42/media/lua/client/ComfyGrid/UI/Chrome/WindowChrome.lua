@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -239,6 +239,11 @@ function WindowChrome.seam(page)
         sf.line.r, sf.line.g, sf.line.b)
 end
 
+local function buttonTopOnPage(buttonPanel, button)
+    local scroll = buttonPanel.getYScroll ~= nil and buttonPanel:getYScroll() or 0
+    return (buttonPanel.y or 0) + button:getY() + scroll
+end
+
 function WindowChrome.selection(page)
     if page.isCollapsed then return end
     local pane = page.inventoryPane
@@ -260,14 +265,51 @@ function WindowChrome.selection(page)
     local left = px == 0
     local x = left and (px + bs - bar) or px
 
+    local columnTop = panel.y or 0
+    local columnBottom = columnTop + (panel.height or 0)
     for i = 1, #buttons do
         local b = buttons[i]
         if b ~= nil and b.inventory == selected and b.getY ~= nil then
-            local by = (panel.y or 0) + b:getY()
+            local by = buttonTopOnPage(panel, b)
             local bh = b:getHeight()
 
-            page:drawRect(x, by + 1, bar, math.max(1, bh - 2), 1,
-                sf.accent.r, sf.accent.g, sf.accent.b)
+            if by + bh > columnTop and by < columnBottom then
+                page:drawRect(x, by + 1, bar, math.max(1, bh - 2), 1,
+                    sf.accent.r, sf.accent.g, sf.accent.b)
+            end
+        end
+    end
+end
+
+function WindowChrome.searchMarks(page)
+    if page.isCollapsed then return end
+    local pane = page.inventoryPane
+    if pane == nil or pane.mode ~= "comfy" then return end
+    local ItemSearch = ComfyGrid.Model and ComfyGrid.Model.ItemSearch or nil
+    local SlotRenderer = ComfyGrid.UI and ComfyGrid.UI.SlotRenderer or nil
+    if ItemSearch == nil or SlotRenderer == nil then return end
+    local marks = ItemSearch.marksFor(page.player)
+    if marks == nil then return end
+    local buttonPanel = page.containerButtonPanel
+    local buttons = page.backpacks
+    if buttonPanel == nil or type(buttons) ~= "table" then return end
+    local pulse = SlotRenderer.applyPulse()
+    local panelX = buttonPanel.x or 0
+    local columnTop = buttonPanel.y or 0
+    local columnBottom = columnTop + (buttonPanel.height or 0)
+    for buttonIndex = 1, #buttons do
+        local button = buttons[buttonIndex]
+        if button ~= nil and button:getIsVisible()
+                and ItemSearch.marksContainer(marks, button.inventory) then
+
+            local top = buttonTopOnPage(buttonPanel, button)
+            local bottom = top + button:getHeight()
+            if top < columnTop then top = columnTop end
+            if bottom > columnBottom then bottom = columnBottom end
+            if bottom - top >= 2 then
+                SlotRenderer.drawSearchBox(page, panelX + button:getX(), top,
+                    button:getWidth(), bottom - top, pulse, true)
+            end
         end
     end
 end
@@ -388,6 +430,14 @@ function WindowChrome.restore(page)
         end
     end
     if page._comfyStrip ~= nil then
+
+        local searchField = page._comfyStrip.searchField
+        if searchField ~= nil and searchField.javaObject ~= nil
+                and searchField:isFocused() then
+            searchField:unfocus()
+        end
+        local ItemSearch = ComfyGrid.Model and ComfyGrid.Model.ItemSearch or nil
+        if ItemSearch ~= nil then ItemSearch.setTerm(page, "") end
         page:removeChild(page._comfyStrip)
         page._comfyStrip = nil
     end

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -12,6 +12,7 @@ require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/Icons"
+require "ComfyGrid/UI/Blit"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 local StackRenderer = {}
@@ -21,6 +22,8 @@ local Log = ComfyGrid.Core.Log
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local Icons = ComfyGrid.UI.Icons
+
+local Blit = ComfyGrid.UI.Blit
 local floor = math.floor
 
 local showStatusBar = ComfyGrid.Settings.get("STATUS_BAR")
@@ -274,10 +277,10 @@ function StackRenderer.blitBrokenMark(view, x, y, sz)
     local line = (colors and colors.BROKEN_LINE) or FALLBACK_BROKEN_LINE
     local outline = brokenLineTexture()
     if outline ~= nil then
-        view:drawTextureScaled(outline, x, y, sz, sz, line.a or 1,
+        Blit.tex(view, outline, x, y, sz, sz, line.a or 1,
             line.r, line.g, line.b)
     end
-    view:drawTextureScaled(tex, x, y, sz, sz, fill.a or 1,
+    Blit.tex(view, tex, x, y, sz, sz, fill.a or 1,
         fill.r, fill.g, fill.b)
 end
 
@@ -339,6 +342,20 @@ local function applyNearest(tex)
 end
 
 local nearestUnsupported = false
+
+local nearestTap = nil
+
+function StackRenderer.applyNearestTo(tex)
+    if nearestUnsupported or tex == nil then return end
+    if not pcall(applyNearest, tex) then
+        nearestUnsupported = true
+        Log.warn("nearest-neighbor icon filtering unavailable; falling back to linear")
+    end
+end
+
+function StackRenderer.setNearestTap(fn)
+    nearestTap = fn
+end
 
 local function statusBarFraction(item, td, playerObj)
     if td.isDrainable then
@@ -527,14 +544,14 @@ end
 
 local function drawMark(view, mk, x, y, w, h, fillCol, lineCol)
     if not mk.ours then
-        view:drawTextureScaled(mk.fill, x, y, w, h, 1, 1, 1, 1)
+        Blit.tex(view, mk.fill, x, y, w, h, 1, 1, 1, 1)
         return
     end
     if mk.line ~= nil and lineCol ~= nil then
-        view:drawTextureScaled(mk.line, x, y, w, h, 1,
+        Blit.tex(view, mk.line, x, y, w, h, 1,
             lineCol.r, lineCol.g, lineCol.b)
     end
-    view:drawTextureScaled(mk.fill, x, y, w, h, 1,
+    Blit.tex(view, mk.fill, x, y, w, h, 1,
         fillCol.r, fillCol.g, fillCol.b)
 end
 
@@ -591,11 +608,13 @@ function StackRenderer.draw(ctx)
             local box = TEXTURE_SIZE * wmul
 
             local hi = Icons.hiRes(tex)
-            if not nearestUnsupported then
+            if not nearestUnsupported and not hi then
 
                 if not pcall(applyNearest, hi or tex) then
                     nearestUnsupported = true
                     Log.warn("nearest-neighbor icon filtering unavailable; falling back to linear")
+                elseif nearestTap ~= nil then
+                    nearestTap(hi or tex)
                 end
             end
 
@@ -611,7 +630,7 @@ function StackRenderer.draw(ctx)
                 if mk then
                     local sz = floor(CELL * UNWANTED_MARK_FRAC + 0.5)
                     local mw, mh = markFit(mk.fill, sz)
-                    view:drawTextureScaled(mk.fill,
+                    Blit.tex(view, mk.fill,
                         x + (CELL - mw) * 0.5, y + (CELL - mh) * 0.5,
                         mw, mh, UNWANTED_MARK_ALPHA, 1, 1, 1)
                 end
@@ -631,7 +650,7 @@ function StackRenderer.draw(ctx)
         local single = (stack.count == nil or stack.count <= 1)
         if single then
             if item.isBroken and item:isBroken() then
-                view:drawRect(x + 1, y + 1, CELL - 2, CELL - 2,
+                Blit.rect(view, x + 1, y + 1, CELL - 2, CELL - 2,
                     BROKEN_OVERLAY_ALPHA, 0, 0, 0)
 
                 StackRenderer.drawBrokenMark(view, x, y, CELL)
@@ -662,12 +681,12 @@ function StackRenderer.draw(ctx)
                 local col = BAR_COLORS[floor(frac * 100 + 0.5)]
                 local bx = x + CELL - Style.BAR_INSET
                 local by = y + 5 + (area - barH)
-                view:drawRect(bx + 1, by, 1, 1, 1, col.r, col.g, col.b)
+                Blit.rect(view, bx + 1, by, 1, 1, 1, col.r, col.g, col.b)
                 if barH > 2 then
-                    view:drawRect(bx, by + 1, 3, barH - 2, 1,
+                    Blit.rect(view, bx, by + 1, 3, barH - 2, 1,
                         col.r, col.g, col.b)
                 end
-                view:drawRect(bx + 1, by + barH - 1, 1, 1, 1,
+                Blit.rect(view, bx + 1, by + barH - 1, 1, 1, 1,
                     col.r, col.g, col.b)
             end
         end
@@ -725,10 +744,10 @@ function StackRenderer.draw(ctx)
                 local wx, wy = x + 3, y + CELL - wsz - 3
                 local line = weightLineTexture()
                 if line ~= nil then
-                    view:drawTextureScaled(line, wx, wy, wsz, wsz, 1,
+                    Blit.tex(view, line, wx, wy, wsz, wsz, 1,
                         wc.lr, wc.lg, wc.lb)
                 end
-                view:drawTextureScaled(weightIcon, wx, wy, wsz, wsz, 1,
+                Blit.tex(view, weightIcon, wx, wy, wsz, wsz, 1,
                     wc.r, wc.g, wc.b)
                 markRight = wx + wsz + 2
             end
@@ -756,11 +775,11 @@ function StackRenderer.draw(ctx)
                 if cs then
                     local off = floor(Style.SCALE + 0.5)
                     if off < 1 then off = 1 end
-                    view:drawText(ammoText, ax + off, ty + off,
+                    Blit.text(view, ammoText, ax + off, ty + off,
                         cs.r, cs.g, cs.b, cs.a or 1, Style.FONT)
                 end
                 local ct = (colors2 and colors2.COUNT_TEXT) or FALLBACK_COUNT_TEXT
-                view:drawText(ammoText, ax, ty, ct.r, ct.g, ct.b, ct.a or 1,
+                Blit.text(view, ammoText, ax, ty, ct.r, ct.g, ct.b, ct.a or 1,
                     Style.FONT)
             end
         end
@@ -800,7 +819,7 @@ function StackRenderer.draw(ctx)
                 if cs then
                     local off = floor(Style.SCALE + 0.5)
                     if off < 1 then off = 1 end
-                    view:drawText(text, vx + off, ty + off,
+                    Blit.text(view, text, vx + off, ty + off,
                         cs.r, cs.g, cs.b, cs.a or 1, Style.FONT)
                 end
                 local vc
@@ -809,16 +828,16 @@ function StackRenderer.draw(ctx)
                 else
                     vc = (colors3 and colors3.COUNT_TEXT) or FALLBACK_COUNT_TEXT
                 end
-                view:drawText(text, vx, ty, vc.r, vc.g, vc.b, vc.a or 1,
+                Blit.text(view, text, vx, ty, vc.r, vc.g, vc.b, vc.a or 1,
                     Style.FONT)
             end
         end
 
         if bulky and weightIcon == nil and not ctx.skipWeightMark then
             local mb = y + CELL - 3
-            view:drawRect(x + 3, mb - 2, 7, 2, 0.9, 0.82, 0.65, 0.38)
-            view:drawRect(x + 3, mb - 4, 5, 2, 0.9, 0.82, 0.65, 0.38)
-            view:drawRect(x + 3, mb - 6, 3, 2, 0.9, 0.82, 0.65, 0.38)
+            Blit.rect(view, x + 3, mb - 2, 7, 2, 0.9, 0.82, 0.65, 0.38)
+            Blit.rect(view, x + 3, mb - 4, 5, 2, 0.9, 0.82, 0.65, 0.38)
+            Blit.rect(view, x + 3, mb - 6, 3, 2, 0.9, 0.82, 0.65, 0.38)
         end
     end
 
@@ -857,10 +876,10 @@ function StackRenderer.draw(ctx)
         if cs then
             local off = floor(Style.SCALE + 0.5)
             if off < 1 then off = 1 end
-            view:drawText(text, textX + off, y + off,
+            Blit.text(view, text, textX + off, y + off,
                 cs.r, cs.g, cs.b, cs.a or 1, Style.FONT)
         end
-        view:drawText(text, textX, y, ct.r, ct.g, ct.b, ct.a or 1, Style.FONT)
+        Blit.text(view, text, textX, y, ct.r, ct.g, ct.b, ct.a or 1, Style.FONT)
     end
 end
 
@@ -916,9 +935,9 @@ function StackRenderer.drawJobOverlay(view, x, y, delta)
     local colors = Style.COLORS
     local ov = (colors and colors.TRANSFER_OVERLAY) or FALLBACK_OVERLAY
     local ed = (colors and colors.TRANSFER_EDGE) or FALLBACK_EDGE
-    view:drawRect(x + 2, y + 2, inner, coverH,
+    Blit.rect(view, x + 2, y + 2, inner, coverH,
         ov.a or 0.72, ov.r or 0, ov.g or 0, ov.b or 0)
-    view:drawRect(x + 2, y + coverH, inner, 2,
+    Blit.rect(view, x + 2, y + coverH, inner, 2,
         ed.a or 0.9, ed.r or 0.95, ed.g or 0.80, ed.b or 0.25)
 end
 

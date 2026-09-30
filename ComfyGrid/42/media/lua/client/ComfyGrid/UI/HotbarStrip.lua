@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -13,6 +13,7 @@ require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/UI/HotbarGhosts"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/SlotRenderer"
+require "ComfyGrid/Model/ItemSearch"
 require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
 require "ComfyGrid/Interact/Transfer"
@@ -26,6 +27,7 @@ local Text = ComfyGrid.Core.Text
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
+local ItemSearch = ComfyGrid.Model.ItemSearch
 local StackRenderer = ComfyGrid.UI.StackRenderer
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
 local Transfer = ComfyGrid.Interact.Transfer
@@ -234,6 +236,10 @@ local function renderImpl(self)
         if applyPlayer == nil then applySrc = nil end
         applyPulse = SlotRenderer.applyPulse()
     end
+
+    local searchMarks = ItemSearch.marksFor(self.playerNum)
+    local searchPulse = 1
+    if searchMarks ~= nil then searchPulse = SlotRenderer.applyPulse() end
     ctx.view = self
     ctx.playerNum = self.playerNum
     for i = 1, self.entryCount do
@@ -248,6 +254,10 @@ local function renderImpl(self)
             ctx.x = tx
             ctx.y = ty
             StackRenderer.draw(ctx)
+
+            if searchMarks ~= nil and ItemSearch.marksItem(searchMarks, item) then
+                SlotRenderer.drawSearchHint(ctx, searchPulse)
+            end
             if applySrc ~= nil
                     and ItemApply.hintFor(applySrc, item, applyPlayer) then
                 SlotRenderer.drawApplyHint(ctx, applyPulse)

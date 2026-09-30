@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -449,9 +449,10 @@ function ContainerPanel:prerender()
     local wtText = nil
     local inv = self.model ~= nil and self.model.inventory or nil
     if inv ~= nil then
-        local cur, cmax = nil, nil
-        local okC, c = pcall(inv.getCapacityWeight, inv)
-        if okC and type(c) == "number" then cur = c end
+        local cmax = nil
+
+        local grid = self.model.grid
+        local cur = Capacity.weightOf(inv, grid ~= nil and grid.changeCount or nil)
         local playerObj = self.playerNum ~= nil
             and getSpecificPlayer(self.playerNum) or nil
         if playerObj ~= nil and inv == playerObj:getInventory() then
@@ -652,8 +653,20 @@ function ContainerPanel:onMouseDown(_x, _y)
     return true
 end
 
+local function drawSearchRing(self)
+    local ItemSearch = ComfyGrid.Model and ComfyGrid.Model.ItemSearch or nil
+    local SlotRenderer = ComfyGrid.UI and ComfyGrid.UI.SlotRenderer or nil
+    if ItemSearch == nil or SlotRenderer == nil then return end
+    local marks = ItemSearch.marksFor(self.playerNum)
+    if not ItemSearch.marksContainer(marks, self.model.inventory) then return end
+    SlotRenderer.drawSearchBox(self, 0, 0, self.width, headerHeight(),
+        SlotRenderer.applyPulse(), false)
+end
+
 function ContainerPanel:render()
-    if self.model == nil or not isActiveSection(self) then return end
+    if self.model == nil then return end
+    drawSearchRing(self)
+    if not isActiveSection(self) then return end
     SectionRule.card(self, 0, 0, self.width, self.height)
 end
 

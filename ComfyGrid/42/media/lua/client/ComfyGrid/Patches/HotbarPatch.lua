@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -77,6 +77,10 @@ local function applyMetrics(self)
     return true
 end
 
+local socketCtx = { view = false, x = 0, y = 0 }
+local REFUSED_WASH = { r = 1, g = 0.25, b = 0.2, a = 0.28 }
+local SLOT_LABEL = {}
+
 local function drawSlotBody(self, x, y, size, item, hot, refused, slot)
     local Style = ComfyGrid.UI.Style
     local SlotRenderer = ComfyGrid.UI.SlotRenderer
@@ -85,7 +89,8 @@ local function drawSlotBody(self, x, y, size, item, hot, refused, slot)
         and SlotRenderer.getTileTexture() or nil
 
     if item == nil and SlotRenderer ~= nil and SlotRenderer.drawSocket ~= nil then
-        SlotRenderer.drawSocket({ view = self, x = x, y = y }, size)
+        socketCtx.view, socketCtx.x, socketCtx.y = self, x, y
+        SlotRenderer.drawSocket(socketCtx, size)
         local Ghosts = ComfyGrid.UI.HotbarGhosts
         if slot ~= nil and Ghosts ~= nil and Ghosts.texFor ~= nil then
             local g = Ghosts.texFor(slot)
@@ -103,7 +108,7 @@ local function drawSlotBody(self, x, y, size, item, hot, refused, slot)
     end
 
     if hot then
-        local wash = refused and { r = 1, g = 0.25, b = 0.2, a = 0.28 }
+        local wash = refused and REFUSED_WASH
             or (colors and colors.HOVER) or { r = 1, g = 1, b = 1, a = 0.12 }
         if tex ~= nil then
             self:drawTextureScaled(tex, x, y, size, size,
@@ -219,7 +224,12 @@ local function render(self)
         end
 
         drawSlotBody(self, x, y, size, item, hot, refused, slot)
-        self:drawText(tostring(i), x + 3, y + 1,
+        local slotLabel = SLOT_LABEL[i]
+        if slotLabel == nil then
+            slotLabel = tostring(i)
+            SLOT_LABEL[i] = slotLabel
+        end
+        self:drawText(slotLabel, x + 3, y + 1,
             accent.r, accent.g, accent.b, 0.75, self.font)
         if item ~= nil then
             drawReadouts(self, x, y, size, item)

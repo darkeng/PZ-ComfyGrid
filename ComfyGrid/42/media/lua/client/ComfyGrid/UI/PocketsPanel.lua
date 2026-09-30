@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -281,8 +281,11 @@ local function renderImpl(self)
         if font ~= nil then
 
             local cur, max = 0, 0
-            local okC, c = pcall(isl.inv.getCapacityWeight, isl.inv)
-            if okC and type(c) == "number" then cur = c end
+
+            local igrid = gv.model ~= nil and gv.model.grid or nil
+            local c = Capacity.weightOf(isl.inv,
+                igrid ~= nil and igrid.changeCount or nil)
+            if type(c) == "number" then cur = c end
 
             local m = Capacity.effectiveFor(isl.inv, self.playerNum)
             if type(m) == "number" then max = m end

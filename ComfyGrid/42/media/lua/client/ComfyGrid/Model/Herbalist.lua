@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -12,10 +12,19 @@ ComfyGrid.Model = ComfyGrid.Model or {}
 local Herbalist = {}
 ComfyGrid.Model.Herbalist = Herbalist
 
-function Herbalist.typeOf(item)
+local isFoodByType = {}
+
+function Herbalist.typeOf(item, fullType)
     if item == nil then return nil end
-    local okFood, isFood = pcall(item.IsFood, item)
-    if not okFood or not isFood then return nil end
+    local isFood = fullType ~= nil and isFoodByType[fullType] or nil
+    if isFood == nil then
+        local okFood, f = pcall(item.IsFood, item)
+        if not okFood then return nil end
+        isFood = false
+        if f then isFood = true end
+        if fullType ~= nil then isFoodByType[fullType] = isFood end
+    end
+    if not isFood then return nil end
     if item.getHerbalistType == nil then return nil end
     local okType, hType = pcall(item.getHerbalistType, item)
     if not okType or hType == nil then return nil end
@@ -79,8 +88,8 @@ function Herbalist.applyMask(inventory, playerNum)
     return changed
 end
 
-function Herbalist.groupNameOf(item)
-    if Herbalist.typeOf(item) == nil then return nil end
+function Herbalist.groupNameOf(item, fullType)
+    if Herbalist.typeOf(item, fullType) == nil then return nil end
     local okName, name = pcall(item.getDisplayName, item)
     if okName and name ~= nil and tostring(name) ~= "" then
         return tostring(name)

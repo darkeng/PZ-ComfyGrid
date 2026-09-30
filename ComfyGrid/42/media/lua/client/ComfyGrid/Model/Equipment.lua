@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -108,9 +108,17 @@ local Log = ComfyGrid.Core.Log
 local Text = ComfyGrid.Core.Text
 
 local displayNames = {}
+
+local groupOfLocation = {}
+
 local function resolveGroup(rawLocation)
     local pretty = tostring(rawLocation)
-    local group = LOCATION_GROUP[pretty] or NORMALIZED[normalize(pretty)]
+    local group = groupOfLocation[pretty]
+    if group == nil then
+        group = LOCATION_GROUP[pretty] or NORMALIZED[normalize(pretty)] or false
+        groupOfLocation[pretty] = group
+    end
+    if group == false then group = nil end
     if reportedLocations[pretty] == nil then
         reportedLocations[pretty] = true
         Log.info("worn location '" .. pretty .. "' -> "
@@ -135,6 +143,20 @@ function Equipment.displayNameFor(key)
     local name = displayNames[tostring(key)]
     if name == false then return nil end
     return name
+end
+
+local function emitEntry(out, n, key, hand, dynamic)
+    n = n + 1
+    local entry = out[n]
+    if entry == nil then
+        entry = {}
+        out[n] = entry
+    end
+    entry.key = key
+    entry.hand = hand
+    entry.items = listFor(key)
+    entry.dynamic = dynamic
+    return n
 end
 
 function Equipment.collect(playerObj, out)
@@ -218,24 +240,12 @@ function Equipment.collect(playerObj, out)
     end
 
     local n = 0
-    local function emit(key, hand, dynamic)
-        n = n + 1
-        local entry = out[n]
-        if entry == nil then
-            entry = {}
-            out[n] = entry
-        end
-        entry.key = key
-        entry.hand = hand
-        entry.items = listFor(key)
-        entry.dynamic = dynamic
-    end
     local GROUPS = Equipment.GROUPS
     for i = 1, #GROUPS do
-        emit(GROUPS[i].key, GROUPS[i].hand, nil)
+        n = emitEntry(out, n, GROUPS[i].key, GROUPS[i].hand, nil)
     end
     for i = 1, #dynamicKeys do
-        emit(dynamicKeys[i], nil, true)
+        n = emitEntry(out, n, dynamicKeys[i], nil, true)
     end
     return n
 end

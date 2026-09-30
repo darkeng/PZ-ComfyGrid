@@ -22,6 +22,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 - **Reorder** — drag a container button to move it; the wheel cycles them in that same order.
 - **The one you have selected stands out** — its section wears a lit header and an outline, and clicking a section name selects that container.
 - **One or all, in one click** — a button in the loot window's title bar switches between every container within reach and one at a time.
+- **Search** — a field in the header of the inventory window and the nearby containers window: matching items show a breathing animation in the current theme's colours, along with the bags, containers and sections that hold them.
 - **Open a bag on the spot** — a backpack you are carrying opens in its own small window, without putting it on.
 
 ## Your character

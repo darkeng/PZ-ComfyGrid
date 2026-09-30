@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -81,6 +81,25 @@ Events.OnGameBoot.Add(function()
 
     local function noop() end
 
+    local function mirroredPlateRect(sel, x, y, w, h, ...)
+        local bs = sel._comfyPlateBs
+        if w == bs and x == sel:getWidth() - bs then x = 0 end
+        return sel._comfyPlateOg(sel, x, y, w, h, ...)
+    end
+
+    local function footerlessBorder(sel, x, y, w, h, ...)
+
+        if x == 0 and y > 0 and w == sel:getWidth()
+                and (y + h) == sel._comfyBorderH then
+            return
+        end
+        local bs = sel._comfyBorderBs
+        if bs ~= nil and w == bs and x == sel:getWidth() - bs then
+            x = 0
+        end
+        return sel._comfyBorderOg(sel, x, y, w, h, ...)
+    end
+
     local og_pagePrerender = ISInventoryPage.prerender
     function ISInventoryPage:prerender()
         local pane = self.inventoryPane
@@ -131,12 +150,9 @@ Events.OnGameBoot.Add(function()
         local savedRect
         if mirrorPlate then
             savedRect = rawget(self, "drawRect")
-            local ogRect = self.drawRect
-            local bs = self.buttonSize
-            self.drawRect = function(sel, x, y, w, h, ...)
-                if w == bs and x == sel:getWidth() - bs then x = 0 end
-                return ogRect(sel, x, y, w, h, ...)
-            end
+            self._comfyPlateOg = self.drawRect
+            self._comfyPlateBs = self.buttonSize
+            self.drawRect = mirroredPlateRect
         end
         local ok, err = pcall(og_pagePrerender, self)
         if mirrorPlate then self.drawRect = savedRect end
@@ -177,17 +193,10 @@ Events.OnGameBoot.Add(function()
             if wc ~= nil and wc.onLeft ~= nil and wc.onLeft(self) then
                 bs = self.buttonSize
             end
-            self.drawRectBorder = function(sel, x, y, w, h, ...)
-
-                if x == 0 and y > 0 and w == sel:getWidth()
-                        and (y + h) == height then
-                    return
-                end
-                if bs ~= nil and w == bs and x == sel:getWidth() - bs then
-                    x = 0
-                end
-                return ogBorder(sel, x, y, w, h, ...)
-            end
+            self._comfyBorderOg = ogBorder
+            self._comfyBorderH = height
+            self._comfyBorderBs = bs
+            self.drawRectBorder = footerlessBorder
         end
 
         if og_pageRender ~= nil then og_pageRender(self) end
@@ -203,6 +212,22 @@ Events.OnGameBoot.Add(function()
         if WindowChrome ~= nil and WindowChrome.selection ~= nil then
             pcall(WindowChrome.selection, self)
         end
+
+        if WindowChrome ~= nil and WindowChrome.searchMarks ~= nil then
+            pcall(WindowChrome.searchMarks, self)
+        end
+    end
+
+    local og_pageSetVisible = ISInventoryPage.setVisible
+    function ISInventoryPage:setVisible(visible, ...)
+        if not visible and self.javaObject ~= nil and self:getIsVisible() then
+            local chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
+            local SearchField = chrome ~= nil and chrome.SearchField or nil
+            if SearchField ~= nil and SearchField.onPageClosed ~= nil then
+                pcall(SearchField.onPageClosed, self)
+            end
+        end
+        return og_pageSetVisible(self, visible, ...)
     end
 
     local function padModule(page, name)

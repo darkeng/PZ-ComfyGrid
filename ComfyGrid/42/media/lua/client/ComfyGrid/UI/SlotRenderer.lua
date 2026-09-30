@@ -1,19 +1,22 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/UI/Style"
+require "ComfyGrid/UI/Blit"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 local SlotRenderer = {}
 ComfyGrid.UI.SlotRenderer = SlotRenderer
 
 local Style = ComfyGrid.UI.Style
+
+local Blit = ComfyGrid.UI.Blit
 
 local FALLBACK_CELL = { r = 0.16, g = 0.16, b = 0.16, a = 0.85 }
 local FALLBACK_HOVER = { r = 1, g = 1, b = 1, a = 0.25 }
@@ -40,10 +43,10 @@ function SlotRenderer.drawCell(ctx, tint)
     local c = tint or (colors and colors.EMPTY_CELL) or FALLBACK_CELL
     local tex = tileTexture()
     if tex ~= nil then
-        ctx.view:drawTextureScaled(tex, ctx.x + 1, ctx.y + 1,
+        Blit.tex(ctx.view, tex, ctx.x + 1, ctx.y + 1,
             cell - 2, cell - 2, c.a or DEFAULT_FILL_ALPHA, c.r, c.g, c.b)
     else
-        ctx.view:drawRect(ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
+        Blit.rect(ctx.view, ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
             c.a or DEFAULT_FILL_ALPHA, c.r, c.g, c.b)
     end
 end
@@ -55,10 +58,10 @@ function SlotRenderer.drawHover(ctx, alphaMul)
     local a = (c.a or FALLBACK_HOVER.a) * (alphaMul or 1)
     local tex = tileTexture()
     if tex ~= nil then
-        ctx.view:drawTextureScaled(tex, ctx.x + 1, ctx.y + 1,
+        Blit.tex(ctx.view, tex, ctx.x + 1, ctx.y + 1,
             cell - 2, cell - 2, a, c.r, c.g, c.b)
     else
-        ctx.view:drawRect(ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
+        Blit.rect(ctx.view, ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
             a, c.r, c.g, c.b)
     end
 end
@@ -72,15 +75,15 @@ function SlotRenderer.drawSelection(view, x, y)
     local c = (colors and colors.SELECTED) or FALLBACK_SELECTED
     local tex = tileTexture()
     if tex ~= nil then
-        view:drawTextureScaled(tex, x + 1, y + 1, cell - 2, cell - 2,
+        Blit.tex(view, tex, x + 1, y + 1, cell - 2, cell - 2,
             SELECTION_WASH_ALPHA, c.r, c.g, c.b)
     else
         local bw = cell - 2
         local a = c.a or 0.9
-        view:drawRect(x + 1, y + 1, bw, 2, a, c.r, c.g, c.b)
-        view:drawRect(x + 1, y + cell - 3, bw, 2, a, c.r, c.g, c.b)
-        view:drawRect(x + 1, y + 3, 2, cell - 6, a, c.r, c.g, c.b)
-        view:drawRect(x + cell - 3, y + 3, 2, cell - 6, a, c.r, c.g, c.b)
+        Blit.rect(view, x + 1, y + 1, bw, 2, a, c.r, c.g, c.b)
+        Blit.rect(view, x + 1, y + cell - 3, bw, 2, a, c.r, c.g, c.b)
+        Blit.rect(view, x + 1, y + 3, 2, cell - 6, a, c.r, c.g, c.b)
+        Blit.rect(view, x + cell - 3, y + 3, 2, cell - 6, a, c.r, c.g, c.b)
     end
 end
 
@@ -88,30 +91,74 @@ local FALLBACK_APPLY = { r = 0.42, g = 0.92, b = 0.50, a = 0.90 }
 local APPLY_RING = 2
 local APPLY_CLIP = 3
 
-function SlotRenderer.drawApplyHint(ctx, pulse)
-    local cell = Style.CELL
-    local colors = Style.COLORS
-    local c = (colors and colors.APPLY) or FALLBACK_APPLY
-    local view = ctx.view
-    local x, y = ctx.x, ctx.y
-    local p = pulse or 1
-    local tex = tileTexture()
-    local wash = 0.14 + 0.16 * p
-    if tex ~= nil then
-        view:drawTextureScaled(tex, x + 1, y + 1, cell - 2, cell - 2,
-            wash, c.r, c.g, c.b)
-    else
-        view:drawRect(x + 1, y + 1, cell - 2, cell - 2, wash, c.r, c.g, c.b)
+local function drawBreathingMark(view, x, y, width, height, pulse, color, withWash)
+    local phase = pulse or 1
+    if withWash then
+        local washAlpha = 0.14 + 0.16 * phase
+        local tex = tileTexture()
+        if tex ~= nil then
+            Blit.tex(view, tex, x + 1, y + 1, width - 2, height - 2,
+                washAlpha, color.r, color.g, color.b)
+        else
+            Blit.rect(view, x + 1, y + 1, width - 2, height - 2, washAlpha,
+                color.r, color.g, color.b)
+        end
     end
-    local a = 0.55 + 0.40 * p
-    local t = APPLY_RING
-    local k = APPLY_CLIP
-    local span = cell - 2 - 2 * k
-    if span <= 0 then return end
-    view:drawRect(x + 1 + k, y + 1, span, t, a, c.r, c.g, c.b)
-    view:drawRect(x + 1 + k, y + cell - 1 - t, span, t, a, c.r, c.g, c.b)
-    view:drawRect(x + 1, y + 1 + k, t, span, a, c.r, c.g, c.b)
-    view:drawRect(x + cell - 1 - t, y + 1 + k, t, span, a, c.r, c.g, c.b)
+    local ringAlpha = 0.55 + 0.40 * phase
+    local ringThickness = APPLY_RING
+    local cornerClip = APPLY_CLIP
+    local spanWidth = width - 2 - 2 * cornerClip
+    local spanHeight = height - 2 - 2 * cornerClip
+    if spanWidth <= 0 or spanHeight <= 0 then return end
+    Blit.rect(view, x + 1 + cornerClip, y + 1, spanWidth, ringThickness,
+        ringAlpha, color.r, color.g, color.b)
+    Blit.rect(view, x + 1 + cornerClip, y + height - 1 - ringThickness, spanWidth,
+        ringThickness, ringAlpha, color.r, color.g, color.b)
+    Blit.rect(view, x + 1, y + 1 + cornerClip, ringThickness, spanHeight,
+        ringAlpha, color.r, color.g, color.b)
+    Blit.rect(view, x + width - 1 - ringThickness, y + 1 + cornerClip,
+        ringThickness, spanHeight, ringAlpha, color.r, color.g, color.b)
+end
+
+function SlotRenderer.drawApplyHint(ctx, pulse)
+    local colors = Style.COLORS
+    local color = (colors and colors.APPLY) or FALLBACK_APPLY
+    local cell = Style.CELL
+    drawBreathingMark(ctx.view, ctx.x, ctx.y, cell, cell, pulse, color, true)
+end
+
+local FALLBACK_SEARCH = { r = 0.85, g = 0.74, b = 0.51 }
+local function searchColor()
+    local colors = Style.COLORS
+    local surface = colors and colors.SURFACE or nil
+    return (surface and surface.accent) or FALLBACK_SEARCH
+end
+
+local markTex = nil
+local markTexMissing = false
+local function markTexture()
+    if markTex == nil and not markTexMissing then
+        markTex = getTexture and getTexture("media/textures/comfy_mark.png") or nil
+        if markTex == nil then markTexMissing = true end
+    end
+    return markTex
+end
+
+function SlotRenderer.drawSearchHint(ctx, pulse)
+    local cell = Style.CELL
+    local color = searchColor()
+    local tex = markTexture()
+    if tex == nil then
+        drawBreathingMark(ctx.view, ctx.x, ctx.y, cell, cell, pulse, color, true)
+        return
+    end
+
+    Blit.tex(ctx.view, tex, ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
+        0.55 + 0.40 * (pulse or 1), color.r, color.g, color.b)
+end
+
+function SlotRenderer.drawSearchBox(view, x, y, width, height, pulse, withWash)
+    drawBreathingMark(view, x, y, width, height, pulse, searchColor(), withWash)
 end
 
 local HIGHLIGHT = { r = 1.0, g = 1.0, b = 1.0 }

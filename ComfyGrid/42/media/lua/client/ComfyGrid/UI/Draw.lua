@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,12 +9,14 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/TextureCache"
 require "ComfyGrid/UI/Style"
+require "ComfyGrid/UI/Blit"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 local Draw = {}
 ComfyGrid.UI.Draw = Draw
 
 local TextureCache = ComfyGrid.Core.TextureCache
+local Blit = ComfyGrid.UI.Blit
 local floor = math.floor
 local min = math.min
 
@@ -42,21 +44,21 @@ end
 function Draw.roundRect(el, x, y, w, h, r, a, c)
     local cs = cornerSet()
     if cs == nil or r == nil or r < 2 then
-        el:drawRect(x, y, w, h, a, c.r, c.g, c.b)
+        Blit.rect(el, x, y, w, h, a, c.r, c.g, c.b)
         return
     end
     local half = floor(min(w, h) * 0.5)
     if r > half then r = half end
-    el:drawTextureScaled(cs.tl, x, y, r, r, a, c.r, c.g, c.b)
-    el:drawTextureScaled(cs.tr, x + w - r, y, r, r, a, c.r, c.g, c.b)
-    el:drawTextureScaled(cs.bl, x, y + h - r, r, r, a, c.r, c.g, c.b)
-    el:drawTextureScaled(cs.br, x + w - r, y + h - r, r, r, a, c.r, c.g, c.b)
+    Blit.tex(el, cs.tl, x, y, r, r, a, c.r, c.g, c.b)
+    Blit.tex(el, cs.tr, x + w - r, y, r, r, a, c.r, c.g, c.b)
+    Blit.tex(el, cs.bl, x, y + h - r, r, r, a, c.r, c.g, c.b)
+    Blit.tex(el, cs.br, x + w - r, y + h - r, r, r, a, c.r, c.g, c.b)
     if w > 2 * r then
-        el:drawRect(x + r, y, w - 2 * r, r, a, c.r, c.g, c.b)
-        el:drawRect(x + r, y + h - r, w - 2 * r, r, a, c.r, c.g, c.b)
+        Blit.rect(el, x + r, y, w - 2 * r, r, a, c.r, c.g, c.b)
+        Blit.rect(el, x + r, y + h - r, w - 2 * r, r, a, c.r, c.g, c.b)
     end
     if h > 2 * r then
-        el:drawRect(x, y + r, w, h - 2 * r, a, c.r, c.g, c.b)
+        Blit.rect(el, x, y + r, w, h - 2 * r, a, c.r, c.g, c.b)
     end
 end
 
@@ -125,6 +127,25 @@ function Draw.disc(el, x, y, d, a, c)
     else
         Draw.roundRect(el, x, y, d, d, floor(d * 0.5), a, c)
     end
+end
+
+function Draw.pill(el, x, y, w, h, a, c)
+    local t = dotTexture()
+    if t == nil or w < h then
+        Draw.roundRect(el, x, y, w, h, floor(h * 0.5), a, c)
+        return
+    end
+    Blit.tex(el, t, x, y, h, h, a, c.r, c.g, c.b)
+    Blit.tex(el, t, x + w - h, y, h, h, a, c.r, c.g, c.b)
+    local half = floor(h * 0.5)
+    if w > 2 * half then
+        Blit.rect(el, x + half, y, w - 2 * half, h, a, c.r, c.g, c.b)
+    end
+end
+
+function Draw.pillFrame(el, x, y, w, h, a, border, fill)
+    Draw.pill(el, x, y, w, h, a, border)
+    Draw.pill(el, x + 1, y + 1, w - 2, h - 2, a, fill)
 end
 
 function Draw.pie(el, cx, cy, r, sweep, a, c)

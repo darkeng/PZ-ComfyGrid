@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -21,13 +21,45 @@ local pages = {}
 
 local PAGE_GETTERS = { getPlayerInventory, getPlayerLoot }
 
-local function depthOf(uis, el)
-    local java = el ~= nil and el.javaObject or nil
-    if java == nil then return nil end
-    for i = 0, uis:size() - 1 do
-        if uis:get(i) == java then return i end
+local targets = {}
+
+local want = {}
+local depths = {}
+
+local function javaOf(el)
+    return el ~= nil and el.javaObject or nil
+end
+
+local function depthsOf(uis, list, count)
+    local wanted = 0
+    for k = 1, count do
+        depths[k] = nil
+        local java = javaOf(list[k])
+        if java ~= nil and want[java] == nil then
+            want[java] = k
+            wanted = wanted + 1
+        end
     end
-    return nil
+    local i = uis:size() - 1
+    while wanted > 0 and i >= 0 do
+        local k = want[uis:get(i)]
+        if k ~= nil and depths[k] == nil then
+            depths[k] = i
+            wanted = wanted - 1
+        end
+        i = i - 1
+    end
+
+    for k = 1, count do
+        local java = javaOf(list[k])
+        local first = java ~= nil and want[java] or nil
+        if first ~= nil and first ~= k then depths[k] = depths[first] end
+    end
+    for k = 1, count do
+        local java = javaOf(list[k])
+        if java ~= nil then want[java] = nil end
+    end
+    return depths
 end
 
 local function pagesOf(playerNum, out)
@@ -76,16 +108,22 @@ function ZOrder.enforce(playerNum)
     if uis == nil then return false end
 
     local pageCount = pagesOf(playerNum, pages)
+
+    for i = 1, pageCount do targets[i] = pages[i] end
+    for i = 1, n do targets[pageCount + i] = order[i] end
+    local total = pageCount + n
+    for i = #targets, total + 1, -1 do targets[i] = nil end
+    local depth = depthsOf(uis, targets, total)
     local floor = -1
     for i = 1, pageCount do
-        local d = depthOf(uis, pages[i])
+        local d = depth[i]
         if d ~= nil and d > floor then floor = d end
     end
 
     local wrong = false
     local prev = floor
     for i = 1, n do
-        local d = depthOf(uis, order[i])
+        local d = depth[pageCount + i]
         if d == nil or d < prev then wrong = true break end
         prev = d
     end

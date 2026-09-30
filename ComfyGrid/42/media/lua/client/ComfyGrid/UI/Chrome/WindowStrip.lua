@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -12,6 +12,7 @@ require "ComfyGrid/Core/Text"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/Chrome/Chip"
+require "ComfyGrid/UI/Chrome/SearchField"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 ComfyGrid.UI.Chrome = ComfyGrid.UI.Chrome or {}
@@ -86,7 +87,7 @@ local RIGHT_CHIPS = {
       when = function(page) return page.onCharacter == true end },
 }
 
-local DEFAULT_SPEC = { left = LEFT_CHIPS, right = RIGHT_CHIPS }
+local DEFAULT_SPEC = { left = LEFT_CHIPS, right = RIGHT_CHIPS, search = true }
 
 local function chipWanted(def, page)
     return def.when == nil or def.when(page) == true
@@ -186,6 +187,24 @@ function WindowStrip:prerender()
             self.chipsLeft:add(def.id, def.tex(), tipOf(def, page))
         end
     end
+    if self.spec.search then self:layoutSearchField() end
+end
+
+function WindowStrip:layoutSearchField()
+    local chrome = ComfyGrid.UI.Chrome
+    local SearchField = chrome ~= nil and chrome.SearchField or nil
+    if SearchField == nil then return end
+    local field = self.searchField
+    if field == nil then
+        field = SearchField:new(self.page)
+        field:initialise()
+        self:addChild(field)
+        self.searchField = field
+        SearchField.register(self.page, field)
+    end
+    field:applyPendingTerm()
+    field:layoutIn(self, PAD + self.chipsLeft.consumed,
+        self.width - PAD - self.chips.consumed)
 end
 
 local ACTIONS = {}
@@ -241,7 +260,16 @@ function WindowStrip:onChip(x, y)
 end
 
 function WindowStrip:onMouseDown(x, y)
+
+    local field = self.searchField
+    self.pressBeganOnPlate = field ~= nil and field:plateContains(x, y)
+    if self.pressBeganOnPlate then return true end
     return self:onChip(x, y)
+end
+
+function WindowStrip:onMouseUpOutside(_x, _y)
+    self.pressBeganOnPlate = false
+    return false
 end
 
 function WindowStrip:activateChip(id)
@@ -265,6 +293,18 @@ function WindowStrip:padActivateChip(slot)
 end
 
 function WindowStrip:onMouseUp(x, y)
+
+    local field = self.searchField
+    local pressBeganOnPlate = self.pressBeganOnPlate
+    self.pressBeganOnPlate = false
+    if pressBeganOnPlate and field ~= nil and field:plateContains(x, y) then
+        if field:clearContains(x, y) then
+            field:clearSearch()
+        else
+            field:focus()
+        end
+        return true
+    end
 
     local id = self.chips:hit(x, y) or self.chipsLeft:hit(x, y)
     if id == nil then return false end

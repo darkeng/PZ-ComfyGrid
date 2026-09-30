@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -109,6 +109,39 @@ local function describeContainer(inventory)
         if okKind and kind ~= nil then return name .. "/" .. kind end
     end
     return name
+end
+
+function SlotGrid:_snapshotItems()
+    local byId = self.itemById
+    local list = self.snapItems
+    local ids = self.snapIds
+    if byId == nil then
+        byId, list, ids = {}, {}, {}
+        self.itemById, self.snapItems, self.snapIds = byId, list, ids
+    else
+        wipe(byId)
+    end
+    local n = 0
+    local items = self.inventory ~= nil and self.inventory:getItems() or nil
+    if items ~= nil then
+        for i = 0, items:size() - 1 do
+            local item = items:get(i)
+
+            if item ~= nil and instanceof(item, "InventoryItem") then
+                local id = item:getID()
+                n = n + 1
+                list[n] = item
+                ids[n] = id
+                if byId[id] == nil then byId[id] = item end
+            end
+        end
+    end
+
+    for k = n + 1, self.snapCount or 0 do
+        list[k] = nil
+        ids[k] = nil
+    end
+    self.snapCount = n
 end
 
 function SlotGrid:new(inventory, persistentGridData, playerNum)
@@ -561,6 +594,9 @@ function SlotGrid:validate()
     wipe(seen)
     wipe(migrated)
 
+    self:_snapshotItems()
+    local byId = self.itemById
+
     local changed = false
     local i = 1
     while i <= #stacks do
@@ -581,13 +617,14 @@ function SlotGrid:validate()
                 if seen[id] then
                     drop = true
                 else
-                    local item = inventory:getItemWithID(id)
+                    local item = byId[id]
                     if item == nil then
 
                         drop = not emptyRead
                     elseif isItemExcluded(item, hotbar, excludeEquipped) then
                         drop = true
-                    elseif kept >= StackRules.maxStackOf(item) then
+
+                    elseif kept > 0 and kept >= StackRules.maxStackOf(item) then
 
                         drop = true
                         seen[id] = true
@@ -698,13 +735,18 @@ function SlotGrid:consolidateLoose()
     return moved
 end
 
-function SlotGrid:reconcile()
+function SlotGrid:reconcile(snapshotIsCurrent)
     self.needsMoreReconcile = false
 
     self:_recomputeSlotCount()
     local inventory = self.inventory
     local items = inventory:getItems()
     if items == nil then return end
+    if not snapshotIsCurrent or self.snapItems == nil then
+        self:_snapshotItems()
+    end
+    local snapItems = self.snapItems
+    local snapIds = self.snapIds
 
     local claims = self.pendingClaims
     if claims ~= nil then
@@ -752,12 +794,12 @@ function SlotGrid:reconcile()
         outboundBusy = TransferJobs ~= nil and TransferJobs.itemsFor ~= nil
             and TransferJobs.itemsFor(self.inventory) ~= nil
     end
-    local size = items:size()
-    for i = 0, size - 1 do
-        local item = items:get(i)
 
-        if item ~= nil and instanceof(item, "InventoryItem")
-                and positioned[item:getID()] ~= true
+    for k = 1, self.snapCount do
+        local item = snapItems[k]
+        local id = snapIds[k]
+
+        if positioned[id] ~= true
                 and not isItemExcluded(item, hotbar, excludeEquipped) then
             if inserted >= MAX_RECONCILE_INSERTS then
                 self.needsMoreReconcile = true
@@ -767,10 +809,10 @@ function SlotGrid:reconcile()
             local claimed = false
             local held = false
             if claims ~= nil then
-                local claim = claims[item:getID()]
+                local claim = claims[id]
                 if claim ~= nil then
                     if self:insertItem(item, claim.slot) then
-                        claims[item:getID()] = nil
+                        claims[id] = nil
                         claimed = true
 
                         self.claimLanded = true
@@ -780,7 +822,7 @@ function SlotGrid:reconcile()
                         held = true
                         self.needsMoreReconcile = true
                     else
-                        claims[item:getID()] = nil
+                        claims[id] = nil
                     end
                 end
             end
@@ -788,7 +830,7 @@ function SlotGrid:reconcile()
             if not held then
                 if claimed then
                     inserted = inserted + 1
-                elseif positioned[item:getID()] ~= nil then
+                elseif positioned[id] ~= nil then
 
                 elseif self:insertItem(item) then
                     inserted = inserted + 1

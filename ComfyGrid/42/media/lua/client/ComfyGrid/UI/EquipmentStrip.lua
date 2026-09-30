@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -14,6 +14,7 @@ require "ComfyGrid/Model/Equipment"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Chrome/SectionRule"
 require "ComfyGrid/UI/SlotRenderer"
+require "ComfyGrid/Model/ItemSearch"
 require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
 require "ComfyGrid/Interact/Transfer"
@@ -28,6 +29,7 @@ local Equipment = ComfyGrid.Model.Equipment
 local Style = ComfyGrid.UI.Style
 local SectionRule = ComfyGrid.UI.Chrome.SectionRule
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
+local ItemSearch = ComfyGrid.Model.ItemSearch
 local StackRenderer = ComfyGrid.UI.StackRenderer
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
 local Transfer = ComfyGrid.Interact.Transfer
@@ -529,6 +531,10 @@ local function renderImpl(self)
         if applyPlayer == nil then applySrc = nil end
         applyPulse = SlotRenderer.applyPulse()
     end
+
+    local searchMarks = ItemSearch.marksFor(self.playerNum)
+    local searchPulse = 1
+    if searchMarks ~= nil then searchPulse = SlotRenderer.applyPulse() end
     ctx.view = self
     ctx.playerNum = self.playerNum
     for i = 1, self.entryCount do
@@ -547,6 +553,15 @@ local function renderImpl(self)
             ctx.x = tx
             ctx.y = ty
             StackRenderer.draw(ctx)
+
+            if searchMarks ~= nil then
+                for layerIndex = 1, #items do
+                    if ItemSearch.marksItem(searchMarks, items[layerIndex]) then
+                        SlotRenderer.drawSearchHint(ctx, searchPulse)
+                        break
+                    end
+                end
+            end
             if applySrc ~= nil
                     and ItemApply.hintFor(applySrc, top, applyPlayer) then
                 SlotRenderer.drawApplyHint(ctx, applyPulse)

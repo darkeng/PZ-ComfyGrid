@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -15,10 +15,12 @@ require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
+require "ComfyGrid/UI/TileCache"
 require "ComfyGrid/Interact/DragAndDrop"
 require "ComfyGrid/Interact/Transfer"
 require "ComfyGrid/Interact/TransferJobs"
 require "ComfyGrid/Interact/Highlight"
+require "ComfyGrid/Model/ItemSearch"
 require "ComfyGrid/Interact/DropHandler"
 require "ComfyGrid/Interact/QuickMove"
 require "ComfyGrid/Interact/ContextMenu"
@@ -35,10 +37,12 @@ local Settings = ComfyGrid.Settings
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local StackRenderer = ComfyGrid.UI.StackRenderer
+local TileCache = ComfyGrid.UI.TileCache
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
 local Transfer = ComfyGrid.Interact.Transfer
 local TransferJobs = ComfyGrid.Interact.TransferJobs
 local Highlight = ComfyGrid.Interact.Highlight
+local ItemSearch = ComfyGrid.Model.ItemSearch
 local DropHandler = ComfyGrid.Interact.DropHandler
 local QuickMove = ComfyGrid.Interact.QuickMove
 local ContextMenu = ComfyGrid.Interact.ContextMenu
@@ -61,6 +65,9 @@ local isFoodType = {}
 
 local MIN_COLS = 2
 local MAX_COLS = 32
+
+local DIRTY_STORM_FRAMES = 3
+local DIRTY_STORM_GAP_MS = 100
 local DEFAULT_COLS = 8
 
 local function computeDims(self)
@@ -79,7 +86,8 @@ local function computeDims(self)
     if self.compactEligible and Settings.get("COMPACT_ROWS") then
 
         rows = math.ceil(grid:contentSlots() / cols)
-        if not Capacity.isFull(self.model.inventory, self.playerNum) then
+        if not Capacity.isFull(self.model.inventory, self.playerNum,
+                grid.changeCount) then
             rows = rows + 1
         end
     else
@@ -232,12 +240,31 @@ end
 local function prerenderImpl(self)
     local model = self.model
     local inventory = model.inventory
+
+    if model.isPlayerMain and model.markViewed ~= nil then model:markViewed() end
     local drawDirty = inventory ~= nil and inventory:isDrawDirty()
-    if drawDirty or model:shouldRefresh() then
+
+    local dirtyNow = false
+    if drawDirty then
+        inventory:setDrawDirty(false)
+
+        self.tileGen = (self.tileGen or 0) + 1
+        self.dirtyStreak = (self.dirtyStreak or 0) + 1
+        self.dirtyPending = true
+    else
+        self.dirtyStreak = 0
+    end
+    if self.dirtyPending then
+        dirtyNow = self.dirtyStreak < DIRTY_STORM_FRAMES
+            or getTimestampMs() - (self.lastDirtyRefreshMs or 0) >= DIRTY_STORM_GAP_MS
+    end
+    if dirtyNow or model:shouldRefresh() then
 
         model:refresh(true)
-        if drawDirty then
-            inventory:setDrawDirty(false)
+
+        if self.dirtyPending then
+            self.dirtyPending = false
+            self.lastDirtyRefreshMs = getTimestampMs()
         end
     end
 
@@ -370,11 +397,16 @@ local function renderAll(self)
     local pixelForSlot = Style.pixelForSlot
     local frontItem = ItemStack.frontItem
     local updateItem = StackRenderer.updateItem
-    local drawStack = StackRenderer.draw
+
+    local tileDraw = TileCache.draw
+    local nowMs = getTimestampMs()
+    local liveSlot = self.hoverSlot
     local stacks = grid.data.stacks
+    local byId = grid.itemById
     ctx.view = self
     ctx.playerNum = self.playerNum
     ctx.inventory = inventory
+    TileCache.beginBoard(self, self.tileGen, grid.changeCount)
 
     local draggedStack = nil
     local washR, washG, washB = 0, 0, 0
@@ -406,6 +438,11 @@ local function renderAll(self)
 
     local highlightIds = Highlight.idsFor(self.playerNum)
 
+    local searchMarks = ItemSearch.marksFor(self.playerNum)
+    local searchPulse = 1
+    if searchMarks ~= nil then searchPulse = SlotRenderer.applyPulse() end
+    local searchChangeCount = grid.changeCount
+
     local ItemApply = ComfyGrid.Interact.ItemApply
     local applySrc = ItemApply ~= nil and ItemApply.dragSource() or nil
     local applyPlayer = nil
@@ -435,7 +472,10 @@ local function renderAll(self)
                 if isFood and stack.count > 1 then
 
                     for id in pairs(stack.itemIDs) do
-                        local it = inventory:getItemWithID(id)
+                        local it = byId ~= nil and byId[id] or nil
+                        if it == nil or it:getContainer() ~= inventory then
+                            it = inventory:getItemWithID(id)
+                        end
                         if it ~= nil and it ~= front then updateItem(it) end
                     end
                 end
@@ -444,7 +484,12 @@ local function renderAll(self)
                 ctx.slot = stack.slot
                 ctx.x = sx
                 ctx.y = sy
-                drawStack(ctx)
+                tileDraw(ctx, nowMs, stack.slot == liveSlot)
+
+                if searchMarks ~= nil and ItemSearch.marksStack(searchMarks,
+                        stack, searchChangeCount) then
+                    SlotRenderer.drawSearchHint(ctx, searchPulse)
+                end
                 if applySrc ~= nil
                         and ItemApply.hintFor(applySrc, front, applyPlayer) then
                     SlotRenderer.drawApplyHint(ctx, applyPulse)

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -17,6 +17,7 @@ require "ComfyGrid/UI/Chrome/PopupRegistry"
 require "ComfyGrid/UI/Chrome/HoverTip"
 require "ComfyGrid/UI/Chrome/WindowChrome"
 require "ComfyGrid/UI/Chrome/WindowStrip"
+require "ComfyGrid/UI/Chrome/SearchField"
 require "ComfyGrid/UI/Chrome/SettingsPopup"
 require "ComfyGrid/UI/Avatar"
 require "ComfyGrid/UI/EquipWindow"

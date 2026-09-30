@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -151,24 +151,42 @@ StackRules.NEVER_STACK_TYPES = {
     ["Base.JS14_Clip"] = true,
 }
 
+local classFacts = {}
+
+local function classFactsOf(item, fullType)
+    local f = fullType ~= nil and classFacts[fullType] or nil
+    if f ~= nil then return f end
+    f = {
+        container = instanceof(item, "InventoryContainer") == true,
+        keyring = instanceof(item, "KeyRing") == true,
+        moveable = instanceof(item, "Moveable") == true,
+        weapon = instanceof(item, "HandWeapon") == true,
+    }
+    if fullType ~= nil then classFacts[fullType] = f end
+    return f
+end
+
 function StackRules.isStackable(item)
     if not item then return false end
 
-    if instanceof(item, "InventoryContainer") then
+    local fullType = item.getFullType ~= nil and item:getFullType() or nil
+    local facts = classFactsOf(item, fullType)
+
+    if facts.container then
         if item.canBeEquipped == nil then return false end
         local okEquip, wornAt = pcall(item.canBeEquipped, item)
         if not okEquip then return false end
         if wornAt ~= nil and tostring(wornAt) ~= "" then return false end
     end
 
-    if instanceof(item, "KeyRing") then return false end
+    if facts.keyring then return false end
 
-    if instanceof(item, "Moveable") then return false end
+    if facts.moveable then return false end
     if item.getDisplayCategory and item:getDisplayCategory() == "Moveable" then
         return false
     end
 
-    if instanceof(item, "HandWeapon") then
+    if facts.weapon then
         local cat = item.getDisplayCategory ~= nil and item:getDisplayCategory()
             or nil
         if cat ~= StackRules.MATERIAL_WEAPON_CATEGORY
@@ -184,7 +202,7 @@ function StackRules.isStackable(item)
         end
     end
 
-    if item.getFullType and StackRules.NEVER_STACK_TYPES[item:getFullType()] then
+    if fullType ~= nil and StackRules.NEVER_STACK_TYPES[fullType] then
         return false
     end
     return true
@@ -192,12 +210,13 @@ end
 
 function StackRules.identityOf(item)
     if item == nil then return nil end
+
+    local fullType = item.getFullType and item:getFullType() or nil
     local Herbalist = ComfyGrid.Model and ComfyGrid.Model.Herbalist
     if Herbalist ~= nil then
-        local masked = Herbalist.groupNameOf(item)
+        local masked = Herbalist.groupNameOf(item, fullType)
         if masked ~= nil then return masked end
     end
-    local fullType = item.getFullType and item:getFullType() or nil
     if fullType == nil then return nil end
     if item.getRecordedMediaIndex ~= nil then
         local ok, idx = pcall(item.getRecordedMediaIndex, item)

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -38,7 +38,41 @@ function Capacity.effectiveFor(inventory, playerNum)
     return nil
 end
 
-function Capacity.isFull(inventory, playerNum)
+local WEIGHT_TTL_MS = 100
+local WEIGHT_MEMO_MAX = 256
+local weightMemo = {}
+local weightMemoCount = 0
+local weightGen = 0
+
+function Capacity.flushWeights()
+    weightGen = weightGen + 1
+end
+
+function Capacity.weightOf(inventory, signal)
+    if inventory == nil then return nil end
+    local now = getTimestampMs()
+    local m = weightMemo[inventory]
+    if m ~= nil and m.gen == weightGen and m.sig == signal
+            and now - m.at < WEIGHT_TTL_MS and not inventory:isDrawDirty() then
+        return m.w
+    end
+    local okC, w = pcall(inventory.getCapacityWeight, inventory)
+    if not okC or type(w) ~= "number" then return nil end
+    if m == nil then
+
+        if weightMemoCount >= WEIGHT_MEMO_MAX then
+            weightMemo = {}
+            weightMemoCount = 0
+        end
+        m = {}
+        weightMemo[inventory] = m
+        weightMemoCount = weightMemoCount + 1
+    end
+    m.w, m.at, m.gen, m.sig = w, now, weightGen, signal
+    return w
+end
+
+function Capacity.isFull(inventory, playerNum, signal)
     if inventory == nil then return false end
     local okT, invType = pcall(inventory.getType, inventory)
     if okT and invType == "floor" then return false end
@@ -47,8 +81,8 @@ function Capacity.isFull(inventory, playerNum)
     if okP and parent ~= nil and instanceof(parent, "IsoGameCharacter") then
         return false
     end
-    local okC, cur = pcall(inventory.getCapacityWeight, inventory)
-    if not okC or type(cur) ~= "number" then return false end
+    local cur = Capacity.weightOf(inventory, signal)
+    if type(cur) ~= "number" then return false end
     local cmax = Capacity.effectiveFor(inventory, playerNum)
     if type(cmax) ~= "number" or cmax <= 0 then return false end
     return cur >= cmax

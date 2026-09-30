@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.8.10
+    Version: 1.9.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -24,6 +24,9 @@ local SlotGrid = ComfyGrid.Model.SlotGrid
 local PLAYER_REFRESH_MS = 100
 local OTHER_REFRESH_MS = 600
 
+local PLAYER_IDLE_REFRESH_MS = 1000
+local VIEW_GRACE_MS = 250
+
 local modelCache = {}
 local modelCacheLastAccess = {}
 
@@ -34,6 +37,9 @@ local CACHE_SWEEP_MS = 1000
 local lastSweepMs = 0
 
 local playerMainModels = {}
+
+local GOLDEN_FRACTION = 0.6180339887498949
+local modelSerial = 0
 
 local function newModel(inventory, playerNum, isPlayerMain)
     local self = setmetatable({
@@ -46,19 +52,45 @@ local function newModel(inventory, playerNum, isPlayerMain)
         lastRefreshMs = 0,
     }, ContainerModel)
 
+    if not self.isPlayerMain then
+        modelSerial = modelSerial + 1
+        local phase = (modelSerial * GOLDEN_FRACTION) % 1
+        self.phaseMs = math.floor(phase * OTHER_REFRESH_MS)
+    end
     self:refresh(true)
+
+    if self.phaseMs ~= nil then
+        self.lastRefreshMs = self.lastRefreshMs - self.phaseMs
+    end
     return self
 end
 
 function ContainerModel:shouldRefresh()
     if self.needsImmediateRefresh then return true end
     if self.grid.needsMoreReconcile then return true end
-    local interval = self.isPlayerMain and PLAYER_REFRESH_MS or OTHER_REFRESH_MS
-    return (getTimestampMs() - self.lastRefreshMs) >= interval
+    local now = getTimestampMs()
+    return (now - self.lastRefreshMs) >= self:pollIntervalAt(now)
+end
+
+function ContainerModel:pollIntervalAt(now)
+    if not self.isPlayerMain then return OTHER_REFRESH_MS end
+    if now - (self.lastViewedMs or 0) < VIEW_GRACE_MS
+            or self.grid.pendingClaims ~= nil
+            or self.publishOnArrival ~= nil then
+        return PLAYER_REFRESH_MS
+    end
+    return PLAYER_IDLE_REFRESH_MS
+end
+
+function ContainerModel:markViewed()
+    self.lastViewedMs = getTimestampMs()
 end
 
 function ContainerModel:refresh(force)
     if not force and not self:shouldRefresh() then return end
+
+    local timerDue = (getTimestampMs() - self.lastRefreshMs)
+        >= (self.isPlayerMain and PLAYER_REFRESH_MS or OTHER_REFRESH_MS)
 
     if isClient() and self.grid.pendingClaims == nil
             and Persistence.resolveSyncOwner(self.inventory) ~= nil then
@@ -73,7 +105,8 @@ function ContainerModel:refresh(force)
         Herbalist.applyMask(self.inventory, self.playerNum)
     end
     self.grid:validate()
-    self.grid:reconcile()
+
+    self.grid:reconcile(true)
 
     if self.grid.claimLanded then
         self.grid.claimLanded = false
@@ -93,6 +126,9 @@ function ContainerModel:refresh(force)
     end
     self.needsImmediateRefresh = false
     self.lastRefreshMs = getTimestampMs()
+    if not timerDue and self.phaseMs ~= nil then
+        self.lastRefreshMs = self.lastRefreshMs - self.phaseMs
+    end
 end
 
 function ContainerModel.getOrCreate(inventory, playerNum)
@@ -101,7 +137,14 @@ function ContainerModel.getOrCreate(inventory, playerNum)
     local player = playerNum ~= nil and getSpecificPlayer(playerNum) or nil
     if player and player:getInventory() == inventory then
         local mainModel = ContainerModel.getPlayerMain(playerNum)
-        if mainModel then return mainModel end
+        if mainModel then
+
+            if mainModel.needsImmediateRefresh or mainModel.grid.needsMoreReconcile
+                    or getTimestampMs() - mainModel.lastRefreshMs >= PLAYER_REFRESH_MS then
+                mainModel:refresh(true)
+            end
+            return mainModel
+        end
     end
     local model = modelCache[inventory]
     if not model then
