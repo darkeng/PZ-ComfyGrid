@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -103,10 +103,6 @@ function DragAndDrop.isDragOwner(owner)
     return ISMouseDrag.dragOwner == owner
 end
 
-function DragAndDrop.wasDragStarted(owner)
-    return ISMouseDrag.dragging ~= nil and ISMouseDrag.dragOwner == owner
-end
-
 function DragAndDrop.getDraggedStacks()
     local dragging = ISMouseDrag.dragging
     if dragging == nil then
@@ -117,35 +113,35 @@ function DragAndDrop.getDraggedStacks()
     if dragging == normalizedSource then
         return normalizedList
     end
-    local list
+    local stacks
     if instanceof(dragging, "InventoryItem") then
-        list = { VanillaStacks.fromItems({ dragging }) }
+        stacks = { VanillaStacks.fromItems({ dragging }) }
     elseif type(dragging) == "table" then
         if dragging.items ~= nil then
-            list = { dragging }
+            stacks = { dragging }
         else
-            list = {}
+            stacks = {}
             for i = 1, #dragging do
                 local entry = dragging[i]
                 if type(entry) == "table" then
                     if entry.items ~= nil then
-                        list[#list + 1] = entry
+                        stacks[#stacks + 1] = entry
                     end
                 elseif instanceof(entry, "InventoryItem") then
                     local wrapped = VanillaStacks.fromItems({ entry })
                     if wrapped ~= nil then
-                        list[#list + 1] = wrapped
+                        stacks[#stacks + 1] = wrapped
                     end
                 end
             end
         end
     else
 
-        list = {}
+        stacks = {}
     end
     normalizedSource = dragging
-    normalizedList = list
-    return list
+    normalizedList = stacks
+    return stacks
 end
 
 function DragAndDrop.endDrag()
@@ -183,10 +179,10 @@ function DragAndDrop.releaseDropsToFloor(playerNum)
     return false
 end
 
-function DragAndDrop.cancelDrag(owner, cb)
+function DragAndDrop.cancelDrag(owner, onCancel)
     if ISMouseDrag.dragOwner ~= owner then return end
     pendingCancelOwner = owner
-    pendingCancelCallback = cb
+    pendingCancelCallback = onCancel
 end
 
 function DragAndDrop._onTick()
@@ -196,13 +192,13 @@ function DragAndDrop._onTick()
     end
     local owner = pendingCancelOwner
     if owner ~= nil then
-        local cb = pendingCancelCallback
+        local onCancel = pendingCancelCallback
         clearPendingCancel()
 
         if ISMouseDrag.dragOwner ~= owner then return end
-        if cb ~= nil then
+        if onCancel ~= nil then
 
-            local ok, err = pcall(cb, owner)
+            local ok, err = pcall(onCancel, owner)
             if not ok then
                 Log.error("DragAndDrop cancel callback failed: " .. tostring(err))
             end
@@ -221,9 +217,9 @@ end
 if not ComfyGrid._dragCancelTickHooked then
     ComfyGrid._dragCancelTickHooked = true
     Events.OnTick.Add(function()
-        local dd = ComfyGrid.Interact and ComfyGrid.Interact.DragAndDrop
-        if dd ~= nil then
-            dd._onTick()
+        local dragAndDrop = ComfyGrid.Interact and ComfyGrid.Interact.DragAndDrop
+        if dragAndDrop ~= nil then
+            dragAndDrop._onTick()
         end
     end)
 end

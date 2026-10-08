@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -20,111 +20,111 @@ local Settings = ComfyGrid.Settings
 local floor = math.floor
 local concat = table.concat
 
-local parts = {}
+local tokenBuffer = {}
 
 function StackRules.bucketOf(item)
-    local n = 0
+    local tokenCount = 0
 
     if item.getInventory ~= nil then
         local held = item:getInventory()
         if held ~= nil and held:getItems():size() > 0 then
-            n = n + 1; parts[n] = "bag:" .. tostring(item:getID())
+            tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "bag:" .. tostring(item:getID())
         end
     end
     if Settings.get("STACK_BY_TYPE") == true then
         if item.isFavorite and item:isFavorite() then
-            n = n + 1; parts[n] = "fav"
+            tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "fav"
         end
         if item.getFluidContainer then
-            local fc = item:getFluidContainer()
-            if fc and not (fc.isEmpty and fc:isEmpty()) then
-                local fluid = fc.getPrimaryFluid and fc:getPrimaryFluid()
-                n = n + 1; parts[n] = "fl:" .. tostring(fluid)
+            local fluidContainer = item:getFluidContainer()
+            if fluidContainer and not (fluidContainer.isEmpty and fluidContainer:isEmpty()) then
+                local fluid = fluidContainer.getPrimaryFluid and fluidContainer:getPrimaryFluid()
+                tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "fl:" .. tostring(fluid)
             end
         end
-        if n == 0 then return "" end
-        if n == 1 then return parts[1] end
-        return concat(parts, "|", 1, n)
+        if tokenCount == 0 then return "" end
+        if tokenCount == 1 then return tokenBuffer[1] end
+        return concat(tokenBuffer, "|", 1, tokenCount)
     end
 
     if item.IsFood and item:IsFood() then
         if item.isRotten and item:isRotten() then
-            n = n + 1; parts[n] = "rotten"
+            tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "rotten"
         elseif item.isFresh and item:isFresh() then
-            n = n + 1; parts[n] = "fresh"
+            tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "fresh"
         else
-            n = n + 1; parts[n] = "stale"
+            tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "stale"
         end
         if item.isBurnt and item:isBurnt() then
-            n = n + 1; parts[n] = "burnt"
+            tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "burnt"
         elseif item.isCooked and item:isCooked() then
-            n = n + 1; parts[n] = "cooked"
+            tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "cooked"
         else
-            n = n + 1; parts[n] = "raw"
+            tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "raw"
         end
         if item.isFrozen and item:isFrozen() then
-            n = n + 1; parts[n] = "frozen"
+            tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "frozen"
         end
 
         if item.getHungChange and item.getBaseHunger then
             local base = item:getBaseHunger()
             if base ~= 0 then
-                local q = floor((item:getHungChange() / base) * 4 + 0.5)
-                if q < 4 then
-                    if q < 0 then q = 0 end
-                    n = n + 1; parts[n] = "eaten:" .. q
+                local eatenQuarter = floor((item:getHungChange() / base) * 4 + 0.5)
+                if eatenQuarter < 4 then
+                    if eatenQuarter < 0 then eatenQuarter = 0 end
+                    tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "eaten:" .. eatenQuarter
                 end
             end
         end
     end
 
     if item.IsDrainable and item:IsDrainable() and item.getCurrentUses then
-        n = n + 1; parts[n] = "uses:" .. item:getCurrentUses()
+        tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "uses:" .. item:getCurrentUses()
     end
 
     if item.getFluidContainer then
-        local fc = item:getFluidContainer()
-        if fc then
-            if fc.isEmpty and fc:isEmpty() then
-                n = n + 1; parts[n] = "fl:empty"
+        local fluidContainer = item:getFluidContainer()
+        if fluidContainer then
+            if fluidContainer.isEmpty and fluidContainer:isEmpty() then
+                tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "fl:empty"
             else
 
-                local fluid = fc.getPrimaryFluid and fc:getPrimaryFluid()
-                local amount = (fc.getAmount and fc:getAmount()) or 0
-                n = n + 1
-                parts[n] = "fl:" .. tostring(fluid) .. ":"
+                local fluid = fluidContainer.getPrimaryFluid and fluidContainer:getPrimaryFluid()
+                local amount = (fluidContainer.getAmount and fluidContainer:getAmount()) or 0
+                tokenCount = tokenCount + 1
+                tokenBuffer[tokenCount] = "fl:" .. tostring(fluid) .. ":"
                     .. floor(amount * 10 + 0.5)
             end
         end
     end
 
     if item.getCondition and item.getConditionMax then
-        local max = item:getConditionMax()
-        if max and max > 0 then
-            local band = floor(4 * item:getCondition() / max)
+        local conditionMax = item:getConditionMax()
+        if conditionMax and conditionMax > 0 then
+            local band = floor(4 * item:getCondition() / conditionMax)
             if band < 4 then
                 if band < 0 then band = 0 end
-                n = n + 1; parts[n] = "cond:" .. band
+                tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "cond:" .. band
             end
         end
     end
     if item.isBroken and item:isBroken() then
-        n = n + 1; parts[n] = "broken"
+        tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "broken"
     end
 
     if item.isFavorite and item:isFavorite() then
-        n = n + 1; parts[n] = "fav"
+        tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "fav"
     end
     if item.isActivated and item:isActivated() then
-        n = n + 1; parts[n] = "on"
+        tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "on"
     end
     if item.isWet and item:isWet() then
-        n = n + 1; parts[n] = "wet"
+        tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "wet"
     end
 
-    if n == 0 then return "" end
-    if n == 1 then return parts[1] end
-    return concat(parts, "|", 1, n)
+    if tokenCount == 0 then return "" end
+    if tokenCount == 1 then return tokenBuffer[1] end
+    return concat(tokenBuffer, "|", 1, tokenCount)
 end
 
 StackRules.HEAVY_WEIGHT = 5
@@ -136,8 +136,8 @@ local function isThrowable(item)
     local ok, explosive = pcall(item.isExplosive, item)
     if not ok or explosive ~= true then return false end
     if item.isRanged ~= nil then
-        local okR, ranged = pcall(item.isRanged, item)
-        if okR and ranged == true then return false end
+        local okRanged, ranged = pcall(item.isRanged, item)
+        if okRanged and ranged == true then return false end
     end
     return true
 end
@@ -151,19 +151,19 @@ StackRules.NEVER_STACK_TYPES = {
     ["Base.JS14_Clip"] = true,
 }
 
-local classFacts = {}
+local classFactsByType = {}
 
 local function classFactsOf(item, fullType)
-    local f = fullType ~= nil and classFacts[fullType] or nil
-    if f ~= nil then return f end
-    f = {
+    local typeFacts = fullType ~= nil and classFactsByType[fullType] or nil
+    if typeFacts ~= nil then return typeFacts end
+    typeFacts = {
         container = instanceof(item, "InventoryContainer") == true,
         keyring = instanceof(item, "KeyRing") == true,
         moveable = instanceof(item, "Moveable") == true,
         weapon = instanceof(item, "HandWeapon") == true,
     }
-    if fullType ~= nil then classFacts[fullType] = f end
-    return f
+    if fullType ~= nil then classFactsByType[fullType] = typeFacts end
+    return typeFacts
 end
 
 function StackRules.isStackable(item)
@@ -187,17 +187,18 @@ function StackRules.isStackable(item)
     end
 
     if facts.weapon then
-        local cat = item.getDisplayCategory ~= nil and item:getDisplayCategory()
-            or nil
-        if cat ~= StackRules.MATERIAL_WEAPON_CATEGORY
+        local displayCategory = item.getDisplayCategory ~= nil
+            and item:getDisplayCategory() or nil
+        if displayCategory ~= StackRules.MATERIAL_WEAPON_CATEGORY
                 and not isThrowable(item) then
             return false
         end
     end
 
     if item.getWeight ~= nil then
-        local ok, w = pcall(item.getWeight, item)
-        if ok and type(w) == "number" and w >= StackRules.HEAVY_WEIGHT then
+        local ok, scriptWeight = pcall(item.getWeight, item)
+        if ok and type(scriptWeight) == "number"
+                and scriptWeight >= StackRules.HEAVY_WEIGHT then
             return false
         end
     end
@@ -219,9 +220,9 @@ function StackRules.identityOf(item)
     end
     if fullType == nil then return nil end
     if item.getRecordedMediaIndex ~= nil then
-        local ok, idx = pcall(item.getRecordedMediaIndex, item)
-        if ok and type(idx) == "number" and idx >= 0 then
-            return fullType .. "@" .. tostring(idx)
+        local ok, mediaIndex = pcall(item.getRecordedMediaIndex, item)
+        if ok and type(mediaIndex) == "number" and mediaIndex >= 0 then
+            return fullType .. "@" .. tostring(mediaIndex)
         end
     end
     return fullType

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -26,15 +26,17 @@ local FALLBACK_CAPACITY = 20
 function Capacity.effectiveFor(inventory, playerNum)
     if inventory == nil then return nil end
     if playerNum ~= nil and inventory.getEffectiveCapacity ~= nil then
-        local okP, playerObj = pcall(getSpecificPlayer, playerNum)
-        if okP and playerObj ~= nil then
-            local okE, eff = pcall(inventory.getEffectiveCapacity, inventory,
-                playerObj)
-            if okE and type(eff) == "number" then return eff end
+        local okPlayer, playerObj = pcall(getSpecificPlayer, playerNum)
+        if okPlayer and playerObj ~= nil then
+            local okEffective, effectiveCapacity = pcall(
+                inventory.getEffectiveCapacity, inventory, playerObj)
+            if okEffective and type(effectiveCapacity) == "number" then
+                return effectiveCapacity
+            end
         end
     end
-    local okC, cap = pcall(inventory.getCapacity, inventory)
-    if okC and type(cap) == "number" then return cap end
+    local okCapacity, baseCapacity = pcall(inventory.getCapacity, inventory)
+    if okCapacity and type(baseCapacity) == "number" then return baseCapacity end
     return nil
 end
 
@@ -51,45 +53,57 @@ end
 function Capacity.weightOf(inventory, signal)
     if inventory == nil then return nil end
     local now = getTimestampMs()
-    local m = weightMemo[inventory]
-    if m ~= nil and m.gen == weightGen and m.sig == signal
-            and now - m.at < WEIGHT_TTL_MS and not inventory:isDrawDirty() then
-        return m.w
+    local memoEntry = weightMemo[inventory]
+    if memoEntry ~= nil and memoEntry.generation == weightGen
+            and memoEntry.signal == signal
+            and now - memoEntry.readAtMs < WEIGHT_TTL_MS
+            and not inventory:isDrawDirty() then
+        return memoEntry.weight
     end
-    local okC, w = pcall(inventory.getCapacityWeight, inventory)
-    if not okC or type(w) ~= "number" then return nil end
-    if m == nil then
+    local okWeight, contentsWeight = pcall(inventory.getCapacityWeight, inventory)
+    if not okWeight or type(contentsWeight) ~= "number" then return nil end
+    if memoEntry == nil then
 
         if weightMemoCount >= WEIGHT_MEMO_MAX then
             weightMemo = {}
             weightMemoCount = 0
         end
-        m = {}
-        weightMemo[inventory] = m
+        memoEntry = {}
+        weightMemo[inventory] = memoEntry
         weightMemoCount = weightMemoCount + 1
     end
-    m.w, m.at, m.gen, m.sig = w, now, weightGen, signal
-    return w
+    memoEntry.weight, memoEntry.readAtMs = contentsWeight, now
+    memoEntry.generation, memoEntry.signal = weightGen, signal
+    return contentsWeight
+end
+
+local function isFloor(inventory)
+    return inventory:getType() == "floor"
+end
+
+local function characterOwnerOf(inventory)
+    local okParent, parent = pcall(inventory.getParent, inventory)
+    if okParent and parent ~= nil and instanceof(parent, "IsoGameCharacter") then
+        return parent
+    end
+    return nil
 end
 
 function Capacity.isFull(inventory, playerNum, signal)
     if inventory == nil then return false end
-    local okT, invType = pcall(inventory.getType, inventory)
-    if okT and invType == "floor" then return false end
+    local okFloor, onFloor = pcall(isFloor, inventory)
+    if okFloor and onFloor then return false end
 
-    local okP, parent = pcall(inventory.getParent, inventory)
-    if okP and parent ~= nil and instanceof(parent, "IsoGameCharacter") then
-        return false
-    end
-    local cur = Capacity.weightOf(inventory, signal)
-    if type(cur) ~= "number" then return false end
-    local cmax = Capacity.effectiveFor(inventory, playerNum)
-    if type(cmax) ~= "number" or cmax <= 0 then return false end
-    return cur >= cmax
+    if characterOwnerOf(inventory) ~= nil then return false end
+    local currentLoad = Capacity.weightOf(inventory, signal)
+    if type(currentLoad) ~= "number" then return false end
+    local capacity = Capacity.effectiveFor(inventory, playerNum)
+    if type(capacity) ~= "number" or capacity <= 0 then return false end
+    return currentLoad >= capacity
 end
 
 function Capacity.slotsFor(inventory, playerNum)
-    if inventory and inventory:getType() == "floor" then
+    if inventory and isFloor(inventory) then
         return FLOOR_SLOTS
     end
 
@@ -101,12 +115,11 @@ function Capacity.slotsFor(inventory, playerNum)
             capacity = value
         end
 
-        local okP, parent = pcall(inventory.getParent, inventory)
-        if okP and parent ~= nil and instanceof(parent, "IsoGameCharacter")
-                and parent.getMaxWeight ~= nil then
-            local okW, wmax = pcall(parent.getMaxWeight, parent)
-            if okW and type(wmax) == "number" and wmax > 0 then
-                capacity = wmax
+        local character = characterOwnerOf(inventory)
+        if character ~= nil and character.getMaxWeight ~= nil then
+            local okMaxWeight, maxWeight = pcall(character.getMaxWeight, character)
+            if okMaxWeight and type(maxWeight) == "number" and maxWeight > 0 then
+                capacity = maxWeight
             end
         end
     end

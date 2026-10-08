@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -30,37 +30,44 @@ end
 
 local function entryLabel(item, playerObj)
     local pct = math.floor(item:getCurrentUsesFloat() * 100)
-    local label = item:getName() .. " (" .. pct
+    local entryText = item:getName() .. " (" .. pct
         .. getText("ContextMenu_FullPercent") .. ")"
     local where = containerLabel(item:getContainer(), playerObj)
     if where ~= nil then
-        label = label .. " - " .. where
+        entryText = entryText .. " - " .. where
     end
-    return label
+    return entryText
 end
 
-local function onPourInto(playerObj, src, target)
-    local ItemApply = ComfyGrid.Interact.ItemApply
+local function pourOptionText(item)
+    local optionText = getText("ContextMenu_Pour_into")
+    if item.getConsolidateOption ~= nil and item:getConsolidateOption() then
+        optionText = getText(item:getConsolidateOption())
+    end
+    return optionText
+end
+
+local function pourAllInto(playerObj, target, sources, logTag)
+    local ItemApply = ComfyGrid.Interact and ComfyGrid.Interact.ItemApply
     if ItemApply == nil then return end
-    local ok, err = pcall(ItemApply.tryApply, { src }, target, playerObj, true)
+    local ok, err = pcall(ItemApply.tryApply, sources, target, playerObj, true)
     if not ok then
-        Log.warn("ConsolidateMenu: pour failed: " .. tostring(err))
+        Log.warn("ConsolidateMenu: " .. logTag .. " failed: " .. tostring(err))
     end
 end
 
-local function onPourAll(playerObj, src, candidates)
-    local ItemApply = ComfyGrid.Interact.ItemApply
-    if ItemApply == nil or #candidates == 0 then return end
+local function onPourInto(playerObj, sourceItem, target)
+    pourAllInto(playerObj, target, { sourceItem }, "pour")
+end
 
-    local target = candidates[1]
-    local sources = { src }
+local function onPourAll(playerObj, sourceItem, candidates)
+    if #candidates == 0 then return end
+
+    local sources = { sourceItem }
     for i = 2, #candidates do
         sources[#sources + 1] = candidates[i]
     end
-    local ok, err = pcall(ItemApply.tryApply, sources, target, playerObj, true)
-    if not ok then
-        Log.warn("ConsolidateMenu: merge-all failed: " .. tostring(err))
-    end
+    pourAllInto(playerObj, candidates[1], sources, "merge-all")
 end
 
 local function mergeableMembers(entry)
@@ -69,16 +76,17 @@ local function mergeableMembers(entry)
     if type(items) ~= "table" or #items < 3 then return nil end
     local seen, out = {}, {}
     for i = 1, #items do
-        local it = items[i]
-        local id = (it ~= nil and it.getID ~= nil) and it:getID() or nil
+        local member = items[i]
+        local id = (member ~= nil and member.getID ~= nil) and member:getID()
+            or nil
         if id ~= nil and not seen[id] then
             seen[id] = true
 
-            if it.canConsolidate ~= nil and it:canConsolidate()
-                    and it.getCurrentUsesFloat ~= nil then
-                local uses = it:getCurrentUsesFloat()
+            if member.canConsolidate ~= nil and member:canConsolidate()
+                    and member.getCurrentUsesFloat ~= nil then
+                local uses = member:getCurrentUsesFloat()
 
-                if uses > 0 and uses < 1 then out[#out + 1] = it end
+                if uses > 0 and uses < 1 then out[#out + 1] = member end
             end
         end
     end
@@ -90,17 +98,12 @@ local function mergeableMembers(entry)
 end
 
 local function onMergeStack(playerObj, members)
-    local ItemApply = ComfyGrid.Interact and ComfyGrid.Interact.ItemApply
-    if ItemApply == nil or members == nil or #members < 2 then return end
-    local target = members[1]
+    if members == nil or #members < 2 then return end
     local sources = {}
     for i = 2, #members do
         sources[#sources + 1] = members[i]
     end
-    local ok, err = pcall(ItemApply.tryApply, sources, target, playerObj, true)
-    if not ok then
-        Log.warn("ConsolidateMenu: tile merge failed: " .. tostring(err))
-    end
+    pourAllInto(playerObj, members[1], sources, "tile merge")
 end
 
 local function fillMergeOption(playerNum, context, items)
@@ -113,12 +116,7 @@ local function fillMergeOption(playerNum, context, items)
     local playerObj = getSpecificPlayer(playerNum)
     if playerObj == nil then return end
 
-    local anchor = getText("ContextMenu_Pour_into")
-    local front = members[1]
-    if front.getConsolidateOption ~= nil and front:getConsolidateOption() then
-        anchor = getText(front:getConsolidateOption())
-    end
-    context:insertOptionBefore(anchor,
+    context:insertOptionBefore(pourOptionText(members[1]),
         Text.tr("IGUI_ComfyGrid_MergeStack", "Consolidate this tile"),
         playerObj, onMergeStack, members)
 end
@@ -149,12 +147,7 @@ Events.OnGameBoot.Add(function()
         end
         if candidates == nil or #candidates == 0 then return end
 
-        local optionName = getText("ContextMenu_Pour_into")
-        if drainable.getConsolidateOption ~= nil
-                and drainable:getConsolidateOption() then
-            optionName = getText(drainable:getConsolidateOption())
-        end
-        local parent = context:addOption(optionName, nil, nil)
+        local parent = context:addOption(pourOptionText(drainable), nil, nil)
         local subMenu = context:getNew(context)
         context:addSubMenu(parent, subMenu)
         if #candidates > 1 then
@@ -168,5 +161,8 @@ Events.OnGameBoot.Add(function()
         end
     end
 
-    Events.OnFillInventoryObjectContextMenu.Add(fillMergeOption)
+    if not ComfyGrid._consolidateMergeHooked then
+        ComfyGrid._consolidateMergeHooked = true
+        Events.OnFillInventoryObjectContextMenu.Add(fillMergeOption)
+    end
 end)

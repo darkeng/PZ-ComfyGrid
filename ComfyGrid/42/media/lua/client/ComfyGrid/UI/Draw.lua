@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -16,6 +16,7 @@ local Draw = {}
 ComfyGrid.UI.Draw = Draw
 
 local TextureCache = ComfyGrid.Core.TextureCache
+local Style = ComfyGrid.UI.Style
 local Blit = ComfyGrid.UI.Blit
 local floor = math.floor
 local min = math.min
@@ -41,142 +42,133 @@ local function cornerSet()
     return corners
 end
 
-function Draw.roundRect(el, x, y, w, h, r, a, c)
-    local cs = cornerSet()
-    if cs == nil or r == nil or r < 2 then
-        Blit.rect(el, x, y, w, h, a, c.r, c.g, c.b)
+function Draw.roundRect(view, x, y, w, h, radius, alpha, color)
+    local cornerTextures = cornerSet()
+    if cornerTextures == nil or radius == nil or radius < 2 then
+        Blit.drawRect(view, x, y, w, h, alpha, color.r, color.g, color.b)
         return
     end
     local half = floor(min(w, h) * 0.5)
-    if r > half then r = half end
-    Blit.tex(el, cs.tl, x, y, r, r, a, c.r, c.g, c.b)
-    Blit.tex(el, cs.tr, x + w - r, y, r, r, a, c.r, c.g, c.b)
-    Blit.tex(el, cs.bl, x, y + h - r, r, r, a, c.r, c.g, c.b)
-    Blit.tex(el, cs.br, x + w - r, y + h - r, r, r, a, c.r, c.g, c.b)
-    if w > 2 * r then
-        Blit.rect(el, x + r, y, w - 2 * r, r, a, c.r, c.g, c.b)
-        Blit.rect(el, x + r, y + h - r, w - 2 * r, r, a, c.r, c.g, c.b)
+    if radius > half then radius = half end
+    local red, green, blue = color.r, color.g, color.b
+    Blit.drawTextureScaled(view, cornerTextures.tl, x, y, radius, radius,
+        alpha, red, green, blue)
+    Blit.drawTextureScaled(view, cornerTextures.tr, x + w - radius, y,
+        radius, radius, alpha, red, green, blue)
+    Blit.drawTextureScaled(view, cornerTextures.bl, x, y + h - radius,
+        radius, radius, alpha, red, green, blue)
+    Blit.drawTextureScaled(view, cornerTextures.br, x + w - radius,
+        y + h - radius, radius, radius, alpha, red, green, blue)
+    if w > 2 * radius then
+        Blit.drawRect(view, x + radius, y, w - 2 * radius, radius,
+            alpha, red, green, blue)
+        Blit.drawRect(view, x + radius, y + h - radius, w - 2 * radius, radius,
+            alpha, red, green, blue)
     end
-    if h > 2 * r then
-        Blit.rect(el, x, y + r, w, h - 2 * r, a, c.r, c.g, c.b)
+    if h > 2 * radius then
+        Blit.drawRect(view, x, y + radius, w, h - 2 * radius,
+            alpha, red, green, blue)
     end
 end
 
-function Draw.roundFrame(el, x, y, w, h, r, a, border, fill, aFill)
-    Draw.roundRect(el, x, y, w, h, r, a, border)
-    Draw.roundRect(el, x + 1, y + 1, w - 2, h - 2, r - 1, aFill or a, fill)
+function Draw.roundFrame(view, x, y, w, h, radius, alpha, border, fill, fillAlpha)
+    Draw.roundRect(view, x, y, w, h, radius, alpha, border)
+    Draw.roundRect(view, x + 1, y + 1, w - 2, h - 2, radius - 1,
+        fillAlpha or alpha, fill)
 end
 
-local glowTex = nil
-local glowTexMissing = false
-local function glowTexture()
-    if glowTex == nil and not glowTexMissing then
-        glowTex = TextureCache.get("media/textures/comfy_glow.png")
-        if glowTex == nil then glowTexMissing = true end
-    end
-    return glowTex
-end
+local glowTexture = TextureCache.lazy("media/textures/comfy_glow.png")
 
-function Draw.shadow(el, x, y, w, h, spread, a)
-    local g = glowTexture()
-    if g == nil then return end
+function Draw.shadow(view, x, y, w, h, spread, alpha)
+    local glowTex = glowTexture()
+    if glowTex == nil then return end
     local down = floor(spread * 0.2 + 0.5)
-    el:drawTextureScaled(g, x - spread, y - spread + down,
-        w + spread * 2, h + spread * 2, a, 0, 0, 0)
+    local ink = Style.COLORS.SHADOW
+    view:drawTextureScaled(glowTex, x - spread, y - spread + down,
+        w + spread * 2, h + spread * 2, alpha, ink.r, ink.g, ink.b)
 end
 
-local gradTex = nil
-local gradTexMissing = false
-local function gradTexture()
-    if gradTex == nil and not gradTexMissing then
-        gradTex = TextureCache.get("media/textures/comfy_grad_v.png")
-        if gradTex == nil then gradTexMissing = true end
-    end
-    return gradTex
+local gradTexture = TextureCache.lazy("media/textures/comfy_grad_v.png")
+
+function Draw.sheen(view, x, y, w, h, alpha, color)
+    local gradTex = gradTexture()
+    if gradTex == nil then return end
+    view:drawTextureScaled(gradTex, x, y, w, h, alpha, color.r, color.g, color.b)
 end
 
-function Draw.sheen(el, x, y, w, h, a, c)
-    local g = gradTexture()
-    if g == nil then return end
-    el:drawTextureScaled(g, x, y, w, h, a, c.r, c.g, c.b)
-end
-
-function Draw.headerLine(el, x, y, w, sheenH, colors)
-    local sf = colors and colors.SURFACE
-    if sf == nil then return end
+function Draw.headerLine(view, x, y, w, sheenH, colors)
+    local surface = colors and colors.SURFACE
+    if surface == nil then return end
     if sheenH and sheenH > 0 then
-        Draw.sheen(el, x, y - sheenH, w, sheenH, 0.06, sf.accent)
+        Draw.sheen(view, x, y - sheenH, w, sheenH, 0.06, surface.accent)
     end
-    el:drawRect(x, y, w, 1, 0.8, sf.line.r, sf.line.g, sf.line.b)
+    view:drawRect(x, y, w, 1, Style.CHROME_LINE_ALPHA,
+        surface.line.r, surface.line.g, surface.line.b)
 end
 
-local dotTex = nil
-local dotTexMissing = false
-local function dotTexture()
-    if dotTex == nil and not dotTexMissing then
-        dotTex = TextureCache.get("media/textures/comfy_dot.png")
-        if dotTex == nil then dotTexMissing = true end
-    end
-    return dotTex
-end
+local dotTexture = TextureCache.lazy("media/textures/comfy_dot.png")
 
-function Draw.disc(el, x, y, d, a, c)
-    local t = dotTexture()
-    if t ~= nil then
-        el:drawTextureScaled(t, x, y, d, d, a, c.r, c.g, c.b)
+function Draw.disc(view, x, y, diameter, alpha, color)
+    local dotTex = dotTexture()
+    if dotTex ~= nil then
+        view:drawTextureScaled(dotTex, x, y, diameter, diameter, alpha,
+            color.r, color.g, color.b)
     else
-        Draw.roundRect(el, x, y, d, d, floor(d * 0.5), a, c)
+        Draw.roundRect(view, x, y, diameter, diameter, floor(diameter * 0.5),
+            alpha, color)
     end
 end
 
-function Draw.pill(el, x, y, w, h, a, c)
-    local t = dotTexture()
-    if t == nil or w < h then
-        Draw.roundRect(el, x, y, w, h, floor(h * 0.5), a, c)
+function Draw.pill(view, x, y, w, h, alpha, color)
+    local dotTex = dotTexture()
+    if dotTex == nil or w < h then
+        Draw.roundRect(view, x, y, w, h, floor(h * 0.5), alpha, color)
         return
     end
-    Blit.tex(el, t, x, y, h, h, a, c.r, c.g, c.b)
-    Blit.tex(el, t, x + w - h, y, h, h, a, c.r, c.g, c.b)
+    local red, green, blue = color.r, color.g, color.b
+    Blit.drawTextureScaled(view, dotTex, x, y, h, h, alpha, red, green, blue)
+    Blit.drawTextureScaled(view, dotTex, x + w - h, y, h, h, alpha, red, green, blue)
     local half = floor(h * 0.5)
     if w > 2 * half then
-        Blit.rect(el, x + half, y, w - 2 * half, h, a, c.r, c.g, c.b)
+        Blit.drawRect(view, x + half, y, w - 2 * half, h, alpha, red, green, blue)
     end
 end
 
-function Draw.pillFrame(el, x, y, w, h, a, border, fill)
-    Draw.pill(el, x, y, w, h, a, border)
-    Draw.pill(el, x + 1, y + 1, w - 2, h - 2, a, fill)
+function Draw.pillFrame(view, x, y, w, h, alpha, border, fill)
+    Draw.pill(view, x, y, w, h, alpha, border)
+    Draw.pill(view, x + 1, y + 1, w - 2, h - 2, alpha, fill)
 end
 
-function Draw.pie(el, cx, cy, r, sweep, a, c)
-    if r < 1 or sweep <= 0 then return end
+function Draw.pie(view, centerX, centerY, radius, sweep, alpha, color)
+    if radius < 1 or sweep <= 0 then return end
     if sweep >= 6.2831853 then
-        Draw.disc(el, floor(cx - r), floor(cy - r), floor(r * 2), a, c)
+        Draw.disc(view, floor(centerX - radius), floor(centerY - radius),
+            floor(radius * 2), alpha, color)
         return
     end
     local wide = sweep > 3.1415927
-    local d1x, d1y = sin(sweep), -cos(sweep)
-    local ri = floor(r)
-    for dy = -ri, ri do
-        local half = sqrt(r * r - dy * dy)
-        local x0 = -floor(half)
-        local x1 = floor(half)
+    local endX, endY = sin(sweep), -cos(sweep)
+    local radiusInt = floor(radius)
+    for rowOffset = -radiusInt, radiusInt do
+        local half = sqrt(radius * radius - rowOffset * rowOffset)
+        local firstColumn = -floor(half)
+        local lastColumn = floor(half)
         local runStart = nil
-        for dx = x0, x1 + 1 do
+        for columnOffset = firstColumn, lastColumn + 1 do
             local inside = false
-            if dx <= x1 then
-                local c1 = d1x * dy - d1y * dx
+            if columnOffset <= lastColumn then
+                local endCross = endX * rowOffset - endY * columnOffset
                 if wide then
-                    inside = dx >= 0 or c1 <= 0
+                    inside = columnOffset >= 0 or endCross <= 0
                 else
-                    inside = dx >= 0 and c1 <= 0
+                    inside = columnOffset >= 0 and endCross <= 0
                 end
             end
             if inside and runStart == nil then
-                runStart = dx
+                runStart = columnOffset
             elseif not inside and runStart ~= nil then
-                el:drawRect(floor(cx + runStart), floor(cy + dy),
-                    dx - runStart, 1, a, c.r, c.g, c.b)
+                view:drawRect(floor(centerX + runStart), floor(centerY + rowOffset),
+                    columnOffset - runStart, 1, alpha, color.r, color.g, color.b)
                 runStart = nil
             end
         end
@@ -188,16 +180,16 @@ local glyphMissing = {}
 
 function Draw.glyphTexture(id)
     if id == nil or glyphMissing[id] then return nil end
-    local t = glyphTex[id]
-    if t == nil then
-        t = TextureCache.get("media/textures/comfy_" .. id .. ".png")
-        if t == nil then
+    local texture = glyphTex[id]
+    if texture == nil then
+        texture = TextureCache.get("media/textures/comfy_" .. id .. ".png")
+        if texture == nil then
             glyphMissing[id] = true
             return nil
         end
-        glyphTex[id] = t
+        glyphTex[id] = texture
     end
-    return t
+    return texture
 end
 
 function Draw.closeTexture()
@@ -240,11 +232,11 @@ local bakedTex = {}
 
 local function bakedTexture(name)
 
-    local S = ComfyGrid.UI and ComfyGrid.UI.Style
+    local LiveStyle = ComfyGrid.UI and ComfyGrid.UI.Style
 
-    local T = ComfyGrid.UI and ComfyGrid.UI.Themes
-    local fallback = (T ~= nil and T.DEFAULT) or "amber"
-    local theme = (S ~= nil and S.THEME) or fallback
+    local LiveThemes = ComfyGrid.UI and ComfyGrid.UI.Themes
+    local fallback = (LiveThemes ~= nil and LiveThemes.DEFAULT) or "amber"
+    local theme = (LiveStyle ~= nil and LiveStyle.THEME) or fallback
     local key = name .. "|" .. theme
     local tex = bakedTex[key]
     if tex ~= nil then return tex or nil end
@@ -284,17 +276,17 @@ function Draw.dockTexture()
 end
 
 function Draw.delta()
-    local ms = UIManager.getMillisSinceLastRender()
-    local d = ms / 33.3
-    if d > 3 then d = 3 end
-    return d
+    local elapsedMs = UIManager.getMillisSinceLastRender()
+    local frames = elapsedMs / 33.3
+    if frames > 3 then frames = 3 end
+    return frames
 end
 
-function Draw.glide(cur, target, rate)
-    local k = rate * Draw.delta()
-    if k > 1 then k = 1 end
-    local nxt = cur + (target - cur) * k
-    local diff = nxt - target
+function Draw.glide(current, target, rate)
+    local step = rate * Draw.delta()
+    if step > 1 then step = 1 end
+    local glided = current + (target - current) * step
+    local diff = glided - target
     if diff < 0.002 and diff > -0.002 then return target end
-    return nxt
+    return glided
 end

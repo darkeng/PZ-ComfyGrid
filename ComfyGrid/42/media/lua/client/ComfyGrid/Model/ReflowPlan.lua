@@ -1,12 +1,13 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/Core/Util"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Model = ComfyGrid.Model or {}
 local ReflowPlan = {}
@@ -20,28 +21,21 @@ local orphans = {}
 local plan = {}
 local planHigh = 0
 
-local tableWipe = table.wipe
-local function wipe(t)
-    if tableWipe then
-        tableWipe(t)
-    else
-        for k in pairs(t) do t[k] = nil end
-    end
-end
+local wipe = ComfyGrid.Core.Util.wipe
 
 function ReflowPlan.homeFor(occupied, cols, row, col, limit)
     if type(cols) ~= "number" or cols < 1 then return nil end
     if row < 0 then row = 0 end
     while row <= limit do
         local bestSlot, bestDist = nil, nil
-        for c = 0, cols - 1 do
-            local slot = row * cols + c
+        for candidateCol = 0, cols - 1 do
+            local slot = row * cols + candidateCol
             if not occupied[slot] then
-                local d = c - col
-                if d < 0 then d = -d end
+                local distance = candidateCol - col
+                if distance < 0 then distance = -distance end
 
-                if bestDist == nil or d < bestDist then
-                    bestSlot, bestDist = slot, d
+                if bestDist == nil or distance < bestDist then
+                    bestSlot, bestDist = slot, distance
                 end
             end
         end
@@ -51,29 +45,29 @@ function ReflowPlan.homeFor(occupied, cols, row, col, limit)
     return nil
 end
 
-local function put(i, stack, slot)
-    local e = plan[i]
-    if e == nil then
-        e = {}
-        plan[i] = e
+local function writePlanEntry(planIndex, stack, slot)
+    local entry = plan[planIndex]
+    if entry == nil then
+        entry = {}
+        plan[planIndex] = entry
     end
-    e.stack = stack
-    e.slot = slot
-    return e
+    entry.stack = stack
+    entry.slot = slot
+    return entry
 end
 
 function ReflowPlan.build(stacks, oldCols, newCols)
     if type(stacks) ~= "table" then return nil end
     if type(oldCols) ~= "number" or type(newCols) ~= "number" then return nil end
     if oldCols < 1 or newCols < 1 or oldCols == newCols then return nil end
-    local n = #stacks
-    if n == 0 then return nil end
+    local stackCount = #stacks
+    if stackCount == 0 then return nil end
 
     wipe(bySlot)
     local maxSlot = -1
-    for i = 1, n do
-        local st = stacks[i]
-        local slot = type(st) == "table" and st.slot or nil
+    for i = 1, stackCount do
+        local stack = stacks[i]
+        local slot = type(stack) == "table" and stack.slot or nil
         if type(slot) ~= "number" or slot < 0 or slot ~= floor(slot) then
             return nil
         end
@@ -81,55 +75,55 @@ function ReflowPlan.build(stacks, oldCols, newCols)
 
             return nil
         end
-        bySlot[slot] = st
+        bySlot[slot] = stack
         if slot > maxSlot then maxSlot = slot end
     end
 
     wipe(taken)
     wipe(orphans)
-    local k, orphanCount, maxRow = 0, 0, 0
+    local planCount, orphanCount, maxRow = 0, 0, 0
     for slot = 0, maxSlot do
-        local st = bySlot[slot]
-        if st ~= nil then
+        local stack = bySlot[slot]
+        if stack ~= nil then
             local row = floor(slot / oldCols)
             local col = slot - row * oldCols
             if col < newCols then
 
                 local target = row * newCols + col
-                k = k + 1
-                put(k, st, target)
+                planCount = planCount + 1
+                writePlanEntry(planCount, stack, target)
                 taken[target] = true
                 if row > maxRow then maxRow = row end
             else
                 orphanCount = orphanCount + 1
-                orphans[orphanCount] = st
+                orphans[orphanCount] = stack
             end
         end
     end
 
     for i = 1, orphanCount do
-        local st = orphans[i]
+        local stack = orphans[i]
         orphans[i] = nil
-        local row = floor(st.slot / oldCols)
+        local row = floor(stack.slot / oldCols)
 
-        local col = st.slot - row * oldCols
+        local col = stack.slot - row * oldCols
 
         local target = ReflowPlan.homeFor(taken, newCols, row, col,
             maxRow + orphanCount + 1)
         if target == nil then return nil end
-        k = k + 1
-        put(k, st, target)
+        planCount = planCount + 1
+        writePlanEntry(planCount, stack, target)
         taken[target] = true
     end
 
-    for i = k + 1, planHigh do
-        local e = plan[i]
-        if e ~= nil then
-            e.stack = nil
-            e.slot = nil
+    for i = planCount + 1, planHigh do
+        local entry = plan[i]
+        if entry ~= nil then
+            entry.stack = nil
+            entry.slot = nil
         end
     end
-    planHigh = k
-    plan.n = k
+    planHigh = planCount
+    plan.n = planCount
     return plan
 end

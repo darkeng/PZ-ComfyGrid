@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -52,9 +52,10 @@ local PadCarry = ComfyGrid.Interact.PadCarry
 local GridView = ISUIElement:derive("ComfyGridView")
 ComfyGrid.UI.GridView = GridView
 
-local DEFAULT_BG = { r = 0.09, g = 0.09, b = 0.11, a = 0.85 }
-
 local DRAG_SOURCE_WASH_ALPHA = 0.6
+
+local MARQUEE_FILL_ALPHA = 0.18
+local MARQUEE_EDGE_ALPHA = 0.9
 
 local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0, inventory = false }
 
@@ -73,28 +74,28 @@ local DIRTY_STORM_GAP_MS = 100
 local DEFAULT_COLS = 8
 
 local function computeDims(self)
-    local avail = self.availWidth
+    local availableWidth = self.availWidth
     local cols
-    if avail == nil then
+    if availableWidth == nil then
         cols = DEFAULT_COLS
     else
 
-        cols = math.floor((avail - 1) / Style.CELL_STRIDE)
+        cols = math.floor((availableWidth - 1) / Style.CELL_STRIDE)
         if cols < MIN_COLS then cols = MIN_COLS end
         if cols > MAX_COLS then cols = MAX_COLS end
     end
     local grid = self.model.grid
     local rows
     local limit = nil
-    local spare = self.compactEligible and Settings.get("SPARE_SLOTS") or "all"
-    if spare == "row" then
+    local spareSlots = self.spareSlotsEligible and Settings.get("SPARE_SLOTS") or "all"
+    if spareSlots == "row" then
 
         rows = math.ceil(grid:contentSlots() / cols)
         if not Capacity.isFull(self.model.inventory, self.playerNum,
                 grid.changeCount) then
             rows = rows + 1
         end
-    elseif spare == "two" then
+    elseif spareSlots == "two" then
 
         limit = grid:contentSlots()
         if not Capacity.isFull(self.model.inventory, self.playerNum,
@@ -113,9 +114,9 @@ local function computeDims(self)
 end
 
 local function reflowColumns(self, cols)
-    local was = self.viewCols
-    if was == cols then return false end
-    if was == nil then
+    local previousCols = self.viewCols
+    if previousCols == cols then return false end
+    if previousCols == nil then
         if self.colsSettle == cols then
             self.viewCols = cols
         else
@@ -129,7 +130,7 @@ local function reflowColumns(self, cols)
         return false
     end
 
-    if not grid:reflowColumns(was, cols) then return false end
+    if not grid:reflowColumns(previousCols, cols) then return false end
     self.viewCols = cols
     return true
 end
@@ -138,49 +139,47 @@ function GridView:new(x, y, model, playerNum)
     if model == nil or model.grid == nil then
         error("ComfyGrid GridView:new requires a ContainerModel")
     end
-    local o = ISUIElement:new(x, y, 1, 1)
-    setmetatable(o, self)
+    local view = ISUIElement:new(x, y, 1, 1)
+    setmetatable(view, self)
     self.__index = self
-    o.model = model
+    view.model = model
 
-    o.playerNum = playerNum or model.playerNum
+    view.playerNum = playerNum or model.playerNum
 
-    o.compactEligible = false
+    view.spareSlotsEligible = false
 
-    o.availWidth = nil
+    view.availWidth = nil
 
-    o.viewCols = nil
-    o.colsSettle = nil
-    o.cols, o.rows, o.slotLimit = computeDims(o)
-    local w, h = Style.gridPixelSize(o.cols, o.rows)
-    o:setWidth(w)
-    o:setHeight(h)
-    o.hoverSlot = nil
-    o.pendingClick = nil
-    o.lastAbsY = nil
+    view.viewCols = nil
+    view.colsSettle = nil
+    view.cols, view.rows, view.slotLimit = computeDims(view)
+    local w, h = Style.gridPixelSize(view.cols, view.rows)
+    view:setWidth(w)
+    view:setHeight(h)
+    view.hoverSlot = nil
+    view.pendingClick = nil
+    view.lastAbsY = nil
 
-    o.sizeDirty = false
+    view.clipHost = nil
 
-    o.clipHost = nil
+    view.pressedStack = nil
+    view.pressedSlot = nil
+    view.dragDidStart = false
 
-    o.pressedStack = nil
-    o.pressedSlot = nil
-    o.dragDidStart = false
+    view.isComfyDragSource = true
 
-    o.isComfyDragSource = true
+    view.selection = nil
+    view.selectionCount = 0
+    view.selGrid = nil
+    view.selStamp = -1
 
-    o.selection = nil
-    o.selectionCount = 0
-    o.selGrid = nil
-    o.selStamp = -1
-
-    o.marqueeArmed = false
-    o.marqueeActive = false
-    o.marqueeX0, o.marqueeY0 = 0, 0
-    o.marqueeX1, o.marqueeY1 = 0, 0
-    o.marqueePressStack = nil
-    o.marqueeBase = nil
-    return o
+    view.marqueeArmed = false
+    view.marqueeActive = false
+    view.marqueeX0, view.marqueeY0 = 0, 0
+    view.marqueeX1, view.marqueeY1 = 0, 0
+    view.marqueePressStack = nil
+    view.marqueeBase = nil
+    return view
 end
 
 local function clearSelection(self)
@@ -189,22 +188,22 @@ local function clearSelection(self)
 end
 
 local function isSelected(self, stack)
-    local sel = self.selection
-    return sel ~= nil and sel[stack] == true
+    local selection = self.selection
+    return selection ~= nil and selection[stack] == true
 end
 
 local function toggleSelected(self, stack)
-    local sel = self.selection
-    if sel == nil then
-        sel = {}
-        self.selection = sel
+    local selection = self.selection
+    if selection == nil then
+        selection = {}
+        self.selection = selection
     end
-    if sel[stack] then
-        sel[stack] = nil
+    if selection[stack] then
+        selection[stack] = nil
         self.selectionCount = self.selectionCount - 1
         if self.selectionCount <= 0 then clearSelection(self) end
     else
-        sel[stack] = true
+        selection[stack] = true
         self.selectionCount = self.selectionCount + 1
     end
 end
@@ -217,22 +216,22 @@ local function syncSelection(self)
         self.selStamp = grid ~= nil and grid.changeCount or -1
         return
     end
-    local sel = self.selection
-    if sel == nil or grid == nil then return end
+    local selection = self.selection
+    if selection == nil or grid == nil then return end
     if grid.changeCount == self.selStamp then return end
     self.selStamp = grid.changeCount
     local stacks = grid.data.stacks
 
-    for stack in pairs(sel) do
+    for selectedStack in pairs(selection) do
         local owned = false
         for i = 1, #stacks do
-            if stacks[i] == stack then
+            if stacks[i] == selectedStack then
                 owned = true
                 break
             end
         end
         if not owned then
-            sel[stack] = nil
+            selection[selectedStack] = nil
             self.selectionCount = self.selectionCount - 1
         end
     end
@@ -248,8 +247,8 @@ local function updateHover(self)
         self.cols, self.rows, self.slotLimit)
 end
 
-function GridView:setAvailableWidth(px)
-    self.availWidth = px
+function GridView:setAvailableWidth(availableWidth)
+    self.availWidth = availableWidth
 end
 
 local function prerenderImpl(self)
@@ -298,7 +297,6 @@ local function prerenderImpl(self)
     if w ~= self.width or h ~= self.height then
         self:setWidth(w)
         self:setHeight(h)
-        self.sizeDirty = true
 
         updateHover(self)
     end
@@ -315,25 +313,24 @@ local CLICK_DELAY_MS = 260
 
 GridView.CLICK_DELAY_MS = CLICK_DELAY_MS
 
+local function askSettings(predicateName)
+    local LiveSettings = ComfyGrid.Settings
+    local predicate = LiveSettings ~= nil and LiveSettings[predicateName] or nil
+    if predicate == nil then return false end
+    local ok, answer = pcall(predicate)
+    return ok and answer == true
+end
+
 local function gestureIsDoubleClick()
-    local S = ComfyGrid.Settings
-    if S == nil or S.transferIsDoubleClick == nil then return false end
-    local ok, v = pcall(S.transferIsDoubleClick)
-    return ok and v == true
+    return askSettings("transferIsDoubleClick")
 end
 
 local function multiSelectHeld()
-    local S = ComfyGrid.Settings
-    if S == nil or S.multiSelectHeld == nil then return false end
-    local ok, v = pcall(S.multiSelectHeld)
-    return ok and v == true
+    return askSettings("multiSelectHeld")
 end
 
 local function transferModifierHeld()
-    local S = ComfyGrid.Settings
-    if S == nil or S.transferModifierHeld == nil then return false end
-    local ok, v = pcall(S.transferModifierHeld)
-    return ok and v == true
+    return askSettings("transferModifierHeld")
 end
 
 function GridView:prerender()
@@ -383,8 +380,7 @@ function GridView:renderBoard()
     local cols = self.cols
     local rows = self.rows
     local w, h = Style.gridPixelSize(cols, rows)
-    local colors = Style.COLORS
-    local bg = colors and colors.BOARD_BG or DEFAULT_BG
+    local bg = Style.COLORS.BOARD_BG
     local stride = Style.CELL_STRIDE
 
     local limit = self.slotLimit
@@ -393,13 +389,12 @@ function GridView:renderBoard()
         lastRowCols = limit - (rows - 1) * cols
         local upperH = (rows - 1) * stride
         if upperH > 0 then
-            self:drawRect(0, 0, w, upperH, bg.a or 1, bg.r or 0, bg.g or 0,
-                bg.b or 0)
+            self:drawRect(0, 0, w, upperH, bg.a, bg.r, bg.g, bg.b)
         end
         self:drawRect(0, upperH, lastRowCols * stride + 1, h - upperH,
-            bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
+            bg.a, bg.r, bg.g, bg.b)
     else
-        self:drawRect(0, 0, w, h, bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
+        self:drawRect(0, 0, w, h, bg.a, bg.r, bg.g, bg.b)
     end
 
     local cullTop, cullBottom = self:visibleBand()
@@ -428,42 +423,34 @@ local function renderAll(self)
     local cols = self.cols
     local rows = self.rows
 
-    local shown = self.slotLimit or (cols * rows)
+    local shownSlotCount = self.slotLimit or (cols * rows)
     local cell = Style.CELL
     local cullTop, cullBottom = self:visibleBand()
     local pixelForSlot = Style.pixelForSlot
     local frontItem = ItemStack.frontItem
     local updateItem = StackRenderer.updateItem
 
-    local tileDraw = TileCache.draw
-    local nowMs = getTimestampMs()
+    local drawTileCached = TileCache.draw
+    local frameStartMs = getTimestampMs()
     local liveSlot = self.hoverSlot
     local stacks = grid.data.stacks
-    local byId = grid.itemById
+    local refreshItemById = grid.itemById
     ctx.view = self
     ctx.playerNum = self.playerNum
     ctx.inventory = inventory
     TileCache.beginBoard(self, self.tileGen, grid.changeCount)
 
     local draggedStack = nil
-    local washR, washG, washB = 0, 0, 0
     if self.pressedStack ~= nil and DragAndDrop.isDragging()
             and DragAndDrop.isDragOwner(self) then
         draggedStack = self.pressedStack
-        local colors = Style.COLORS
-        local bg = colors and colors.BOARD_BG or DEFAULT_BG
-        washR = bg.r or 0
-        washG = bg.g or 0
-        washB = bg.b or 0
     end
 
     local padCarried = PadCarry.carriedStackOn(self)
-    if padCarried ~= nil and draggedStack == nil then
-        local colors = Style.COLORS
-        local bg = colors and colors.BOARD_BG or DEFAULT_BG
-        washR = bg.r or 0
-        washG = bg.g or 0
-        washB = bg.b or 0
+    local washR, washG, washB = 0, 0, 0
+    if draggedStack ~= nil or padCarried ~= nil then
+        local bg = Style.COLORS.BOARD_BG
+        washR, washG, washB = bg.r, bg.g, bg.b
     end
 
     local selection = self.selection
@@ -491,9 +478,9 @@ local function renderAll(self)
     end
     for i = 1, #stacks do
         local stack = stacks[i]
-        local sx, sy = pixelForSlot(stack.slot, cols)
+        local cellX, cellY = pixelForSlot(stack.slot, cols)
 
-        if cullTop == nil or (sy + cell > cullTop and sy < cullBottom) then
+        if cullTop == nil or (cellY + cell > cullTop and cellY < cullBottom) then
             local front = frontItem(stack, inventory)
 
             if front ~= nil then
@@ -509,19 +496,19 @@ local function renderAll(self)
                 if isFood and stack.count > 1 then
 
                     for id in pairs(stack.itemIDs) do
-                        local it = byId ~= nil and byId[id] or nil
-                        if it == nil or it:getContainer() ~= inventory then
-                            it = inventory:getItemWithID(id)
+                        local member = refreshItemById ~= nil and refreshItemById[id] or nil
+                        if member == nil or member:getContainer() ~= inventory then
+                            member = inventory:getItemWithID(id)
                         end
-                        if it ~= nil and it ~= front then updateItem(it) end
+                        if member ~= nil and member ~= front then updateItem(member) end
                     end
                 end
                 ctx.stack = stack
                 ctx.item = front
                 ctx.slot = stack.slot
-                ctx.x = sx
-                ctx.y = sy
-                tileDraw(ctx, nowMs, stack.slot == liveSlot)
+                ctx.x = cellX
+                ctx.y = cellY
+                drawTileCached(ctx, frameStartMs, stack.slot == liveSlot)
 
                 if searchMarks ~= nil and ItemSearch.marksStack(searchMarks,
                         stack, searchChangeCount) then
@@ -538,110 +525,115 @@ local function renderAll(self)
 
                 if stack == draggedStack or stack == padCarried
                         or (draggingSelection and selection[stack]) then
-                    self:drawRect(sx + 1, sy + 1, cell - 2, cell - 2,
+                    self:drawRect(cellX + 1, cellY + 1, cell - 2, cell - 2,
                         DRAG_SOURCE_WASH_ALPHA, washR, washG, washB)
                 end
 
                 if selection ~= nil and selection[stack] then
-                    SlotRenderer.drawSelection(self, sx, sy)
+                    SlotRenderer.drawSelection(self, cellX, cellY)
                 end
 
-                local hit, best = StackRenderer.jobOverlayFor(stack, front, jobs, currentAction)
+                local hit, bestDelta = StackRenderer.jobOverlayFor(stack, front, jobs, currentAction)
                 if hit then
-                    StackRenderer.drawJobOverlay(self, sx, sy, best)
+                    StackRenderer.drawJobOverlay(self, cellX, cellY, bestDelta)
                 end
             end
         end
     end
 
     local hoverSlot = self.hoverSlot
-    if hoverSlot ~= nil and (hoverSlot < 0 or hoverSlot >= shown
+    if hoverSlot ~= nil and (hoverSlot < 0 or hoverSlot >= shownSlotCount
             or not self:isMouseOver()) then
         hoverSlot = nil
     end
+
     local Draw = ComfyGrid.UI.Draw
     if Draw ~= nil then
-        local ht = self.hoverT
-        if ht == nil then
-            ht = {}
-            self.hoverT = ht
+        local hoverHeatBySlot = self.hoverT
+        if hoverHeatBySlot == nil then
+            hoverHeatBySlot = {}
+            self.hoverT = hoverHeatBySlot
         end
-        if hoverSlot ~= nil and ht[hoverSlot] == nil then
-            ht[hoverSlot] = 0
+        if hoverSlot ~= nil and hoverHeatBySlot[hoverSlot] == nil then
+            hoverHeatBySlot[hoverSlot] = 0
         end
-        for slot, heat in pairs(ht) do
+        for slot, heat in pairs(hoverHeatBySlot) do
             heat = Draw.glide(heat, slot == hoverSlot and 1 or 0, 0.45)
             if heat <= 0 then
-                ht[slot] = nil
+                hoverHeatBySlot[slot] = nil
             else
-                ht[slot] = heat
-                if slot < shown then
-                    local hx, hy = pixelForSlot(slot, cols)
+                hoverHeatBySlot[slot] = heat
+                if slot < shownSlotCount then
+                    local hoverX, hoverY = pixelForSlot(slot, cols)
                     ctx.stack = grid:stackAt(slot)
                     ctx.item = nil
                     ctx.slot = slot
-                    ctx.x = hx
-                    ctx.y = hy
+                    ctx.x = hoverX
+                    ctx.y = hoverY
                     SlotRenderer.drawHover(ctx, heat)
                 end
             end
         end
     elseif hoverSlot ~= nil then
-        local hx, hy = pixelForSlot(hoverSlot, cols)
+        local hoverX, hoverY = pixelForSlot(hoverSlot, cols)
         ctx.stack = grid:stackAt(hoverSlot)
         ctx.item = nil
         ctx.slot = hoverSlot
-        ctx.x = hx
-        ctx.y = hy
+        ctx.x = hoverX
+        ctx.y = hoverY
         SlotRenderer.drawHover(ctx)
     end
 
     local padSlot = PadFocus.cursorFor(self)
-    if padSlot ~= nil and padSlot < shown then
-        local px, py = pixelForSlot(padSlot, cols)
-        SlotRenderer.drawSelection(self, px, py)
+    if padSlot ~= nil and padSlot < shownSlotCount then
+        local padX, padY = pixelForSlot(padSlot, cols)
+        SlotRenderer.drawSelection(self, padX, padY)
         ctx.stack = grid:stackAt(padSlot)
         ctx.item = nil
         ctx.slot = padSlot
-        ctx.x = px
-        ctx.y = py
+        ctx.x = padX
+        ctx.y = padY
         SlotRenderer.drawHover(ctx)
 
-        PadCarry.renderAt(self, px, py)
+        PadCarry.renderAt(self, padX, padY)
     end
 
     local pending = self.pendingClick
     if pending ~= nil and pending.shows and pending.slot ~= nil
-            and pending.slot < shown then
+            and pending.slot < shownSlotCount then
         local elapsed = getTimestampMs() - pending.atMs
-        local t = elapsed / CLICK_DELAY_MS
-        if t < 0 then t = 0 elseif t > 1 then t = 1 end
-        local bx, by = pixelForSlot(pending.slot, cols)
-        local cell = Style.CELL
-        local sf = Style.COLORS.SURFACE
+        local waitFraction = elapsed / CLICK_DELAY_MS
+        if waitFraction < 0 then waitFraction = 0 elseif waitFraction > 1 then waitFraction = 1 end
+        local pendingX, pendingY = pixelForSlot(pending.slot, cols)
+        local surface = Style.COLORS.SURFACE
 
-        local cxp = bx + cell * 0.5
-        local cyp = by + cell * 0.5
-        local r = cell * 0.34
+        local dialCenterX = pendingX + cell * 0.5
+        local dialCenterY = pendingY + cell * 0.5
+        local dialRadius = cell * 0.34
         if Draw ~= nil and Draw.disc ~= nil and Draw.pie ~= nil then
 
-            local d = math.floor(r * 2 + 4)
-            Draw.disc(self, math.floor(cxp - d * 0.5), math.floor(cyp - d * 0.5), d,
-                0.55, sf.bg)
+            local scrimDiameter = math.floor(dialRadius * 2 + 4)
+            Draw.disc(self, math.floor(dialCenterX - scrimDiameter * 0.5),
+                math.floor(dialCenterY - scrimDiameter * 0.5), scrimDiameter,
+                0.55, surface.bg)
 
-            Draw.pie(self, cxp, cyp, r, t * 6.2831853, 0.30, sf.accent)
+            Draw.pie(self, dialCenterX, dialCenterY, dialRadius,
+                waitFraction * 6.2831853, 0.30, surface.accent)
         end
     end
 
     if self.marqueeActive then
-        local mx0 = math.min(self.marqueeX0, self.marqueeX1)
-        local my0 = math.min(self.marqueeY0, self.marqueeY1)
-        local mw = math.abs(self.marqueeX1 - self.marqueeX0)
-        local mh = math.abs(self.marqueeY1 - self.marqueeY0)
-        local sc = Style.COLORS and Style.COLORS.SELECTED
-        local sr, sg, sb = sc and sc.r or 0.35, sc and sc.g or 0.75, sc and sc.b or 1.0
-        self:drawRect(mx0, my0, mw, mh, 0.18, sr, sg, sb)
-        self:drawRectBorder(mx0, my0, mw, mh, 0.9, sr, sg, sb)
+        local bandX = math.min(self.marqueeX0, self.marqueeX1)
+        local bandY = math.min(self.marqueeY0, self.marqueeY1)
+        local bandW = math.abs(self.marqueeX1 - self.marqueeX0)
+        local bandH = math.abs(self.marqueeY1 - self.marqueeY0)
+        local selectedColor = Style.COLORS.SELECTED
+        local bandRed, bandGreen, bandBlue = selectedColor.r, selectedColor.g,
+            selectedColor.b
+        self:drawRect(bandX, bandY, bandW, bandH, MARQUEE_FILL_ALPHA,
+            bandRed, bandGreen, bandBlue)
+        self:drawRectBorder(bandX, bandY, bandW, bandH, MARQUEE_EDGE_ALPHA,
+            bandRed, bandGreen, bandBlue)
     end
 end
 
@@ -673,11 +665,6 @@ function GridView:dropSlotAt(x, y)
     return slot
 end
 
-function GridView:isMouseOverSlot(slot)
-    if slot == nil or not self:isMouseOver() then return false end
-    return self:slotAt(self:getMouseX(), self:getMouseY()) == slot
-end
-
 local lastMouseError = nil
 local function reportMouseError(err)
     if err ~= lastMouseError then
@@ -686,13 +673,19 @@ local function reportMouseError(err)
     end
 end
 
-local function hostPane(self)
+local function stackPane(self)
     local node = self.parent
     while node ~= nil do
         if node.pane ~= nil then return node.pane end
         node = node.parent
     end
-    return nil
+    local player = getSpecificPlayer(self.playerNum or 0)
+    local inventory = self.model ~= nil and self.model.inventory or nil
+    local mine = false
+    if player ~= nil and inventory ~= nil then
+        mine = inventory:isInCharacterInventory(player)
+    end
+    return VanillaStacks.sidePaneFor(self.playerNum, mine)
 end
 
 local function stackAtPixel(self, x, y)
@@ -705,32 +698,39 @@ end
 
 local function buildPayload(self, stack)
     local payload = VanillaStacks.listFrom({ stack }, self.model.inventory,
-        hostPane(self))
+        stackPane(self))
     if #payload == 0 then return nil end
     payload[1].comfyStacks = stack
     return payload
+end
+
+local function bySlot(left, right)
+    return (left.slot or 0) < (right.slot or 0)
+end
+
+local function selectionInSlotOrder(selection)
+    local ordered = {}
+    for selectedStack in pairs(selection) do
+        ordered[#ordered + 1] = selectedStack
+    end
+    table.sort(ordered, bySlot)
+    return ordered
 end
 
 local function payloadFor(self, stack)
     if not isSelected(self, stack) or self.selectionCount < 2 then
         return buildPayload(self, stack)
     end
-    local ordered = {}
-    for s in pairs(self.selection) do
-        ordered[#ordered + 1] = s
-    end
-    table.sort(ordered, function(a, b)
-        return (a.slot or 0) < (b.slot or 0)
-    end)
+    local ordered = selectionInSlotOrder(self.selection)
     local out = {}
     for i = 1, #ordered do
-        local p = buildPayload(self, ordered[i])
-        if p ~= nil then
+        local entryPayload = buildPayload(self, ordered[i])
+        if entryPayload ~= nil then
             if ordered[i] == stack then
 
-                p[1].comfyAnchorCols = self.cols
+                entryPayload[1].comfyAnchorCols = self.cols
             end
-            out[#out + 1] = p[1]
+            out[#out + 1] = entryPayload[1]
         end
     end
     if #out == 0 then return nil end
@@ -760,20 +760,14 @@ end
 
 function GridView:padSelectionPayload()
     syncSelection(self)
-    local sel = self.selection
-    if sel == nil or self.selectionCount < 1 then return nil end
-    local ordered = {}
-    for s in pairs(sel) do
-        ordered[#ordered + 1] = s
-    end
-    table.sort(ordered, function(a, b)
-        return (a.slot or 0) < (b.slot or 0)
-    end)
+    local selection = self.selection
+    if selection == nil or self.selectionCount < 1 then return nil end
+    local ordered = selectionInSlotOrder(selection)
     local out = {}
     for i = 1, #ordered do
-        local p = buildPayload(self, ordered[i])
-        if p ~= nil then
-            out[#out + 1] = p[1]
+        local entryPayload = buildPayload(self, ordered[i])
+        if entryPayload ~= nil then
+            out[#out + 1] = entryPayload[1]
         end
     end
     if #out == 0 then return nil end
@@ -827,7 +821,6 @@ end
 
 local function promoteDrag(self)
 
-    if DragAndDrop == nil then return end
     DragAndDrop.startDrag(self)
     if not self.dragDidStart and DragAndDrop.isDragging()
             and DragAndDrop.isDragOwner(self) then
@@ -844,26 +837,29 @@ local function updateMarqueeSelection(self)
     local y0 = math.min(self.marqueeY0, self.marqueeY1)
     local x1 = math.max(self.marqueeX0, self.marqueeX1)
     local y1 = math.max(self.marqueeY0, self.marqueeY1)
-    local sel, count = {}, 0
+    local newSelection, count = {}, 0
     local base = self.marqueeBase
     if base ~= nil then
-        for s in pairs(base) do sel[s] = true; count = count + 1 end
+        for selectedStack in pairs(base) do
+            newSelection[selectedStack] = true
+            count = count + 1
+        end
     end
     local cols = self.cols
     local cell = Style.CELL
     local stacks = self.model.grid.data.stacks
     for i = 1, #stacks do
-        local s = stacks[i]
-        if s ~= nil and s.slot ~= nil and not sel[s] then
-            local cx, cy = Style.pixelForSlot(s.slot, cols)
+        local stack = stacks[i]
+        if stack ~= nil and stack.slot ~= nil and not newSelection[stack] then
+            local cellX, cellY = Style.pixelForSlot(stack.slot, cols)
 
-            if x0 < cx + cell and x1 > cx and y0 < cy + cell and y1 > cy then
-                sel[s] = true
+            if x0 < cellX + cell and x1 > cellX and y0 < cellY + cell and y1 > cellY then
+                newSelection[stack] = true
                 count = count + 1
             end
         end
     end
-    self.selection = count > 0 and sel or nil
+    self.selection = count > 0 and newSelection or nil
     self.selectionCount = count
 end
 
@@ -919,7 +915,7 @@ local function mouseDownImpl(self, x, y)
         self.marqueePressStack = stack
         local base = {}
         if self.selection ~= nil then
-            for s in pairs(self.selection) do base[s] = true end
+            for selectedStack in pairs(self.selection) do base[selectedStack] = true end
         end
         self.marqueeBase = base
         return
@@ -1035,30 +1031,24 @@ local function rightMouseUpImpl(self, x, y)
     if stack == nil then return end
     if isSelected(self, stack) and self.selectionCount > 1 then
 
-        local list = { stack }
-        for s in pairs(self.selection) do
-            if s ~= stack then list[#list + 1] = s end
+        local menuStacks = { stack }
+        for selectedStack in pairs(self.selection) do
+            if selectedStack ~= stack then menuStacks[#menuStacks + 1] = selectedStack end
         end
-        ContextMenu.open(self.playerNum, list, self)
+        ContextMenu.open(self.playerNum, menuStacks, self)
         return
     end
     ContextMenu.open(self.playerNum, { stack }, self)
 end
 
-local function alreadyShown(inv)
-    if inv == nil then return false end
-    for n = 0, 1 do
-        for _, get in ipairs({ getPlayerInventory, getPlayerLoot }) do
-            local okP, page = pcall(get, n)
-            local pane = okP and page ~= nil and page.inventoryPane or nil
-            local host = pane ~= nil and pane.comfyHost or nil
-            if host ~= nil and host.showsInventory ~= nil then
-                local okS, shown = pcall(host.showsInventory, host, inv)
-                if okS and shown then return true end
-            end
-        end
+local function alreadyShown(bagInventory)
+    if bagInventory == nil then return false end
+    local ContainerWindow = ComfyGrid.UI.ContainerWindow
+    if ContainerWindow == nil or ContainerWindow.pageShowing == nil then
+        return false
     end
-    return false
+    return ContainerWindow.pageShowing(0, bagInventory) ~= nil
+        or ContainerWindow.pageShowing(1, bagInventory) ~= nil
 end
 
 local function openStackSurface(self, stack)
@@ -1073,56 +1063,54 @@ local function openStackSurface(self, stack)
         return popup
     end
 
-    local CW = ComfyGrid.UI.ContainerWindow
-    if CW == nil or CW.openFor == nil then return end
-    local ItemStack = ComfyGrid.Model.ItemStack
-    if ItemStack == nil or ItemStack.frontItem == nil then return end
-    local okI, item = pcall(ItemStack.frontItem, stack, self.model.inventory)
-    if not okI or item == nil then return end
-    local inv = CW.inventoryOf(item)
-    if inv == nil then return end
+    local ContainerWindow = ComfyGrid.UI.ContainerWindow
+    if ContainerWindow == nil or ContainerWindow.openFor == nil then return end
+    local okItem, item = pcall(ItemStack.frontItem, stack, self.model.inventory)
+    if not okItem or item == nil then return end
+    local bagInventory = ContainerWindow.inventoryOf(item)
+    if bagInventory == nil then return end
 
-    local open = CW.windowFor ~= nil and CW.windowFor(self.playerNum) or nil
+    local open = ContainerWindow.windowFor ~= nil
+        and ContainerWindow.windowFor(self.playerNum) or nil
     if open ~= nil and open:getIsVisible() and open.item == item then
-        CW.closeFor(self.playerNum)
+        ContainerWindow.closeFor(self.playerNum)
         return
     end
 
     local playerObj = getSpecificPlayer(self.playerNum)
     if playerObj ~= nil then
-        local okE, equipped = pcall(playerObj.isEquipped, playerObj, item)
-        if okE and equipped then return end
+        local okEquipped, equipped = pcall(playerObj.isEquipped, playerObj, item)
+        if okEquipped and equipped then return end
     end
-    if alreadyShown(inv) then return end
+    if alreadyShown(bagInventory) then return end
 
-    local cx, cy = Style.pixelForSlot(stack.slot, self.cols or 1)
-    local x = self:getAbsoluteX() + cx + Style.CELL + 2
-    local y = self:getAbsoluteY() + cy + Style.CELL + 2
-    local ok, err = pcall(CW.openFor, self.playerNum, item, x, y)
+    local cellX, cellY = Style.pixelForSlot(stack.slot, self.cols or 1)
+    local x = self:getAbsoluteX() + cellX + Style.CELL + 2
+    local y = self:getAbsoluteY() + cellY + Style.CELL + 2
+    local ok, err = pcall(ContainerWindow.openFor, self.playerNum, item, x, y)
     if not ok then reportMouseError(err) end
 end
 
 local function wouldOpenSomething(self, stack)
     if stack == nil or stack.count == nil then return false end
     if stack.count >= 2 then return true end
-    local CW = ComfyGrid.UI.ContainerWindow
-    if CW == nil or CW.inventoryOf == nil then return false end
-    local ItemStack = ComfyGrid.Model.ItemStack
-    if ItemStack == nil or self.model == nil then return false end
-    local okI, item = pcall(ItemStack.frontItem, stack, self.model.inventory)
-    if not okI or item == nil then return false end
-    local inv = CW.inventoryOf(item)
-    if inv == nil then return false end
+    local ContainerWindow = ComfyGrid.UI.ContainerWindow
+    if ContainerWindow == nil or ContainerWindow.inventoryOf == nil then return false end
+    if self.model == nil then return false end
+    local okItem, item = pcall(ItemStack.frontItem, stack, self.model.inventory)
+    if not okItem or item == nil then return false end
+    local bagInventory = ContainerWindow.inventoryOf(item)
+    if bagInventory == nil then return false end
 
     local playerObj = getSpecificPlayer(self.playerNum)
     if playerObj ~= nil then
-        local okE, equipped = pcall(playerObj.isEquipped, playerObj, item)
-        if okE and equipped then return false end
+        local okEquipped, equipped = pcall(playerObj.isEquipped, playerObj, item)
+        if okEquipped and equipped then return false end
     end
-    return not alreadyShown(inv)
+    return not alreadyShown(bagInventory)
 end
 
-function GridView:onStackClicked(stack, x, y)
+function GridView:onStackClicked(stack, _x, _y)
     if stack == nil then return end
     local now = getTimestampMs()
     local pending = self.pendingClick

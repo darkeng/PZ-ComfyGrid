@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -19,9 +19,9 @@ local MAX_MEMORY_ENTRIES = 64
 
 local function evictOldestMemory()
     local oldestKey, oldestMs
-    for inventory, ms in pairs(memoryAccessMs) do
-        if oldestMs == nil or ms < oldestMs then
-            oldestKey, oldestMs = inventory, ms
+    for inventory, accessMs in pairs(memoryAccessMs) do
+        if oldestMs == nil or accessMs < oldestMs then
+            oldestKey, oldestMs = inventory, accessMs
         end
     end
     if oldestKey ~= nil then
@@ -32,17 +32,17 @@ local function evictOldestMemory()
 end
 
 local function memoryFor(inventory)
-    local md = memoryModData[inventory]
-    if md == nil then
+    local memoryTable = memoryModData[inventory]
+    if memoryTable == nil then
         if memoryCount >= MAX_MEMORY_ENTRIES then
             evictOldestMemory()
         end
-        md = {}
-        memoryModData[inventory] = md
+        memoryTable = {}
+        memoryModData[inventory] = memoryTable
         memoryCount = memoryCount + 1
     end
     memoryAccessMs[inventory] = getTimestampMs()
-    return md
+    return memoryTable
 end
 
 local function mergeBucket(kind, owner)
@@ -56,44 +56,71 @@ local function mergeBucket(kind, owner)
     end
 end
 
+local ANY_LOCAL_SEAT = {}
+
+local PERSISTENT_RUNG = { player = true, bag = true, vehicle = true, object = true }
+
+local function playerOwningInventory(inventory)
+    local ok, count = pcall(getNumActivePlayers)
+    if not ok or type(count) ~= "number" then return nil end
+    for i = 0, count - 1 do
+        local player = getSpecificPlayer(i)
+        if player and player:getInventory() == inventory then
+            return player
+        end
+    end
+    return nil
+end
+
+local function playerForSeat(inventory, seat)
+    if seat == ANY_LOCAL_SEAT then return playerOwningInventory(inventory) end
+    if not seat then return nil end
+    local player = getSpecificPlayer(seat)
+    if player and player:getInventory() == inventory then return player end
+    return nil
+end
+
+local function ownerOf(inventory, seat)
+    if inventory:getType() == "floor" then return nil, "floor" end
+
+    local player = playerForSeat(inventory, seat)
+    if player then return player, "player" end
+
+    local containingItem = inventory:getContainingItem()
+    if containingItem then return containingItem, "bag" end
+
+    local parent = inventory:getParent()
+    if parent and instanceof(parent, "BaseVehicle") then return parent, "vehicle" end
+    if parent and instanceof(parent, "IsoMovingObject") then return parent, "mover" end
+    if parent and instanceof(parent, "IsoObject") then return parent, "object" end
+    return parent, "none"
+end
+
+function Persistence.ownerOf(inventory, playerNum)
+    if not inventory then return nil, nil end
+    return ownerOf(inventory, playerNum)
+end
+
 function Persistence.getModDataFor(inventory, playerNum)
     if not inventory then
         return nil, false
     end
-
-    if inventory:getType() == "floor" then
-        return memoryFor(inventory), false
+    local owner, rung = ownerOf(inventory, playerNum)
+    if rung == "bag" then
+        mergeBucket("worldItem", owner)
+    elseif rung == "vehicle" then
+        mergeBucket("vehicle", owner)
     end
-
-    if playerNum then
-        local player = getSpecificPlayer(playerNum)
-        if player and player:getInventory() == inventory then
-            return player:getModData(), true
-        end
+    if PERSISTENT_RUNG[rung] then
+        return owner:getModData(), true
     end
-
-    local containingItem = inventory:getContainingItem()
-    if containingItem then
-        mergeBucket("worldItem", containingItem)
-        return containingItem:getModData(), true
-    end
-
-    local parent = inventory:getParent()
-
-    if parent and instanceof(parent, "BaseVehicle") then
-        mergeBucket("vehicle", parent)
-        return parent:getModData(), true
-    end
-
-    if parent and instanceof(parent, "IsoMovingObject") then
-        return memoryFor(inventory), false
-    end
-
-    if parent and instanceof(parent, "IsoObject") then
-        return parent:getModData(), true
-    end
-
     return memoryFor(inventory), false
+end
+
+function Persistence.isPersistent(inventory, playerNum)
+    if not inventory then return false end
+    local _, rung = ownerOf(inventory, playerNum)
+    return PERSISTENT_RUNG[rung] == true
 end
 
 local function containerKeyFor(inventory)
@@ -146,40 +173,15 @@ function Persistence.gridDataFor(inventory, playerNum)
     return gridData
 end
 
-local function playerOwningInventory(inventory)
-    local ok, count = pcall(getNumActivePlayers)
-    if not ok or type(count) ~= "number" then return nil end
-    for i = 0, count - 1 do
-        local player = getSpecificPlayer(i)
-        if player and player:getInventory() == inventory then
-            return player
-        end
-    end
-    return nil
-end
-
 function Persistence.resolveSyncOwner(inventory)
     if not inventory then return nil end
-    if inventory:getType() == "floor" then return nil end
+    local owner, rung = ownerOf(inventory, ANY_LOCAL_SEAT)
+    if rung == "player" or rung == "object" then return owner, "object" end
+    if rung == "vehicle" then return owner, "vehicle" end
+    if rung == "bag" then
 
-    local player = playerOwningInventory(inventory)
-    if player then return player, "object" end
-
-    local item = inventory:getContainingItem()
-    if item then
-
-        local ok, worldObj = pcall(function() return item:getWorldItem() end)
+        local ok, worldObj = pcall(function() return owner:getWorldItem() end)
         if ok and worldObj then return worldObj, "worldItem" end
-        return nil
-    end
-
-    local parent = inventory:getParent()
-    if parent and instanceof(parent, "BaseVehicle") then
-        return parent, "vehicle"
-    end
-    if parent and instanceof(parent, "IsoMovingObject") then return nil end
-    if parent and instanceof(parent, "IsoObject") then
-        return parent, "object"
     end
     return nil
 end

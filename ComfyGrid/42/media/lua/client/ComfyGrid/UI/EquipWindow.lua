@@ -1,21 +1,25 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Core/Input"
 require "ComfyGrid/Core/Prefs"
 require "ComfyGrid/Core/Text"
 require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/Chrome/WindowStrip"
+require "ComfyGrid/UI/Chrome/WindowChrome"
+require "ComfyGrid/UI/Chrome/ResizeGrip"
 require "ComfyGrid/UI/Avatar"
 require "ComfyGrid/UI/EquipmentStrip"
+require "ComfyGrid/UI/EquipDock"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -25,8 +29,11 @@ local Text = ComfyGrid.Core.Text
 local Style = ComfyGrid.UI.Style
 local Draw = ComfyGrid.UI.Draw
 local WindowStrip = ComfyGrid.UI.Chrome.WindowStrip
+local WindowChrome = ComfyGrid.UI.Chrome.WindowChrome
+local ResizeGrip = ComfyGrid.UI.Chrome.ResizeGrip
 local Avatar = ComfyGrid.UI.Avatar
 local EquipmentStrip = ComfyGrid.UI.EquipmentStrip
+local EquipDock = ComfyGrid.UI.EquipDock
 
 local EquipWindow = ISPanel:derive("ComfyEquipWindow")
 ComfyGrid.UI.EquipWindow = EquipWindow
@@ -37,8 +44,7 @@ local MODDATA_KEY = "ComfyGrid_EquipWindow"
 local LAYOUT_ID = "ComfyGridEquipWindow"
 
 local function padOwns(playerNum)
-    if JoypadState == nil or JoypadState.players == nil then return false end
-    return JoypadState.players[(playerNum or 0) + 1] ~= nil
+    return ComfyGrid.Core.Input.padOwns(playerNum)
 end
 
 local function settings()
@@ -46,56 +52,56 @@ local function settings()
 end
 
 local function wantsWindow()
-    local S = settings()
-    if S == nil or S.get == nil then return false end
-    return S.get("EQUIPMENT_VIEW") == "window"
+    local Settings = settings()
+    if Settings == nil or Settings.get == nil then return false end
+    return Settings.get("EQUIPMENT_VIEW") == "window"
 end
 
 local function setView(view)
-    local S = settings()
-    if S == nil or S.set == nil then return end
-    S.set("EQUIPMENT_VIEW", view)
-    if S.save ~= nil then S.save() end
+    local Settings = settings()
+    if Settings == nil or Settings.set == nil then return end
+    Settings.set("EQUIPMENT_VIEW", view)
+    if Settings.save ~= nil then Settings.save() end
 end
 
 local FIGURE_TILES = 3
-
-local COL_GAP = 4
 local PAD = 6
-local SHADOW_SPREAD = 12
-local SHADOW_ALPHA = 0.45
 
 local PREF_KEY = "equipWindowScale"
 local MAX_FIGURE_SCALE = 3
 
 local SNAP = 0.03
 
-local function clampFigureScale(wanted)
-    if type(wanted) ~= "number" or wanted ~= wanted then wanted = 1 end
+local function clampFigureScale(requestedScale)
+    if type(requestedScale) ~= "number" or requestedScale ~= requestedScale then
+        requestedScale = 1
+    end
     local natural = Avatar.heightFor(FIGURE_TILES * Style.CELL)
-    local floor = natural > 0 and EquipmentStrip.minFigureHeight() / natural or 1
-    if floor > 1 then floor = 1 end
-    if wanted < floor then wanted = floor end
-    if wanted > MAX_FIGURE_SCALE then wanted = MAX_FIGURE_SCALE end
-    return wanted
+    local minimumScale = natural > 0
+        and EquipmentStrip.minFigureHeight() / natural or 1
+    if minimumScale > 1 then minimumScale = 1 end
+    if requestedScale < minimumScale then requestedScale = minimumScale end
+    if requestedScale > MAX_FIGURE_SCALE then requestedScale = MAX_FIGURE_SCALE end
+    return requestedScale
 end
 
-local function figureWidth(k)
-    return math.floor(FIGURE_TILES * Style.CELL * clampFigureScale(k) + 0.5)
+local function figureWidth(figureScale)
+    return math.floor(FIGURE_TILES * Style.CELL * clampFigureScale(figureScale)
+        + 0.5)
 end
 
 local function sideColumn()
-    return Style.CELL_STRIDE + COL_GAP
+    return Style.CELL_STRIDE + EquipmentStrip.ROW_GAP
 end
 
-local function defaultWidth(k)
-    return figureWidth(k) + 2 * sideColumn() + 2 * PAD
+local function defaultWidth(figureScale)
+    return figureWidth(figureScale) + 2 * sideColumn() + 2 * PAD
 end
 
-local function defaultHeight(trayRows, stripWidth, k)
+local function defaultHeight(trayRows, stripWidth, figureScale)
     return Style.headerHeight() + PAD
-        + EquipmentStrip.anchorsHeight(Avatar.heightFor(figureWidth(k)), trayRows,
-            stripWidth or (defaultWidth(k) - PAD * 2))
+        + EquipmentStrip.anchorsHeight(Avatar.heightFor(figureWidth(figureScale)),
+            trayRows, stripWidth or (defaultWidth(figureScale) - PAD * 2))
         + PAD
 end
 
@@ -118,14 +124,14 @@ end
 local function stateOf(playerNum)
     local playerObj = getSpecificPlayer(playerNum)
     if playerObj == nil or playerObj.getModData == nil then return nil end
-    local ok, md = pcall(playerObj.getModData, playerObj)
-    if not ok or md == nil then return nil end
-    local st = md[MODDATA_KEY]
-    if type(st) ~= "table" then
-        st = { docked = true }
-        md[MODDATA_KEY] = st
+    local ok, modData = pcall(playerObj.getModData, playerObj)
+    if not ok or modData == nil then return nil end
+    local state = modData[MODDATA_KEY]
+    if type(state) ~= "table" then
+        state = { docked = true }
+        modData[MODDATA_KEY] = state
     end
-    return st
+    return state
 end
 
 local CHIP_LEFT = {
@@ -168,24 +174,23 @@ end
 local CHIP_SPEC = { left = CHIP_LEFT, right = CHIP_RIGHT,
     actions = CHIP_ACTIONS }
 
-local Grip
-
 function EquipWindow:new(playerNum)
 
-    local k = Prefs ~= nil and Prefs.getNumber ~= nil
+    local savedFigureScale = Prefs ~= nil and Prefs.getNumber ~= nil
         and Prefs.getNumber(PREF_KEY .. tostring(playerNum), 1) or 1
-    local w, h = defaultWidth(k), defaultHeight(0, nil, k)
-    local o = ISPanel:new(0, 0, w, h)
+    local width = defaultWidth(savedFigureScale)
+    local height = defaultHeight(0, nil, savedFigureScale)
+    local o = ISPanel:new(0, 0, width, height)
     setmetatable(o, self)
     self.__index = self
     o.playerNum = playerNum
-    o.figureK = k
+    o.figureK = savedFigureScale
     o.resize = nil
     o.pin = true
     o.isCollapsed = false
     o.collapseCounter = 0
 
-    o.preferredWidth = w
+    o.preferredWidth = width
     o.docked = true
 
     o.dockSide = "left"
@@ -221,7 +226,7 @@ function EquipWindow:createChildren()
     self:addChild(strip)
     self.content = strip
 
-    local grip = Grip:new(self)
+    local grip = ResizeGrip:new(self)
     grip:initialise()
     self:addChild(grip)
     self.grip = grip
@@ -232,158 +237,21 @@ function EquipWindow:createChildren()
     self.strip = band
 end
 
-local function flushLootPage(playerNum, page)
-    local ok, data = pcall(getPlayerData, playerNum)
-    if not ok or data == nil then return nil end
-    local loot = data.lootInventory
-    if loot == nil or loot.getIsVisible == nil or not loot:getIsVisible() then
-        return nil
-    end
-    local gap = loot:getX() - (page:getX() + page:getWidth())
-    if gap < -2 or gap > 2 then return nil end
-    return loot
-end
-
-local function makeRoom(self, page)
-    local prev = type(self.push) == "table" and self.push or nil
-
-    if prev ~= nil and prev.page ~= nil and prev.page:getX() ~= prev.pageX then
-        prev = nil
-    end
-    self.pushWidth = self.preferredWidth or self.width
-    self.push = prev or false
-    local left = getPlayerScreenLeft ~= nil
-        and getPlayerScreenLeft(self.playerNum) or 0
-    local screenW = getPlayerScreenWidth ~= nil
-        and getPlayerScreenWidth(self.playerNum) or 0
-    local short = (self.preferredWidth or self.width) - (page:getX() - left) - 1
-    if short <= 0 or screenW <= 0 then return end
-    local loot = flushLootPage(self.playerNum, page)
-    local rightMost = loot ~= nil and (loot:getX() + loot:getWidth())
-        or (page:getX() + page:getWidth())
-    local slack = (left + screenW) - rightMost
-
-    if short > slack then return end
-    page:setX(page:getX() + short)
-    if loot ~= nil then loot:setX(loot:getX() + short) end
-
-    self.push = { page = page, pageX = page:getX(),
-        amount = short + (prev ~= nil and prev.amount or 0),
-        loot = loot, lootX = loot ~= nil and loot:getX() or nil }
-end
-
-local function giveBackRoom(self)
-    local p = self.push
-    self.push = nil
-    self.pushWidth = nil
-    if type(p) ~= "table" then return end
-    if p.page ~= nil and p.page:getX() == p.pageX then
-        p.page:setX(p.pageX - p.amount)
-    end
-    if p.loot ~= nil and p.loot:getX() == p.lootX then
-        p.loot:setX(p.lootX - p.amount)
-    end
-end
-
-local function screenRect(playerNum)
-    local left = getPlayerScreenLeft ~= nil
-        and getPlayerScreenLeft(playerNum) or 0
-    local top = getPlayerScreenTop ~= nil
-        and getPlayerScreenTop(playerNum) or 0
-    local w = getPlayerScreenWidth ~= nil
-        and getPlayerScreenWidth(playerNum) or 0
-    local h = getPlayerScreenHeight ~= nil
-        and getPlayerScreenHeight(playerNum) or 0
-    return left, top, w, h
-end
-
-local function placePage(page, x, width)
-    if page == nil then return end
-    if page:getX() ~= x then page:setX(x) end
-    if width > 0 and page:getWidth() ~= width then page:setWidth(width) end
-end
-
-local function padRestore(page)
-    local playerNum = page.player
-    local left, _, w = screenRect(playerNum)
-    if w <= 0 then return end
-    local half = math.floor(w / 2)
-    placePage(page, left, half)
-    local ok, loot = pcall(getPlayerLoot, playerNum)
-    if ok and loot ~= nil and loot ~= page then
-        placePage(loot, left + half, w - half)
-    end
-end
-
-local function padSplit(self, page)
-    local playerNum = self.playerNum
-    local left, _, w = screenRect(playerNum)
-    local mid = self.preferredWidth or self.width
-    if w <= 0 or mid <= 0 or w - mid < 200 then
-
-        return false
-    end
-    local half = math.floor((w - mid) / 2)
-    placePage(page, left, half)
-    local ok, loot = pcall(getPlayerLoot, playerNum)
-    if ok and loot ~= nil and loot ~= page then
-        placePage(loot, left + half + mid, w - half - mid)
-    end
-
-    self.dockSide = "centre"
-    if self.width ~= mid then self:setWidth(mid) end
-    if self.x ~= left + half then self:setX(left + half) end
-    local y = page:getY()
-    if self.y ~= y then self:setY(y) end
-    return true
-end
-
-local function dockTo(self, page)
-
-    if self.preferredWidth ~= nil and self.width ~= self.preferredWidth then
-        self:setWidth(self.preferredWidth)
-    end
-    local left = getPlayerScreenLeft ~= nil
-        and getPlayerScreenLeft(self.playerNum) or 0
-    local top = getPlayerScreenTop ~= nil
-        and getPlayerScreenTop(self.playerNum) or 0
-    local x = page:getX() - self.width + 1
-    local y = page:getY()
-    if x >= left then
-        self.dockSide = "left"
-    else
-        local above = page:getY() - self.height + 1
-        if above >= top then
-
-            self.dockSide, x, y = "above", page:getX(), above
-        else
-
-            self.dockSide, x, y = "above", page:getX(), top
-        end
-    end
-    if self.x ~= x then self:setX(x) end
-    if self.y ~= y then self:setY(y) end
-end
-
 local function clampOnScreen(self)
-    local left = getPlayerScreenLeft ~= nil
-        and getPlayerScreenLeft(self.playerNum) or 0
-    local top = getPlayerScreenTop ~= nil
-        and getPlayerScreenTop(self.playerNum) or 0
-    local w = getPlayerScreenWidth ~= nil
-        and getPlayerScreenWidth(self.playerNum) or 0
-    local h = getPlayerScreenHeight ~= nil
-        and getPlayerScreenHeight(self.playerNum) or 0
+    local left, top, screenWidth, screenHeight =
+        EquipDock.screenRect(self.playerNum)
     local band = self:titleBarHeight()
     local x = self.x
     if x < left then x = left end
-    if w > 0 and x + self.width > left + w then
-        x = left + w - self.width
+    if screenWidth > 0 and x + self.width > left + screenWidth then
+        x = left + screenWidth - self.width
         if x < left then x = left end
     end
     local y = self.y
     if y < top then y = top end
-    if h > 0 and y + band > top + h then y = top + h - band end
+    if screenHeight > 0 and y + band > top + screenHeight then
+        y = top + screenHeight - band
+    end
     if self.x ~= x then self:setX(x) end
     if self.y ~= y then self:setY(y) end
 end
@@ -426,15 +294,17 @@ end
 
 function EquipWindow:setPinned(pin)
     self.pin = pin and true or false
-    local st = stateOf(self.playerNum)
-    if st ~= nil then st.pin = self.pin end
+    local state = stateOf(self.playerNum)
+    if state ~= nil then state.pin = self.pin end
     if self.pin then self:uncollapse() end
 end
 
 function EquipWindow:setDocked(docked)
     self.docked = docked and true or false
-    local st = stateOf(self.playerNum)
-    if st ~= nil then st.docked = self.docked end
+    local state = stateOf(self.playerNum)
+    if state ~= nil then state.docked = self.docked end
+
+    self.dockedPageSpot = nil
 
     self:uncollapse()
     if not self.docked then
@@ -453,9 +323,9 @@ function EquipWindow.getOrCreate(playerNum)
     win = EquipWindow:new(playerNum)
     win:initialise()
     win:addToUIManager()
-    local st = stateOf(playerNum)
-    win.docked = st == nil or st.docked ~= false
-    win.pin = st == nil or st.pin ~= false
+    local state = stateOf(playerNum)
+    win.docked = state == nil or state.docked ~= false
+    win.pin = state == nil or state.pin ~= false
 
     if playerNum == 0 and ISLayoutManager ~= nil then
         pcall(ISLayoutManager.RegisterWindow, LAYOUT_ID, EquipWindow, win)
@@ -468,14 +338,11 @@ function EquipWindow.windowFor(playerNum)
     return windows[playerNum]
 end
 
-function EquipWindow.isOpen(_playerNum)
-    return wantsWindow()
-end
-
 function EquipWindow.viewOf(_playerNum)
-    local S = settings()
-    local v = (S ~= nil and S.get ~= nil) and S.get("EQUIPMENT_VIEW") or nil
-    if v == "window" or v == "off" then return v end
+    local Settings = settings()
+    local view = (Settings ~= nil and Settings.get ~= nil)
+        and Settings.get("EQUIPMENT_VIEW") or nil
+    if view == "window" or view == "off" then return view end
     return "strip"
 end
 
@@ -510,8 +377,8 @@ end
 
 function EquipWindow.toggle(playerNum)
     playerNum = playerNum or 0
-    local next_ = NEXT_VIEW[EquipWindow.viewOf(playerNum)] or "window"
-    if next_ ~= "off" then return setView(next_) end
+    local nextView = NEXT_VIEW[EquipWindow.viewOf(playerNum)] or "window"
+    if nextView ~= "off" then return setView(nextView) end
     confirmOff(playerNum, function() setView("off") end)
 end
 
@@ -530,7 +397,7 @@ function EquipWindow.follow(page)
     if win == nil then
 
         if not wanted then
-            if pad then padRestore(page) end
+            if pad then EquipDock.padRestore(page) end
             return
         end
         win = EquipWindow.getOrCreate(playerNum)
@@ -539,26 +406,37 @@ function EquipWindow.follow(page)
     if pad then
 
         win.docked = true
-        if win.push ~= nil then giveBackRoom(win) end
+        if win.push ~= nil then EquipDock.giveBackRoom(win) end
         if wanted then
-            split = padSplit(win, page)
+            split = EquipDock.padSplit(win, page)
         else
-            padRestore(page)
+            EquipDock.padRestore(page)
         end
     elseif wanted and win.docked then
 
         local grew = win.pushWidth ~= nil
             and (win.preferredWidth or win.width) > win.pushWidth
-        if win.push == nil or grew then makeRoom(win, page) end
+        if win.push == nil then
+
+            local spot = win.dockedPageSpot
+            win.dockedPageSpot = nil
+            if spot ~= nil and spot.x == page:getX() and spot.y == page:getY() then
+                EquipDock.keepSavedSpot(win)
+            else
+                EquipDock.makeRoom(win, page)
+            end
+        elseif grew then
+            EquipDock.makeRoom(win, page)
+        end
     elseif win.push ~= nil then
-        giveBackRoom(win)
+        EquipDock.giveBackRoom(win)
     end
     if win:getIsVisible() ~= showing then
         win:setVisible(showing)
         if showing then win:bringToTop() end
     end
 
-    if showing and win.docked and not split then dockTo(win, page) end
+    if showing and win.docked and not split then EquipDock.dockTo(win, page) end
 end
 
 local function gripSide(self)
@@ -566,20 +444,16 @@ local function gripSide(self)
     return "right"
 end
 
-local function gripSize()
-    return math.max(12, math.floor(Style.headerHeight() * 0.55))
+local function factorForWidth(windowWidth)
+    return (windowWidth - 2 * sideColumn() - 2 * PAD) / (FIGURE_TILES * Style.CELL)
 end
 
-local function factorForWidth(w)
-    return (w - 2 * sideColumn() - 2 * PAD) / (FIGURE_TILES * Style.CELL)
-end
-
-local function factorForHeight(self, h)
+local function factorForHeight(self, windowHeight)
     local strip = self.content
     local trayRows = strip ~= nil and strip.trayRows or 0
-    local fixed = Style.headerHeight() + PAD
+    local chromeHeight = Style.headerHeight() + PAD
         + EquipmentStrip.anchorsHeight(0, trayRows, self.width - PAD * 2) + PAD
-    return Avatar.widthFor(h - fixed) / (FIGURE_TILES * Style.CELL)
+    return Avatar.widthFor(windowHeight - chromeHeight) / (FIGURE_TILES * Style.CELL)
 end
 
 local function applySize(self)
@@ -593,83 +467,40 @@ function EquipWindow:beginResize()
     if self.resize ~= nil then return end
     self.resize = {
         mouseX = getMouseX(), mouseY = getMouseY(),
-        k = clampFigureScale(self.figureK),
+        startFigureScale = clampFigureScale(self.figureK),
         width = self.width, height = self.height,
         side = gripSide(self),
     }
-    self.resize.sign = self.resize.side == "left" and -1 or 1
+    self.resize.widthSign = self.resize.side == "left" and -1 or 1
 end
 
 function EquipWindow:endResize()
-    local r = self.resize
-    if r == nil then return end
+    local drag = self.resize
+    if drag == nil then return end
     self.resize = nil
-    if self.figureK ~= r.k and Prefs ~= nil and Prefs.set ~= nil then
+    if self.figureK ~= drag.startFigureScale and Prefs ~= nil
+            and Prefs.set ~= nil then
         Prefs.set(PREF_KEY .. tostring(self.playerNum),
             string.format("%.3f", self.figureK))
     end
 end
 
-local function updateResize(self)
-    local r = self.resize
-    local dx = (getMouseX() - r.mouseX) * r.sign
-    local dy = getMouseY() - r.mouseY
-    local byWidth = factorForWidth(r.width + dx)
-    local byHeight = factorForHeight(self, r.height + dy)
-    local k = byWidth
-    if math.abs(byHeight - r.k) > math.abs(byWidth - r.k) then k = byHeight end
-    k = clampFigureScale(k)
-    if math.abs(k - 1) < SNAP then k = 1 end
-    if k ~= self.figureK then
-        self.figureK = k
-        applySize(self)
+function EquipWindow:updateResize()
+    local drag = self.resize
+    local dx = (getMouseX() - drag.mouseX) * drag.widthSign
+    local dy = getMouseY() - drag.mouseY
+    local byWidth = factorForWidth(drag.width + dx)
+    local byHeight = factorForHeight(self, drag.height + dy)
+    local nextFigureScale = byWidth
+    if math.abs(byHeight - drag.startFigureScale)
+            > math.abs(byWidth - drag.startFigureScale) then
+        nextFigureScale = byHeight
     end
-end
-
-Grip = ISUIElement:derive("ComfyEquipGrip")
-
-function Grip:new(owner)
-    local o = ISUIElement:new(0, 0, 1, 1)
-    setmetatable(o, self)
-    self.__index = self
-    o.owner = owner
-    o.side = "right"
-    return o
-end
-
-function Grip:onMouseDown(_x, _y)
-    self.owner:beginResize()
-    return true
-end
-
-function Grip:onMouseUp(_x, _y)
-    self.owner:endResize()
-    return true
-end
-
-function Grip:onMouseUpOutside(_x, _y)
-    self.owner:endResize()
-end
-
-function Grip:render()
-    local sf = Style.COLORS and Style.COLORS.SURFACE
-    if sf == nil then return end
-
-    local hot = self.owner.resize ~= nil or self:isMouseOver()
-    local a = hot and 1 or 0.85
-    local ink = sf.accent or sf.line
-    local dot, step = 2, 4
-    local span = 2 * step + dot
-    local oy = self.height - 2 - span
-    local ox = self.side == "left" and 2 or (self.width - 2 - span)
-    for row = 0, 2 do
-        for col = 0, 2 do
-            if col + row >= 2 then
-                local c = self.side == "left" and (2 - col) or col
-                self:drawRect(ox + c * step, oy + row * step, dot, dot, a,
-                    ink.r, ink.g, ink.b)
-            end
-        end
+    nextFigureScale = clampFigureScale(nextFigureScale)
+    if math.abs(nextFigureScale - 1) < SNAP then nextFigureScale = 1 end
+    if nextFigureScale ~= self.figureK then
+        self.figureK = nextFigureScale
+        applySize(self)
     end
 end
 
@@ -677,95 +508,94 @@ local function layoutGrip(self)
     local grip = self.grip
     if grip == nil then return end
     local show = not padOwns(self.playerNum) and not self.isCollapsed
-    if grip:getIsVisible() ~= show then grip:setVisible(show) end
-    local size = gripSize()
-    if grip.width ~= size then
-        grip:setWidth(size)
-        grip:setHeight(size)
-    end
 
     local side = self.resize ~= nil and self.resize.side or gripSide(self)
-    grip.side = side
-    local gx = side == "left" and 1 or (self.width - size - 1)
-    local gy = self.height - size - 1
-    if grip.x ~= gx then grip:setX(gx) end
-    if grip.y ~= gy then grip:setY(gy) end
+    ResizeGrip.seat(grip, show, side, ResizeGrip.defaultSize())
 end
 
-local function prerenderImpl(self)
-
+local function standDownWithPage(self)
     local ok, page = pcall(getPlayerInventory, self.playerNum)
     if not ok or page == nil or not page:getIsVisible() then
         self:setVisible(false)
-        return
+        return true
     end
+    return false
+end
 
-    if self.resize ~= nil then
-        if isMouseButtonDown == nil or not isMouseButtonDown(0) then
-            self:endResize()
-        else
-            updateResize(self)
-        end
-    end
-
-    local band = self.strip
-    local bandH = self:titleBarHeight()
-
+local function paintBody(self, bandH)
     if Draw ~= nil and Draw.shadow ~= nil and not self.docked then
-        local spread = math.max(6,
-            math.floor(SHADOW_SPREAD * (Style.SCALE or 1)))
         local shadowH = self.isCollapsed and bandH or self.height
-        Draw.shadow(self, 0, 0, self.width, shadowH, spread, SHADOW_ALPHA)
+        Draw.shadow(self, 0, 0, self.width, shadowH, WindowChrome.shadowSpread(),
+            WindowChrome.SHADOW_ALPHA)
     end
 
-    local sf = Style.COLORS and Style.COLORS.SURFACE
-    if sf ~= nil then
-        self:drawRect(0, 0, self.width, self.height, 0.95, sf.bg.r, sf.bg.g,
-            sf.bg.b)
+    local surface = Style.COLORS and Style.COLORS.SURFACE
+    if surface ~= nil then
+        self:drawRect(0, 0, self.width, self.height, 0.95, surface.bg.r,
+            surface.bg.g, surface.bg.b)
     end
+end
 
-    if band ~= nil then
-        if band.width ~= self.width then band:setWidth(self.width) end
-        if band.y ~= 0 then band:setY(0) end
-    end
+local function trackBand(self)
+    local band = self.strip
+    if band == nil then return end
+    if band.width ~= self.width then band:setWidth(self.width) end
+    if band.y ~= 0 then band:setY(0) end
+end
 
-    local innerY = bandH + PAD
-    local innerW = self.width - PAD * 2
-
-    local col = sideColumn()
-    local span = innerW - col * 2
+local function fitFigure(self, innerW)
+    local columnWidth = sideColumn()
+    local figureRoom = innerW - columnWidth * 2
     local figW = figureWidth(self.figureK)
-    if figW > span then figW = span end
+    if figW > figureRoom then figW = figureRoom end
     if figW < Style.CELL then figW = Style.CELL end
     local figX = math.floor((innerW - figW) / 2)
     local figY = EquipmentStrip.anchorsTop()
     local figH = Avatar.heightFor(figW)
+    return figX, figY, figW, figH
+end
 
+local function placeContent(self, innerY, innerW, figX, figY, figW, figH)
     local content = self.content
-    if content ~= nil then
-        if content.x ~= PAD then content:setX(PAD) end
-        if content.y ~= innerY then content:setY(innerY) end
-        if content.setAvailableWidth ~= nil then
-            content:setAvailableWidth(innerW)
-        end
-        if content.setFigureBox ~= nil then
-            content:setFigureBox(figX, figY, figW, figH)
-        end
+    if content == nil then return end
+    if content.x ~= PAD then content:setX(PAD) end
+    if content.y ~= innerY then content:setY(innerY) end
+    if content.setAvailableWidth ~= nil then
+        content:setAvailableWidth(innerW)
     end
-
-    local av = self.avatar
-    if av ~= nil then
-        local ax, ay = PAD + figX, innerY + figY
-        if not av:getIsVisible() then av:setVisible(true) end
-        if av.x ~= ax then av:setX(ax) end
-        if av.y ~= ay then av:setY(ay) end
-        if av.width ~= figW then av:setWidth(figW) end
-        if av.height ~= figH then av:setHeight(figH) end
+    if content.setFigureBox ~= nil then
+        content:setFigureBox(figX, figY, figW, figH)
     end
+end
 
+local function placeAvatar(self, innerY, figX, figY, figW, figH)
+    local avatar = self.avatar
+    if avatar == nil then return end
+    local ax, ay = PAD + figX, innerY + figY
+    if not avatar:getIsVisible() then avatar:setVisible(true) end
+    if avatar.x ~= ax then avatar:setX(ax) end
+    if avatar.y ~= ay then avatar:setY(ay) end
+    if avatar.width ~= figW then avatar:setWidth(figW) end
+    if avatar.height ~= figH then avatar:setHeight(figH) end
+end
+
+local function followTray(self)
     local wantH = wantedHeight(self)
     if wantH ~= nil and self.height ~= wantH then self:setHeight(wantH) end
+end
 
+local function prerenderImpl(self)
+    if standDownWithPage(self) then return end
+    ResizeGrip.poll(self)
+    local bandH = self:titleBarHeight()
+    paintBody(self, bandH)
+    trackBand(self)
+    local innerY = bandH + PAD
+    local innerW = self.width - PAD * 2
+    local figX, figY, figW, figH = fitFigure(self, innerW)
+    placeContent(self, innerY, innerW, figX, figY, figW, figH)
+    placeAvatar(self, innerY, figX, figY, figW, figH)
+    followTray(self)
     layoutGrip(self)
 end
 
@@ -775,12 +605,12 @@ function EquipWindow:prerender()
 end
 
 function EquipWindow:render()
-    local sf = Style.COLORS and Style.COLORS.SURFACE
-    if sf == nil then return end
+    local surface = Style.COLORS and Style.COLORS.SURFACE
+    if surface == nil then return end
 
-    local h = self.isCollapsed and self:titleBarHeight() or self.height
-    self:drawRectBorder(0, 0, self.width, h, 0.85, sf.line.r, sf.line.g,
-        sf.line.b)
+    local frameHeight = self.isCollapsed and self:titleBarHeight() or self.height
+    self:drawRectBorder(0, 0, self.width, frameHeight, 0.85, surface.line.r,
+        surface.line.g, surface.line.b)
 end
 
 function EquipWindow:onMouseDown(_x, y)
@@ -812,6 +642,12 @@ function EquipWindow:onMouseUpOutside(_x, _y)
     self.dragging = false
 end
 
+local function dragBy(self, dx, dy)
+    self:setX(self.x + dx)
+    self:setY(self.y + dy)
+    clampOnScreen(self)
+end
+
 function EquipWindow:onMouseMove(dx, dy)
 
     if not isMouseButtonDown(0) and not isMouseButtonDown(1)
@@ -822,16 +658,12 @@ function EquipWindow:onMouseMove(dx, dy)
         end
     end
     if not self.dragging then return end
-    self:setX(self.x + dx)
-    self:setY(self.y + dy)
-    clampOnScreen(self)
+    dragBy(self, dx, dy)
 end
 
 function EquipWindow:onMouseMoveOutside(dx, dy)
     if self.dragging then
-        self:setX(self.x + dx)
-        self:setY(self.y + dy)
-        clampOnScreen(self)
+        dragBy(self, dx, dy)
         return
     end
     if self.docked or self.pin or self.isCollapsed then return end
@@ -842,9 +674,9 @@ function EquipWindow:onMouseMoveOutside(dx, dy)
         return
     end
 
-    local gt = getGameTime()
+    local gameTime = getGameTime()
     self.collapseCounter = self.collapseCounter
-        + gt:getMultiplier() / gt:getTrueMultiplier() / 0.8
+        + gameTime:getMultiplier() / gameTime:getTrueMultiplier() / 0.8
     if self.collapseCounter > 120 then self:collapseNow() end
 end
 
@@ -856,6 +688,12 @@ function EquipWindow:RestoreLayout(_name, layout)
     self:setHeight(wantedHeight(self))
 
     self:setVisible(wantsWindow())
+
+    local pageX, pageY = tonumber(layout.dockedPageX), tonumber(layout.dockedPageY)
+    self.dockedPageSpot = nil
+    if pageX ~= nil and pageY ~= nil then
+        self.dockedPageSpot = { x = pageX, y = pageY }
+    end
 end
 
 function EquipWindow:SaveLayout(_name, layout)
@@ -866,6 +704,15 @@ function EquipWindow:SaveLayout(_name, layout)
     end
     ISLayoutManager.DefaultSaveWindow(self, layout)
     self.width = live
+
+    local okPage, page = pcall(getPlayerInventory, self.playerNum)
+    if self.docked and okPage and page ~= nil and not padOwns(self.playerNum) then
+        layout.dockedPageX = page:getX()
+        layout.dockedPageY = page:getY()
+    else
+        layout.dockedPageX = nil
+        layout.dockedPageY = nil
+    end
 end
 
 Style.onScaleChanged(function()

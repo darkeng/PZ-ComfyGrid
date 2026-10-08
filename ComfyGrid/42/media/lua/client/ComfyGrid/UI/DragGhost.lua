@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,6 +11,7 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Icons"
 require "ComfyGrid/UI/SlotRenderer"
+require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/Interact/DragAndDrop"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
@@ -19,6 +20,7 @@ local Log = ComfyGrid.Core.Log
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local Icons = ComfyGrid.UI.Icons
+local StackRenderer = ComfyGrid.UI.StackRenderer
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
 
 local DragGhost = ISUIElement:derive("ComfyDragGhost")
@@ -28,32 +30,34 @@ local floor = math.floor
 
 local GHOST_ALPHA = 0.7
 
+local LIFT_SHADOW_ALPHA = 0.35
+
 local countStrings = {}
 
 local lastRenderError = nil
 
 function DragGhost:new()
-    local o = ISUIElement:new(0, 0, 0, 0)
-    setmetatable(o, self)
+    local ghost = ISUIElement:new(0, 0, 0, 0)
+    setmetatable(ghost, self)
     self.__index = self
-    return o
+    return ghost
 end
 
 function DragGhost.ensure()
-    local inst = ComfyGrid.UI._dragGhostInstance
-    if inst ~= nil then
+    local instance = ComfyGrid.UI._dragGhostInstance
+    if instance ~= nil then
 
-        if getmetatable(inst) ~= DragGhost then
+        if getmetatable(instance) ~= DragGhost then
             DragGhost.__index = DragGhost
-            setmetatable(inst, DragGhost)
+            setmetatable(instance, DragGhost)
         end
-        return inst
+        return instance
     end
-    inst = DragGhost:new()
-    inst:initialise()
-    inst:addToUIManager()
-    ComfyGrid.UI._dragGhostInstance = inst
-    return inst
+    instance = DragGhost:new()
+    instance:initialise()
+    instance:addToUIManager()
+    ComfyGrid.UI._dragGhostInstance = instance
+    return instance
 end
 
 function DragGhost:prerender()
@@ -74,9 +78,9 @@ local function renderImpl(self)
 
     local total = 0
     for i = 1, #stacks do
-        local st = stacks[i].items
-        if st ~= nil and #st > 1 then
-            total = total + #st - 1
+        local stackItems = stacks[i].items
+        if stackItems ~= nil and #stackItems > 1 then
+            total = total + #stackItems - 1
         end
     end
 
@@ -87,36 +91,25 @@ local function renderImpl(self)
     local x = floor(mx - size * 0.5)
     local y = floor(my - size * 0.5)
 
-    local tileTex = SlotRenderer.getTileTexture ~= nil
-        and SlotRenderer.getTileTexture() or nil
+    self:suspendStencil()
+
+    local colors = Style.COLORS
+    local tileTex = SlotRenderer.getTileTexture()
     if tileTex ~= nil then
         local cell = floor((Style.CELL - 2) * 1.05)
-        local gx = floor(mx - cell * 0.5)
-        local gy = floor(my - cell * 0.5)
-        self:suspendStencil()
+        local tileX = floor(mx - cell * 0.5)
+        local tileY = floor(my - cell * 0.5)
 
-        self:drawTextureScaled(tileTex, gx + 3, gy + 4, cell, cell,
-            0.35, 0, 0, 0)
-        local cat = front.getDisplayCategory and front:getDisplayCategory()
+        local shadowInk = colors.SHADOW
+        self:drawTextureScaled(tileTex, tileX + 3, tileY + 4, cell, cell,
+            LIFT_SHADOW_ALPHA, shadowInk.r, shadowInk.g, shadowInk.b)
+        local category = front.getDisplayCategory and front:getDisplayCategory()
             or nil
-        local tints = Style.COLORS and Style.COLORS.CATEGORY
-        local tint = nil
 
-        if Style.tintForCategory ~= nil then
-            tint = Style.tintForCategory(cat)
-        end
-        if tint == nil then
-            tint = (cat ~= nil and tints ~= nil and tints[cat])
-                or (tints ~= nil and tints.default) or nil
-        end
-        if tint ~= nil then
-            self:drawTextureScaled(tileTex, gx, gy, cell, cell,
-                0.85, tint.r, tint.g, tint.b)
-        end
-        self:resumeStencil()
+        local tint = Style.tintForCategory(category)
+        self:drawTextureScaled(tileTex, tileX, tileY, cell, cell,
+            0.85, tint.r, tint.g, tint.b)
     end
-
-    self:suspendStencil()
 
     local tex = front.getTex and front:getTex() or nil
     local drew = false
@@ -125,14 +118,15 @@ local function renderImpl(self)
         local texH = tex:getHeight()
         if texW and texH and texW > 0 and texH > 0 then
 
-            Icons.draw(self, front, floor(x), floor(y), GHOST_ALPHA, size, size)
+            Icons.draw(self, front, x, y, GHOST_ALPHA, size, size)
             drew = true
         end
     end
     if not drew then
 
+        local placeholder = colors.PLACEHOLDER_TEXT
         self:drawTextCentre("?", mx, floor(y + (size - Style.FONT_H) * 0.5),
-            1, 1, 1, GHOST_ALPHA, Style.FONT)
+            placeholder.r, placeholder.g, placeholder.b, GHOST_ALPHA, Style.FONT)
     end
 
     if total > 1 then
@@ -141,20 +135,8 @@ local function renderImpl(self)
             text = tostring(total)
             countStrings[total] = text
         end
-        local colors = Style.COLORS
-        local cs = colors and colors.COUNT_SHADOW
-        local ct = colors and colors.COUNT_TEXT
-        if cs then
-            local off = floor(Style.SCALE + 0.5)
-            if off < 1 then off = 1 end
-            self:drawText(text, x + 2 + off, y + off,
-                cs.r, cs.g, cs.b, cs.a or 1, Style.FONT)
-        end
-        if ct then
-            self:drawText(text, x + 2, y, ct.r, ct.g, ct.b, ct.a or 1, Style.FONT)
-        else
-            self:drawText(text, x + 2, y, 1, 1, 1, 1, Style.FONT)
-        end
+        StackRenderer.drawShadowedText(self, text, x + 2, y, colors.COUNT_TEXT,
+            colors.COUNT_SHADOW)
     end
 
     self:resumeStencil()

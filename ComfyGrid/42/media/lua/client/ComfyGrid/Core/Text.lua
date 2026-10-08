@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -21,51 +21,57 @@ function Text.tr(key, fallback)
     return value
 end
 
-local function utf8Ends(s)
-    local ends, n = {}, #s
-    for i = 1, n do
-        local b = string.byte(s, i)
-        if (b < 0x80 or b >= 0xC0) and i > 1 then
-            ends[#ends + 1] = i - 1
+local function utf8Ends(text)
+    local codepointEnds, length = {}, #text
+    for i = 1, length do
+        local code = string.byte(text, i)
+        if (code < 0x80 or code >= 0xC0) and i > 1 then
+            codepointEnds[#codepointEnds + 1] = i - 1
         end
     end
-    ends[#ends + 1] = n
-    return ends
+    codepointEnds[#codepointEnds + 1] = length
+    return codepointEnds
 end
 
-function Text.fit(s, font, maxPx, maxCp)
-    if type(s) ~= "string" or s == "" then return s end
-    local ends = utf8Ends(s)
-    local count = #ends
-    local cap = maxCp or count
-    if cap > count then cap = count end
-    local tm = getTextManager and getTextManager() or nil
-    if tm == nil or font == nil or maxPx == nil then
-        return s:sub(1, ends[cap])
+function Text.fit(text, font, maxPx, maxCp)
+    if type(text) ~= "string" or text == "" then return text end
+    local codepointEnds = utf8Ends(text)
+    local codepointCount = #codepointEnds
+    local cap = maxCp or codepointCount
+    if cap > codepointCount then cap = codepointCount end
+    local textManager = getTextManager and getTextManager() or nil
+    if textManager == nil or font == nil or maxPx == nil then
+        return text:sub(1, codepointEnds[cap])
     end
-    for cp = cap, 1, -1 do
-        local candidate = s:sub(1, ends[cp])
-        local ok, w = pcall(tm.MeasureStringX, tm, font, candidate)
+    for codepointIndex = cap, 1, -1 do
+        local candidate = text:sub(1, codepointEnds[codepointIndex])
+        local ok, widthPx = pcall(textManager.MeasureStringX, textManager, font, candidate)
         if not ok then return candidate end
-        if w <= maxPx then return candidate end
+        if widthPx <= maxPx then return candidate end
     end
-    return s:sub(1, ends[1])
+    return text:sub(1, codepointEnds[1])
 end
 
-function Text.fitEllipsis(s, font, maxPx, maxCp)
-    if type(s) ~= "string" or s == "" then return s end
-    local tm = getTextManager and getTextManager() or nil
-    if tm == nil or font == nil or maxPx == nil then
-        return Text.fit(s, font, maxPx, maxCp)
+function Text.fitEllipsis(text, font, maxPx, maxCp)
+    if type(text) ~= "string" or text == "" then return text end
+    local textManager = getTextManager and getTextManager() or nil
+    if textManager == nil or font == nil or maxPx == nil then
+        return Text.fit(text, font, maxPx, maxCp)
     end
-    local ok, w = pcall(tm.MeasureStringX, tm, font, s)
-    if ok and w <= maxPx then
-        return Text.fit(s, font, maxPx, maxCp)
+    local ok, widthPx = pcall(textManager.MeasureStringX, textManager, font, text)
+    if ok and widthPx <= maxPx then
+        return Text.fit(text, font, maxPx, maxCp)
     end
-    local okE, ew = pcall(tm.MeasureStringX, tm, font, "...")
-    local budget = maxPx - (okE and ew or 12)
+    local okEllipsis, ellipsisPx = pcall(textManager.MeasureStringX, textManager, font, "...")
+    local budget = maxPx - (okEllipsis and ellipsisPx or 12)
     if budget < 1 then budget = 1 end
-    local trimmed = Text.fit(s, font, budget, maxCp)
-    if trimmed == s then return s end
+    local trimmed = Text.fit(text, font, budget, maxCp)
+    if trimmed == text then return text end
     return trimmed .. "..."
+end
+
+function Text.formatLoad(load, capacity)
+    local loadText = string.format("%.1f", load)
+    loadText = loadText:gsub("%.0$", "")
+    return loadText .. "/" .. tostring(math.floor(capacity + 0.5))
 end

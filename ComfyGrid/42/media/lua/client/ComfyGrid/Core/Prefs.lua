@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -17,29 +17,29 @@ local Log = ComfyGrid.Core.Log
 
 local FILE = "ComfyGrid_state.ini"
 
-local cache = nil
+local prefsByKey = nil
 
-local function load()
-    if cache ~= nil then return cache end
-    cache = {}
-    if getFileReader == nil then return cache end
+local function readPrefsFile()
+    if prefsByKey ~= nil then return prefsByKey end
+    prefsByKey = {}
+    if getFileReader == nil then return prefsByKey end
 
     local ok, reader = pcall(getFileReader, FILE, false)
-    if not ok or reader == nil then return cache end
+    if not ok or reader == nil then return prefsByKey end
     local okRead = pcall(function()
         local line = reader:readLine()
         while line ~= nil do
-            local k, v = string.match(line, "^([%w_]+)%s*=%s*(.-)%s*$")
-            if k ~= nil then cache[k] = v end
+            local key, value = string.match(line, "^([%w_]+)%s*=%s*(.-)%s*$")
+            if key ~= nil then prefsByKey[key] = value end
             line = reader:readLine()
         end
     end)
     pcall(reader.close, reader)
     if not okRead then Log.warn("Prefs: could not read " .. FILE) end
-    return cache
+    return prefsByKey
 end
 
-local function store()
+local function writePrefsFile()
     if getFileWriter == nil then return end
     local ok, writer = pcall(getFileWriter, FILE, true, false)
     if not ok or writer == nil then
@@ -47,8 +47,8 @@ local function store()
         return
     end
     local okWrite = pcall(function()
-        for k, v in pairs(cache) do
-            writer:write(k .. "=" .. tostring(v) .. "\r\n")
+        for key, value in pairs(prefsByKey) do
+            writer:write(key .. "=" .. tostring(value) .. "\r\n")
         end
     end)
     pcall(writer.close, writer)
@@ -56,19 +56,19 @@ local function store()
 end
 
 function Prefs.get(key)
-    return load()[key]
+    return readPrefsFile()[key]
 end
 
 function Prefs.getNumber(key, default)
-    local v = tonumber(Prefs.get(key))
-    if v == nil then return default end
-    return v
+    local number = tonumber(Prefs.get(key))
+    if number == nil then return default end
+    return number
 end
 
 function Prefs.set(key, value)
-    load()
-    local s = tostring(value)
-    if cache[key] == s then return end
-    cache[key] = s
-    store()
+    readPrefsFile()
+    local text = tostring(value)
+    if prefsByKey[key] == text then return end
+    prefsByKey[key] = text
+    writePrefsFile()
 end

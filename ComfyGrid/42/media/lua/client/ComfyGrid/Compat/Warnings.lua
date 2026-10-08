@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -36,10 +36,10 @@ local function isModActive(modId)
     if type(getActivatedMods) ~= "function" then return false end
     local ok, mods = pcall(getActivatedMods)
     if not ok or mods == nil then return false end
-    local ok2, found = pcall(mods.contains, mods, modId)
-    if ok2 and found then return true end
-    local ok3, found2 = pcall(mods.contains, mods, "\\" .. modId)
-    return ok3 and found2 or false
+    local okPlain, foundPlain = pcall(mods.contains, mods, modId)
+    if okPlain and foundPlain then return true end
+    local okSlashed, foundSlashed = pcall(mods.contains, mods, "\\" .. modId)
+    return okSlashed and foundSlashed or false
 end
 
 local function warningText(entry)
@@ -71,9 +71,9 @@ end
 if not ComfyGrid._compatWarningsHooked then
     ComfyGrid._compatWarningsHooked = true
     Events.OnGameStart.Add(function()
-        local dd = ComfyGrid.Compat and ComfyGrid.Compat.Warnings
-        if dd ~= nil then
-            pcall(dd.check)
+        local warningsModule = ComfyGrid.Compat and ComfyGrid.Compat.Warnings
+        if warningsModule ~= nil then
+            pcall(warningsModule.check)
         end
     end)
 end

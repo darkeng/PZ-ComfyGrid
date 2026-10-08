@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -70,8 +70,8 @@ function HotbarGhosts.texFor(slot)
     if fullType ~= nil and instanceItem ~= nil then
         local ok, item = pcall(instanceItem, fullType)
         if ok and item ~= nil and item.getTex ~= nil then
-            local okT, t = pcall(item.getTex, item)
-            if okT then tex = t end
+            local okTex, texture = pcall(item.getTex, item)
+            if okTex then tex = texture end
         end
     end
     ghostTexCache[key] = tex or false

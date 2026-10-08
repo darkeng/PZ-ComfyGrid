@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -34,6 +34,11 @@ local function isWearable(item)
     return false
 end
 
+local function isDeadWeapon(item)
+    local ok, condition = pcall(item.getCondition, item)
+    return ok and type(condition) == "number" and condition <= 0
+end
+
 local function canEquip(item)
     if item == nil then return false end
     if isWearable(item) then
@@ -43,10 +48,7 @@ local function canEquip(item)
     end
     if instanceof(item, "HandWeapon") then
 
-        local ok, condition = pcall(item.getCondition, item)
-        if ok and type(condition) == "number" and condition <= 0 then
-            return false
-        end
+        if isDeadWeapon(item) then return false end
         return true
     end
 
@@ -55,21 +57,10 @@ end
 
 local function queueLength(playerObj)
     if ISTimedActionQueue == nil then return 0 end
-    local ok, q = pcall(ISTimedActionQueue.getTimedActionQueue, playerObj)
-    if not ok or q == nil or q.queue == nil then return 0 end
-    return #q.queue
-end
-
-local function isHandEquippable(item)
-    if item == nil then return false end
-    if instanceof(item, "HandWeapon") then
-        local ok, condition = pcall(item.getCondition, item)
-        return not (ok and type(condition) == "number" and condition <= 0)
-    end
-    if not instanceof(item, "InventoryItem") then return false end
-    if instanceof(item, "Clothing") then return false end
-    if instanceof(item, "Food") then return false end
-    return true
+    local ok, queueState = pcall(ISTimedActionQueue.getTimedActionQueue,
+        playerObj)
+    if not ok or queueState == nil or queueState.queue == nil then return 0 end
+    return #queueState.queue
 end
 
 local function capacityOf(item)
@@ -90,19 +81,22 @@ local function holdsMoreThan(item, other)
 end
 
 local function equipInHand(playerObj, item)
-    local two = false
+    local twoHanded = false
     local okT, isTwo = pcall(item.isTwoHandWeapon, item)
-    if okT and isTwo then two = true end
+    if okT and isTwo then twoHanded = true end
     local okR, forcesTwo = pcall(item.isRequiresEquippedBothHands, item)
-    if okR and forcesTwo then two = true end
+    if okR and forcesTwo then twoHanded = true end
 
     local primary = true
-    if not two then
+    if not twoHanded then
         local okP, held = pcall(playerObj.getPrimaryHandItem, playerObj)
-        local okS, off = pcall(playerObj.getSecondaryHandItem, playerObj)
-        if okP and held ~= nil and okS and off == nil then primary = false end
+        local okS, secondaryItem = pcall(playerObj.getSecondaryHandItem,
+            playerObj)
+        if okP and held ~= nil and okS and secondaryItem == nil then
+            primary = false
+        end
     end
-    pcall(ISInventoryPaneContextMenu.equipWeapon, item, primary, two, 0)
+    pcall(ISInventoryPaneContextMenu.equipWeapon, item, primary, twoHanded, 0)
 end
 
 local function isEquippableKind(item)
@@ -121,36 +115,47 @@ local function equippableIn(stack, inventory)
     return nil
 end
 
-local function hoveredInInspector()
-    local ui = ComfyGrid.UI
-    if ui == nil then return nil, nil, nil end
-    local popup = nil
-    local sp = ui.StackPopup
-    if sp ~= nil and sp.current ~= nil then popup = sp.current() end
-    if popup == nil then return nil, nil, nil end
-    if popup.hoveredItem == nil or popup.model == nil then return nil, nil, nil end
-    local okI, item = pcall(popup.hoveredItem, popup)
-    if not okI or item == nil then return nil, nil, nil end
-    local okId, id = pcall(item.getID, item)
-    if not okId or id == nil then return nil, nil, nil end
-    return { count = 1, itemIDs = { [id] = true } },
-        popup.model.inventory, popup.hostPane
+local function hoveredInPopup(Tooltip)
+    if Tooltip.hoveredPopupItem == nil then return nil, nil, nil end
+    local page = getPlayerInventory(0)
+    local pane = page ~= nil and page.inventoryPane or nil
+    if pane ~= nil then
+        local ok, item, popup = pcall(Tooltip.hoveredPopupItem, pane)
+        if ok and popup ~= nil then return item, popup, pane end
+    end
+    page = getPlayerLoot(0)
+    pane = page ~= nil and page.inventoryPane or nil
+    if pane ~= nil then
+        local ok, item, popup = pcall(Tooltip.hoveredPopupItem, pane)
+        if ok and popup ~= nil then return item, popup, pane end
+    end
+    return nil, nil, nil
 end
 
-local function hoveredInEquipment()
-    local LP = ComfyGrid.UI and ComfyGrid.UI.LayersPopup
-    local popup = LP ~= nil and LP.current ~= nil and LP.current() or nil
-    if popup ~= nil and popup.isMouseOver ~= nil and popup:isMouseOver()
-            and popup.hoveredItem ~= nil then
-        local layer = popup:hoveredItem()
-        if layer ~= nil then return layer, "unequip" end
-    end
-    local Tooltip = ComfyGrid.Interact and ComfyGrid.Interact.Tooltip
-    if Tooltip == nil or Tooltip.hoveredEquipment == nil then return nil end
+local function isLayersPopup(popup)
+    local LayersPopup = ComfyGrid.UI and ComfyGrid.UI.LayersPopup
+    return LayersPopup ~= nil and LayersPopup.current ~= nil
+        and LayersPopup.current() == popup
+end
+
+local function inspectorStack(item)
+    local okId, id = pcall(item.getID, item)
+    if not okId or id == nil then return nil end
+    return { count = 1, itemIDs = { [id] = true } }
+end
+
+local function hoveredInEquipment(Tooltip)
+    if Tooltip.hoveredEquipment == nil then return nil end
     local page = getPlayerInventory(0)
     local pane = page ~= nil and page.inventoryPane or nil
     if pane == nil then return nil end
     return Tooltip.hoveredEquipment(pane)
+end
+
+local function sendBack(item, verb)
+    local Unequip = ComfyGrid.Interact and ComfyGrid.Interact.Unequip
+    if Unequip == nil or Unequip.sendBack == nil then return false end
+    return Unequip.sendBack({ item }, 0, verb) > 0
 end
 
 local function dryOffWith(playerObj, item)
@@ -181,24 +186,33 @@ local function equipHovered()
     local playerObj = getSpecificPlayer(0)
     if playerObj == nil then return false end
 
-    local dd = ComfyGrid.Interact.DragAndDrop
-    if dd ~= nil and dd.isDragging ~= nil and dd.isDragging() then return false end
-
-    local wornItem, verb = hoveredInEquipment()
-    if wornItem ~= nil then
-        local Unequip = ComfyGrid.Interact and ComfyGrid.Interact.Unequip
-        if Unequip == nil or Unequip.sendBack == nil then return false end
-        return Unequip.sendBack({ wornItem }, 0, verb) > 0
+    local DragAndDrop = ComfyGrid.Interact.DragAndDrop
+    if DragAndDrop ~= nil and DragAndDrop.isDragging ~= nil
+            and DragAndDrop.isDragging() then
+        return false
     end
-
     local Tooltip = ComfyGrid.Interact.Tooltip
-    if Tooltip == nil or Tooltip.hoveredStackOf == nil then return false end
+    if Tooltip == nil then return false end
 
-    local stack, inventory, pane = hoveredInInspector()
-    local page
-    if stack == nil then
+    local stack, inventory, pane
+    local popupItem, popup, popupPane = hoveredInPopup(Tooltip)
+    if popup ~= nil then
 
-        page = getPlayerInventory(0)
+        if popupItem == nil then return false end
+
+        if isLayersPopup(popup) then return sendBack(popupItem, "unequip") end
+        if popup.model == nil then return false end
+        stack = inspectorStack(popupItem)
+        if stack == nil then return false end
+        inventory, pane = popup.model.inventory, popupPane
+    else
+
+        local wornItem, verb = hoveredInEquipment(Tooltip)
+        if wornItem ~= nil then return sendBack(wornItem, verb) end
+
+        if Tooltip.hoveredStackOf == nil then return false end
+
+        local page = getPlayerInventory(0)
         pane = page ~= nil and page.inventoryPane or nil
         if pane ~= nil then
             stack, inventory = Tooltip.hoveredStackOf(pane)
@@ -236,11 +250,14 @@ local function equipHovered()
         if queueLength(playerObj) > queued then return true end
 
         local okMap, isMap = pcall(item.IsMap, item)
-        if okMap and isMap then return true end
+        if okMap and isMap then
+            local okDark, tooDark = pcall(playerObj.tooDarkToRead, playerObj)
+            return not (okDark and tooDark)
+        end
 
         if dryOffWith(playerObj, item) then return true end
 
-        if isHandEquippable(item) then
+        if Equipment.handAccepts(item) then
             equipInHand(playerObj, item)
             return true
         end
@@ -252,7 +269,7 @@ local function equipHovered()
     if isWearable(front) then
         displaced = Equipment.findDisplacedWorn(playerObj, front)
 
-        if displaced ~= nil and isHandEquippable(front)
+        if displaced ~= nil and Equipment.handAccepts(front)
                 and not holdsMoreThan(front, displaced) then
             equipInHand(playerObj, front)
             return true
@@ -288,7 +305,7 @@ local shieldBox = nil
 local shieldKey = nil
 local shieldSinceMs = 0
 
-QuickEquip._rawKeyDown = function(key)
+local function rawKeyDown(key)
     return GameKeyboard ~= nil and GameKeyboard.isKeyDownRaw ~= nil
         and GameKeyboard.isKeyDownRaw(key) == true
 end
@@ -323,7 +340,7 @@ end
 
 function QuickEquip._onTick()
     if shieldKey == nil then return end
-    local held = QuickEquip._rawKeyDown(shieldKey)
+    local held = rawKeyDown(shieldKey)
     if not held or getTimestampMs() - shieldSinceMs > SHIELD_MAX_MS then
         shieldDown()
     end
@@ -339,8 +356,10 @@ local function targetKey()
 
     local core = getCore and getCore() or nil
     if core ~= nil and core.getKey ~= nil then
-        local ok, k = pcall(core.getKey, core, "Interact")
-        if ok and type(k) == "number" and k > 0 then return k end
+        local ok, interactKey = pcall(core.getKey, core, "Interact")
+        if ok and type(interactKey) == "number" and interactKey > 0 then
+            return interactKey
+        end
     end
     return Keyboard ~= nil and Keyboard.KEY_E or nil
 end
@@ -397,15 +416,15 @@ end
 if not ComfyGrid._quickEquipHooked then
     ComfyGrid._quickEquipHooked = true
     Events.OnKeyStartPressed.Add(function(key)
-        local qe = ComfyGrid.Interact and ComfyGrid.Interact.QuickEquip
-        if qe ~= nil and qe._onKey ~= nil then
-            qe._onKey(key)
+        local quickEquip = ComfyGrid.Interact and ComfyGrid.Interact.QuickEquip
+        if quickEquip ~= nil and quickEquip._onKey ~= nil then
+            quickEquip._onKey(key)
         end
     end)
     Events.OnTick.Add(function()
-        local qe = ComfyGrid.Interact and ComfyGrid.Interact.QuickEquip
-        if qe ~= nil and qe._onTick ~= nil then
-            qe._onTick()
+        local quickEquip = ComfyGrid.Interact and ComfyGrid.Interact.QuickEquip
+        if quickEquip ~= nil and quickEquip._onTick ~= nil then
+            quickEquip._onTick()
         end
     end)
 end

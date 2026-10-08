@@ -1,12 +1,13 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/Core/Input"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Settings"
 ComfyGrid = ComfyGrid or {}
@@ -20,29 +21,29 @@ local unequipFailLogged = false
 local detachFailLogged = false
 
 local function modifierHeld()
-    local S = ComfyGrid.Settings
-    if S == nil or S.transferModifierHeld == nil then return false end
-    local ok, v = pcall(S.transferModifierHeld)
-    return ok and v == true
+    local Settings = ComfyGrid.Settings
+    if Settings == nil or Settings.transferModifierHeld == nil then
+        return false
+    end
+    local ok, isHeld = pcall(Settings.transferModifierHeld)
+    return ok and isHeld == true
 end
 
 local function gestureIsDoubleClick()
-    local S = ComfyGrid.Settings
-    if S == nil or S.transferIsDoubleClick == nil then return false end
-    local ok, v = pcall(S.transferIsDoubleClick)
-    return ok and v == true
+    local Settings = ComfyGrid.Settings
+    if Settings == nil or Settings.transferIsDoubleClick == nil then
+        return false
+    end
+    local ok, isDoubleClick = pcall(Settings.transferIsDoubleClick)
+    return ok and isDoubleClick == true
 end
 
 local function clickWindowMs()
-    local GV = ComfyGrid.UI and ComfyGrid.UI.GridView
-    return (GV ~= nil and GV.CLICK_DELAY_MS) or 260
+    local GridView = ComfyGrid.UI and ComfyGrid.UI.GridView
+    return (GridView ~= nil and GridView.CLICK_DELAY_MS) or 260
 end
 
-local function hotbarOf(playerNum)
-    local ok, hotbar = pcall(getPlayerHotbar, playerNum)
-    if ok then return hotbar end
-    return nil
-end
+local hotbarOf = ComfyGrid.Core.Input.hotbarOf
 
 function Unequip.sendBack(items, playerNum, how)
     if items == nil then return 0 end

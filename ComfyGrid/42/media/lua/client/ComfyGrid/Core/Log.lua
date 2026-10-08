@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -24,5 +24,3 @@ end
 function Log.error(msg)
     print(PREFIX .. "ERROR: " .. tostring(msg))
 end
-
-ComfyGrid.log = Log.info

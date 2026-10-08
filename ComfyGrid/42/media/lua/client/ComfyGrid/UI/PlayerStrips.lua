@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -58,22 +58,22 @@ function PlayerStrips:_sync()
     end
 end
 
-function PlayerStrips:setPocketInventories(invs)
-    local pp = self.pocketsPanel
-    if invs == nil or #invs == 0 then
-        if pp ~= nil then
-            self:removeChild(pp)
+function PlayerStrips:setPocketInventories(pocketInventories)
+    local pocketsPanel = self.pocketsPanel
+    if pocketInventories == nil or #pocketInventories == 0 then
+        if pocketsPanel ~= nil then
+            self:removeChild(pocketsPanel)
             self.pocketsPanel = nil
         end
         return
     end
-    if pp == nil then
-        pp = PocketsPanel:new(0, 0, self.playerNum)
-        pp:initialise()
-        self:addChild(pp)
-        self.pocketsPanel = pp
+    if pocketsPanel == nil then
+        pocketsPanel = PocketsPanel:new(0, 0, self.playerNum)
+        pocketsPanel:initialise()
+        self:addChild(pocketsPanel)
+        self.pocketsPanel = pocketsPanel
     end
-    pp:setInventories(invs)
+    pocketsPanel:setInventories(pocketInventories)
 end
 
 function PlayerStrips:prerender()
@@ -118,12 +118,12 @@ function PlayerStrips:prerender()
         end
     end
 
-    local pp = self.pocketsPanel
-    if pp ~= nil then
-        if pp.width ~= w then pp:setWidth(w) end
-        if pp.x ~= 0 then pp:setX(0) end
-        if pp.y ~= y then pp:setY(y) end
-        y = y + pp.height + STRIP_GAP
+    local pocketsPanel = self.pocketsPanel
+    if pocketsPanel ~= nil then
+        if pocketsPanel.width ~= w then pocketsPanel:setWidth(w) end
+        if pocketsPanel.x ~= 0 then pocketsPanel:setX(0) end
+        if pocketsPanel.y ~= y then pocketsPanel:setY(y) end
+        y = y + pocketsPanel.height + STRIP_GAP
     end
 
     if self.height ~= y then self:setHeight(y) end

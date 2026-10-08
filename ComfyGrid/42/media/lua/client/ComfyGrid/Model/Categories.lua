@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -29,11 +29,10 @@ Categories.ORDER = {
     "other",
 }
 
-local rank = {}
+local rankByBucket = {}
 for i = 1, #Categories.ORDER do
-    rank[Categories.ORDER[i]] = i
+    rankByBucket[Categories.ORDER[i]] = i
 end
-Categories.RANK = rank
 
 local DEFAULT_BUCKET = "other"
 Categories.DEFAULT_BUCKET = DEFAULT_BUCKET
@@ -157,26 +156,26 @@ local function betterSortingActive()
     return bsActive
 end
 
-local catBucket = {}
-function Categories.bucketForCategory(cat)
-    if cat == nil then return nil end
-    local memo = catBucket[cat]
-    if memo ~= nil then
-        if memo == false then return nil end
-        return memo
+local bucketByCategory = {}
+function Categories.bucketForCategory(displayCategory)
+    if displayCategory == nil then return nil end
+    local cachedBucket = bucketByCategory[displayCategory]
+    if cachedBucket ~= nil then
+        if cachedBucket == false then return nil end
+        return cachedBucket
     end
-    local bucket = Categories.BUCKET[cat]
+    local bucket = Categories.BUCKET[displayCategory]
     if bucket == nil and betterSortingActive() then
         local rules = Categories.BS_PREFIX
         for i = 1, #rules do
             local prefix = rules[i][1]
-            if string.sub(cat, 1, #prefix) == prefix then
+            if string.sub(displayCategory, 1, #prefix) == prefix then
                 bucket = rules[i][2]
                 break
             end
         end
     end
-    catBucket[cat] = bucket or false
+    bucketByCategory[displayCategory] = bucket or false
     return bucket
 end
 
@@ -211,11 +210,10 @@ Categories.WEAPON_SUB = {
     "spear",
     "other",
 }
-local subRank = {}
+local rankBySub = {}
 for i = 1, #Categories.WEAPON_SUB do
-    subRank[Categories.WEAPON_SUB[i]] = i
+    rankBySub[Categories.WEAPON_SUB[i]] = i
 end
-Categories.SUB_RANK = subRank
 
 local WEAPON_DC = {
     Weapon           = "other",
@@ -229,30 +227,33 @@ local WEAPON_DC = {
 
 Categories.MIN_WEAPON_DAMAGE = 0.3
 
-local classMemo = {}
+local verdictByFullType = {}
+
+local function isWeaponCategory(item, weaponCategory)
+    if weaponCategory == nil then return false end
+    local ok, matches = pcall(item.isOfWeaponCategory, item, weaponCategory)
+    return ok and matches == true
+end
 
 local function weaponSubOf(item)
-    local sub = nil
+    local subCategory = nil
     if item.getSubCategory ~= nil then
-        local okS, s = pcall(item.getSubCategory, item)
-        if okS and s ~= nil then sub = tostring(s) end
+        local okSub, probedSub = pcall(item.getSubCategory, item)
+        if okSub and probedSub ~= nil then subCategory = tostring(probedSub) end
     end
-    if sub == "Firearm" then return "firearm" end
+    if subCategory == "Firearm" then return "firearm" end
     if WeaponCategory ~= nil and item.isOfWeaponCategory ~= nil then
-        local function isCat(c)
-            if c == nil then return false end
-            local ok, v = pcall(item.isOfWeaponCategory, item, c)
-            return ok and v == true
-        end
 
-        if isCat(WeaponCategory.AXE) then return "axe" end
-        if isCat(WeaponCategory.SPEAR) then return "spear" end
-        if isCat(WeaponCategory.LONG_BLADE) then return "blade" end
-        if isCat(WeaponCategory.SMALL_BLADE) then return "blade" end
-        if isCat(WeaponCategory.BLUNT) then return "longblunt" end
-        if isCat(WeaponCategory.SMALL_BLUNT) then return "shortblunt" end
+        if isWeaponCategory(item, WeaponCategory.AXE) then return "axe" end
+        if isWeaponCategory(item, WeaponCategory.SPEAR) then return "spear" end
+        if isWeaponCategory(item, WeaponCategory.LONG_BLADE) then return "blade" end
+        if isWeaponCategory(item, WeaponCategory.SMALL_BLADE) then return "blade" end
+        if isWeaponCategory(item, WeaponCategory.BLUNT) then return "longblunt" end
+        if isWeaponCategory(item, WeaponCategory.SMALL_BLUNT) then
+            return "shortblunt"
+        end
     end
-    if sub == "Spear" then return "spear" end
+    if subCategory == "Spear" then return "spear" end
     return "other"
 end
 
@@ -261,44 +262,46 @@ local function combatVerdict(item, displayCategory)
     if item == nil or not instanceof(item, "HandWeapon") then
         return forced ~= nil, forced or "other"
     end
-    local sub = weaponSubOf(item)
+    local weaponSub = weaponSubOf(item)
     if forced ~= nil then
 
-        return true, sub
+        return true, weaponSub
     end
     local improvised = false
     if WeaponCategory ~= nil and item.isOfWeaponCategory ~= nil then
-        local okI, v = pcall(item.isOfWeaponCategory, item,
+        local okImprovised, isImprovised = pcall(item.isOfWeaponCategory, item,
             WeaponCategory.IMPROVISED)
-        improvised = okI and v == true
+        improvised = okImprovised and isImprovised == true
     end
-    if improvised then return false, sub end
-    local dmg = nil
+    if improvised then return false, weaponSub end
+    local maxDamage = nil
     if item.getMaxDamage ~= nil then
-        local okD, d = pcall(item.getMaxDamage, item)
-        if okD and type(d) == "number" then dmg = d end
+        local okDamage, probedDamage = pcall(item.getMaxDamage, item)
+        if okDamage and type(probedDamage) == "number" then
+            maxDamage = probedDamage
+        end
     end
-    if dmg ~= nil and dmg < Categories.MIN_WEAPON_DAMAGE then
-        return false, sub
+    if maxDamage ~= nil and maxDamage < Categories.MIN_WEAPON_DAMAGE then
+        return false, weaponSub
     end
-    return true, sub
+    return true, weaponSub
 end
 
 function Categories.bucketOf(stack)
     if stack == nil then return DEFAULT_BUCKET end
-    local t = stack.itemType
-    if t ~= nil and Categories.HYGIENE_TYPES[t] then
+    local itemType = stack.itemType
+    if itemType ~= nil and Categories.HYGIENE_TYPES[itemType] then
         return "hygiene"
     end
-    local c = stack.category
-    if c == nil then return DEFAULT_BUCKET end
-    return Categories.bucketForCategory(c) or DEFAULT_BUCKET
+    local displayCategory = stack.category
+    if displayCategory == nil then return DEFAULT_BUCKET end
+    return Categories.bucketForCategory(displayCategory) or DEFAULT_BUCKET
 end
 
 function Categories.classify(stack, inventory)
     if stack == nil then return DEFAULT_BUCKET, 0 end
-    local t = stack.itemType
-    if t ~= nil and Categories.HYGIENE_TYPES[t] then
+    local itemType = stack.itemType
+    if itemType ~= nil and Categories.HYGIENE_TYPES[itemType] then
         return "hygiene", 0
     end
 
@@ -306,41 +309,39 @@ function Categories.classify(stack, inventory)
     if inventory ~= nil then
         local ItemStack = ComfyGrid.Model and ComfyGrid.Model.ItemStack
         if ItemStack ~= nil and ItemStack.frontItem ~= nil then
-            local okF, f = pcall(ItemStack.frontItem, stack, inventory)
-            if okF then item = f end
+            local okFront, front = pcall(ItemStack.frontItem, stack, inventory)
+            if okFront then item = front end
         end
     end
 
     local key = nil
     if item ~= nil and item.getFullType ~= nil then
-        local okT, ft = pcall(item.getFullType, item)
-        if okT then key = ft end
+        local okFullType, fullType = pcall(item.getFullType, item)
+        if okFullType then key = fullType end
     end
-    if key == nil then key = t end
-    local memo = key ~= nil and classMemo[key] or nil
-    if memo ~= nil then return memo.bucket, memo.sub end
+    if key == nil then key = itemType end
+    local cachedVerdict = key ~= nil and verdictByFullType[key] or nil
+    if cachedVerdict ~= nil then
+        return cachedVerdict.bucket, cachedVerdict.sub
+    end
 
-    local bucket, sub
+    local bucket, subIndex
     local isWeapon, weaponSub = combatVerdict(item, stack.category)
     if isWeapon then
         bucket = "weapons"
-        sub = subRank[weaponSub] or subRank.other
+        subIndex = rankBySub[weaponSub] or rankBySub.other
     else
         bucket = Categories.bucketOf(stack)
-        sub = 0
+        subIndex = 0
     end
 
     if key ~= nil and item ~= nil then
-        classMemo[key] = { bucket = bucket, sub = sub }
+        verdictByFullType[key] = { bucket = bucket, sub = subIndex }
     end
-    return bucket, sub
-end
-
-function Categories.rankOf(stack)
-    return rank[Categories.bucketOf(stack)] or #Categories.ORDER
+    return bucket, subIndex
 end
 
 function Categories.rankPairOf(stack, inventory)
-    local bucket, sub = Categories.classify(stack, inventory)
-    return rank[bucket] or #Categories.ORDER, sub or 0
+    local bucket, subIndex = Categories.classify(stack, inventory)
+    return rankByBucket[bucket] or #Categories.ORDER, subIndex or 0
 end

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -20,8 +20,15 @@ ComfyGrid.Patches.TransferActionPatch = TransferActionPatch
 
 local Log = ComfyGrid.Core.Log
 
-local agingFailLogged = false
-local bookkeepFailLogged = false
+local failLogged = { aging = false, bookkeep = false }
+
+local function runLogged(latch, message, fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok and not failLogged[latch] then
+        failLogged[latch] = true
+        Log.error(message .. tostring(err))
+    end
+end
 
 local function playerNumFor(character)
     if character ~= nil and instanceof(character, "IsoPlayer") then
@@ -52,15 +59,15 @@ Events.OnGameBoot.Add(function()
 
     local og_new = ISInventoryTransferAction.new
     function ISInventoryTransferAction:new(character, item, srcContainer, destContainer, time, ...)
-        local o = og_new(self, character, item, srcContainer, destContainer, time, ...)
+        local action = og_new(self, character, item, srcContainer, destContainer, time, ...)
 
         if srcContainer and destContainer and not isClient()
                 and Settings and Settings.get("INSTANT_TRANSFER") then
-            o.maxTime = 0
-            o.stopOnWalk = false
-            o.stopOnRun = false
+            action.maxTime = 0
+            action.stopOnWalk = false
+            action.stopOnRun = false
         end
-        return o
+        return action
     end
 
     local og_canMergeAction = ISInventoryTransferAction.canMergeAction
@@ -87,7 +94,7 @@ Events.OnGameBoot.Add(function()
             destModel.grid:claimSlotForItem(moved:getID(), action.comfySlot)
         end
 
-        destModel.publishOnArrival = { id = moved:getID(), ms = getTimestampMs() }
+        destModel:armPublishOnArrival(moved:getID())
         destModel.needsImmediateRefresh = true
     end
 
@@ -108,12 +115,9 @@ Events.OnGameBoot.Add(function()
 
     local function bookkeepTransfer(action, moved, allowPending)
         if moved == nil then return end
-        local okPub, errPub = pcall(publishContainerLayout, action, moved)
-        if not okPub and not bookkeepFailLogged then
-            bookkeepFailLogged = true
-            Log.error("TransferActionPatch: container layout publish failed "
-                .. "(logged once): " .. tostring(errPub))
-        end
+        runLogged("bookkeep",
+            "TransferActionPatch: container layout publish failed (logged once): ",
+            publishContainerLayout, action, moved)
 
         local okType, destType = pcall(action.destContainer.getType,
             action.destContainer)
@@ -175,19 +179,12 @@ Events.OnGameBoot.Add(function()
     function ISInventoryTransferAction:transferItem(item)
         og_transferItem(self, item)
 
-        local ok, err = pcall(ageItem, self.item or item)
-        if not ok and not agingFailLogged then
-            agingFailLogged = true
-            Log.error("TransferActionPatch: JIT aging failed (logged once): "
-                .. tostring(err))
-        end
+        runLogged("aging", "TransferActionPatch: JIT aging failed (logged once): ",
+            ageItem, self.item or item)
 
-        ok, err = pcall(bookkeepTransfer, self, self.item or item, isClient())
-        if not ok and not bookkeepFailLogged then
-            bookkeepFailLogged = true
-            Log.error("TransferActionPatch: grid bookkeeping failed (logged once): "
-                .. tostring(err))
-        end
+        runLogged("bookkeep",
+            "TransferActionPatch: grid bookkeeping failed (logged once): ",
+            bookkeepTransfer, self, self.item or item, isClient())
 
         TransferJobs.unregister(self.srcContainer, item)
         if self.item ~= nil and self.item ~= item then
@@ -211,19 +208,13 @@ Events.OnGameBoot.Add(function()
             if item ~= nil then
 
                 if item:getContainer() ~= self.srcContainer then
-                    local okAge, errAge = pcall(ageItem, item)
-                    if not okAge and not agingFailLogged then
-                        agingFailLogged = true
-                        Log.error("TransferActionPatch: MP JIT aging failed (logged once): "
-                            .. tostring(errAge))
-                    end
+                    runLogged("aging",
+                        "TransferActionPatch: MP JIT aging failed (logged once): ",
+                        ageItem, item)
                 end
-                local ok, err = pcall(bookkeepTransfer, self, item, true)
-                if not ok and not bookkeepFailLogged then
-                    bookkeepFailLogged = true
-                    Log.error("TransferActionPatch: MP grid bookkeeping failed (logged once): "
-                        .. tostring(err))
-                end
+                runLogged("bookkeep",
+                    "TransferActionPatch: MP grid bookkeeping failed (logged once): ",
+                    bookkeepTransfer, self, item, true)
                 TransferJobs.unregister(self.srcContainer, item)
             end
         end

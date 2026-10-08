@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -36,32 +36,24 @@ end
 
 function PopupRegistry.closeOthers(keep)
     for i = 1, #entries do
-        local e = entries[i]
-        local ok, popup = pcall(e.current)
+        local entry = entries[i]
+        local ok, popup = pcall(entry.current)
         if ok and popup ~= nil and popup ~= keep and popup.close ~= nil
-                and e.dismissable ~= false then
+                and entry.dismissable ~= false then
             local okClose, err = pcall(popup.close, popup)
             if not okClose then
-                Log.warn("PopupRegistry: " .. e.name .. ":close() failed: "
+                Log.warn("PopupRegistry: " .. entry.name .. ":close() failed: "
                     .. tostring(err))
             end
         end
     end
 end
 
-function PopupRegistry.forEach(fn)
-    if type(fn) ~= "function" then return end
+function PopupRegistry.forEach(visit)
+    if type(visit) ~= "function" then return end
     for i = 1, #entries do
-        local e = entries[i]
-        local ok, popup = pcall(e.current)
-        if ok and popup ~= nil then pcall(fn, popup, e.name) end
+        local entry = entries[i]
+        local ok, popup = pcall(entry.current)
+        if ok and popup ~= nil then pcall(visit, popup, entry.name) end
     end
-end
-
-function PopupRegistry.anyOpen()
-    for i = 1, #entries do
-        local ok, popup = pcall(entries[i].current)
-        if ok and popup ~= nil then return true end
-    end
-    return false
 end

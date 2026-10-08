@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -13,6 +13,17 @@ ComfyGrid = ComfyGrid or {}
 ComfyGrid.Core = ComfyGrid.Core or {}
 local VanillaStacks = {}
 ComfyGrid.Core.VanillaStacks = VanillaStacks
+
+function VanillaStacks.firstRealIndex(items)
+    return (#items >= 2) and 2 or 1
+end
+
+function VanillaStacks.sidePaneFor(playerNum, inPlayerInventory)
+    local pageOf = inPlayerInventory and getPlayerInventory or getPlayerLoot
+    local ok, page = pcall(pageOf, playerNum or 0)
+    if ok and page ~= nil then return page.inventoryPane end
+    return nil
+end
 
 function VanillaStacks.fromItems(items, _inventory, pane)
     if not items or #items == 0 then return nil end
@@ -45,13 +56,13 @@ function VanillaStacks.fromStack(stack, inventory, pane)
 end
 
 function VanillaStacks.listFrom(stacks, inventory, pane)
-    local list = {}
-    if not stacks then return list end
+    local vanillaStackList = {}
+    if not stacks then return vanillaStackList end
     for i = 1, #stacks do
         local vanillaStack = VanillaStacks.fromStack(stacks[i], inventory, pane)
         if vanillaStack then
-            list[#list + 1] = vanillaStack
+            vanillaStackList[#vanillaStackList + 1] = vanillaStack
         end
     end
-    return list
+    return vanillaStackList
 end

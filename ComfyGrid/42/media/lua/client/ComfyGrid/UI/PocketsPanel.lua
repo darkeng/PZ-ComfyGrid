@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,7 +11,9 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
 require "ComfyGrid/Model/Capacity"
 require "ComfyGrid/Model/ContainerModel"
+require "ComfyGrid/Model/ContainerName"
 require "ComfyGrid/UI/Style"
+require "ComfyGrid/UI/Chrome/SectionRule"
 require "ComfyGrid/UI/GridView"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
@@ -22,34 +24,16 @@ local Log = ComfyGrid.Core.Log
 local Text = ComfyGrid.Core.Text
 local Capacity = ComfyGrid.Model.Capacity
 local ContainerModel = ComfyGrid.Model.ContainerModel
+local ContainerName = ComfyGrid.Model.ContainerName
 local Style = ComfyGrid.UI.Style
+local SectionRule = ComfyGrid.UI.Chrome.SectionRule
 local GridView = ComfyGrid.UI.GridView
 
-local SECTION_PAD = 4
-
 local PLATE_BLEED = 3
-
-local SECTION_TEXT = { r = 0.66, g = 0.66, b = 0.72, a = 0.95 }
-local SECTION_LINE = { r = 0.45, g = 0.45, b = 0.50, a = 0.55 }
-
-local function refreshSectionColors()
-    local sf = Style.COLORS and Style.COLORS.SURFACE
-    if sf == nil then return end
-    SECTION_TEXT.r, SECTION_TEXT.g, SECTION_TEXT.b, SECTION_TEXT.a =
-        sf.accent.r, sf.accent.g, sf.accent.b, 0.92
-    SECTION_LINE.r, SECTION_LINE.g, SECTION_LINE.b, SECTION_LINE.a =
-        sf.line.r, sf.line.g, sf.line.b, 0.60
-end
-
-refreshSectionColors()
-if Style.onPaletteChanged ~= nil then
-    Style.onPaletteChanged(refreshSectionColors)
-end
 
 local GAP_X = 6
 local GAP_Y = 6
 local ACCENT_H = 2
-local LABEL_COLOR = { r = 0.62, g = 0.62, b = 0.68, a = 0.9 }
 
 local function labelHeight()
     local h = Style.FONT_H - 3
@@ -57,54 +41,10 @@ local function labelHeight()
     return h
 end
 
-local ACCENTS = {
-    { r = 0.82, g = 0.65, b = 0.38, a = 0.9 },
-    { r = 0.35, g = 0.75, b = 1.00, a = 0.9 },
-    { r = 0.59, g = 0.78, b = 0.47, a = 0.9 },
-    { r = 0.71, g = 0.55, b = 0.86, a = 0.9 },
-}
-
-local function fmtWeight(cur, max)
-    local c = string.format("%.1f", cur)
-    c = c:gsub("%.0$", "")
-    return c .. "/" .. tostring(math.floor(max + 0.5))
-end
-
-local titleInfo = nil
-local function sectionInfo()
-    if titleInfo == nil then
-        local label = Text.tr("IGUI_ComfyGrid_SectionPockets", "Pockets")
-        local width = 0
-        local tm = getTextManager and getTextManager() or nil
-        if tm ~= nil then
-            local ok, w = pcall(tm.MeasureStringX, tm, Style.FONT, label)
-            width = ok and w or 0
-        end
-        titleInfo = { label = label, width = width }
-    end
-    return titleInfo
-end
-
 local metricsGen = 0
 Style.onScaleChanged(function()
     metricsGen = metricsGen + 1
-    titleInfo = nil
 end)
-
-local nameGen = 0
-
-function PocketsPanel.invalidateNames()
-    nameGen = nameGen + 1
-end
-
-if not ComfyGrid._pocketNamesHooked then
-    ComfyGrid._pocketNamesHooked = true
-    Events.OnRefreshInventoryWindowContainers.Add(function(_page, stage)
-        if stage ~= "end" then return end
-        local PP = ComfyGrid.UI and ComfyGrid.UI.PocketsPanel
-        if PP ~= nil and PP.invalidateNames ~= nil then PP.invalidateNames() end
-    end)
-end
 
 local lastPrerenderError = nil
 local lastRenderError = nil
@@ -121,35 +61,40 @@ function PocketsPanel:new(x, y, playerNum)
 
     o.islands = {}
     o.gridViews = {}
+
+    o._liveInventories = {}
+    o._liveModels = {}
     return o
 end
 
-function PocketsPanel:setInventories(invs)
-    local mine = self.inventories
-    for i = #mine, 1, -1 do mine[i] = nil end
-    for i = 1, #invs do mine[i] = invs[i] end
+function PocketsPanel:setInventories(inventories)
+    local stored = self.inventories
+    for i = #stored, 1, -1 do stored[i] = nil end
+    for i = 1, #inventories do stored[i] = inventories[i] end
 end
 
 local function resolveLabel(inv)
     local ok, containing = pcall(inv.getContainingItem, inv)
     if ok and containing ~= nil then
-        local okN, n = pcall(containing.getName, containing)
-        if okN and n ~= nil then return n end
+        local okName, name = pcall(containing.getName, containing)
+        if okName and name ~= nil then return name end
     end
     return "?"
 end
 
 local function prerenderImpl(self)
-    local invs = self.inventories
+    local inventories = self.inventories
     local islands = self.islands
     local gridViews = self.gridViews
 
-    local liveInv = {}
-    local liveModel = {}
-    for i = 1, #invs do
-        local model = ContainerModel.getOrCreate(invs[i], self.playerNum)
+    local liveInv = self._liveInventories
+    local liveModel = self._liveModels
+    for i = #liveInv, 1, -1 do liveInv[i] = nil end
+    for i = #liveModel, 1, -1 do liveModel[i] = nil end
+    for i = 1, #inventories do
+        local model = ContainerModel.getOrCreate(inventories[i], self.playerNum)
         if model ~= nil then
-            liveInv[#liveInv + 1] = invs[i]
+            liveInv[#liveInv + 1] = inventories[i]
             liveModel[#liveModel + 1] = model
         end
     end
@@ -180,15 +125,16 @@ local function prerenderImpl(self)
         end
     end
 
+    local nameGen = ContainerName.renameGeneration()
     if self._nameGen ~= nameGen then
         self._nameGen = nameGen
         for i = 1, #islands do
-            local isl = islands[i]
-            if isl ~= nil and isl.inv ~= nil then
-                local fresh = resolveLabel(isl.inv)
-                if fresh ~= nil and fresh ~= isl.label then
-                    isl.label = fresh
-                    isl.fitFor = nil
+            local island = islands[i]
+            if island ~= nil and island.inv ~= nil then
+                local fresh = resolveLabel(island.inv)
+                if fresh ~= nil and fresh ~= island.label then
+                    island.label = fresh
+                    island.fitFor = nil
                 end
             end
         end
@@ -205,15 +151,15 @@ local function prerenderImpl(self)
     for i = 1, #islands do
         local gv = islands[i].gv
         local grid = gv.model ~= nil and gv.model.grid or nil
-        local sc = grid ~= nil and grid:slotCount() or 2
-        local natural = sc * stride + 1
+        local slotCount = grid ~= nil and grid:slotCount() or 2
+        local natural = slotCount * stride + 1
         local room = w - PLATE_BLEED * 2
         if room < 1 then room = 1 end
         gv:setAvailableWidth(natural <= room and natural or room)
-        local gw = gv.width
-        local gh = gv.height
+        local boardW = gv.width
+        local boardH = gv.height
 
-        if x > PLATE_BLEED and x + gw + PLATE_BLEED > w then
+        if x > PLATE_BLEED and x + boardW + PLATE_BLEED > w then
             x = PLATE_BLEED
             y = y + lineH + GAP_Y
             lineH = 0
@@ -222,39 +168,30 @@ local function prerenderImpl(self)
         local boardY = y + labelH + ACCENT_H + 1
         if gv.x ~= x then gv:setX(x) end
         if gv.y ~= boardY then gv:setY(boardY) end
-        x = x + gw + GAP_X
-        local hh = labelH + ACCENT_H + 1 + gh
-        if hh > lineH then lineH = hh end
+        x = x + boardW + GAP_X
+        local islandH = labelH + ACCENT_H + 1 + boardH
+        if islandH > lineH then lineH = islandH end
     end
     local h = y + lineH
     if h < sectionH + 1 then h = sectionH + 1 end
     if self.height ~= h then self:setHeight(h) end
 
     local Draw = ComfyGrid.UI.Draw
-    local surf = Style.COLORS and Style.COLORS.SURFACE
-    if Draw ~= nil and surf ~= nil then
-        local labelHp = labelHeight()
+    local surface = Style.COLORS and Style.COLORS.SURFACE
+    if Draw ~= nil and surface ~= nil then
         for i = 1, #islands do
             local gv = islands[i].gv
             local px = gv.x - PLATE_BLEED
-            local py = gv.y - ACCENT_H - 1 - labelHp - 2
+            local py = gv.y - ACCENT_H - 1 - labelH - 2
             local pw = gv.width + PLATE_BLEED * 2
-            local ph = labelHp + ACCENT_H + 1 + gv.height + 5
-            Draw.roundFrame(self, px, py, pw, ph, 6, 0.45, surf.line,
-                surf.panel, 0.55)
+            local ph = labelH + ACCENT_H + 1 + gv.height + 5
+            Draw.roundFrame(self, px, py, pw, ph, 6, 0.45, surface.line,
+                surface.panel, 0.55)
         end
     end
 
-    local info = sectionInfo()
-    self:drawText(info.label, SECTION_PAD, 1,
-        SECTION_TEXT.r, SECTION_TEXT.g, SECTION_TEXT.b, SECTION_TEXT.a,
-        Style.FONT)
-    local lineX = SECTION_PAD + info.width + 6
-    local lineW = self.width - SECTION_PAD - lineX
-    if lineW > 0 then
-        self:drawRect(lineX, math.floor(sectionH / 2), lineW, 1,
-            SECTION_LINE.a, SECTION_LINE.r, SECTION_LINE.g, SECTION_LINE.b)
-    end
+    SectionRule.draw(self, SectionRule.info("IGUI_ComfyGrid_SectionPockets",
+        "Pockets"), 0, sectionH)
 end
 
 function PocketsPanel:prerender()
@@ -269,51 +206,55 @@ local function renderImpl(self)
     local islands = self.islands
     local font = Style.FONT
     local labelH = labelHeight()
-    local tm = getTextManager and getTextManager() or nil
+    local textManager = getTextManager and getTextManager() or nil
+    local accents = Style.COLORS.POCKET_ACCENTS
+    local labelColor = Style.COLORS.POCKET_LABEL
     for i = 1, #islands do
-        local isl = islands[i]
-        local gv = isl.gv
-        local gw = gv.width
+        local island = islands[i]
+        local gv = island.gv
+        local boardW = gv.width
         local accentY = gv.y - ACCENT_H - 1
         local capY = accentY - labelH
-        local a = ACCENTS[(i - 1) % #ACCENTS + 1]
-        self:drawRect(gv.x, accentY, gw, ACCENT_H, a.a, a.r, a.g, a.b)
+        local accent = accents[(i - 1) % #accents + 1]
+        self:drawRect(gv.x, accentY, boardW, ACCENT_H,
+            accent.a, accent.r, accent.g, accent.b)
         if font ~= nil then
 
-            local cur, max = 0, 0
+            local load, capacity = 0, 0
 
-            local igrid = gv.model ~= nil and gv.model.grid or nil
-            local c = Capacity.weightOf(isl.inv,
-                igrid ~= nil and igrid.changeCount or nil)
-            if type(c) == "number" then cur = c end
+            local islandGrid = gv.model ~= nil and gv.model.grid or nil
+            local weight = Capacity.weightOf(island.inv,
+                islandGrid ~= nil and islandGrid.changeCount or nil)
+            if type(weight) == "number" then load = weight end
 
-            local m = Capacity.effectiveFor(isl.inv, self.playerNum)
-            if type(m) == "number" then max = m end
-            local key = math.floor(cur * 10 + 0.5) * 1000 + max
-            if isl.wtKey ~= key or isl.gen ~= metricsGen then
-                isl.wtKey = key
-                isl.gen = metricsGen
-                isl.wtText = fmtWeight(cur, max)
-                isl.wtW = 0
-                if tm ~= nil then
-                    local okW, wpx = pcall(tm.MeasureStringX, tm, font,
-                        isl.wtText)
-                    if okW then isl.wtW = wpx end
+            local effectiveCapacity = Capacity.effectiveFor(island.inv,
+                self.playerNum)
+            if type(effectiveCapacity) == "number" then
+                capacity = effectiveCapacity
+            end
+            local key = math.floor(load * 10 + 0.5) * 1000 + capacity
+            if island.wtKey ~= key or island.gen ~= metricsGen then
+                island.wtKey = key
+                island.gen = metricsGen
+                island.wtText = Text.formatLoad(load, capacity)
+                island.wtW = 0
+                if textManager ~= nil then
+                    local okWidth, weightW = pcall(textManager.MeasureStringX,
+                        textManager, font, island.wtText)
+                    if okWidth then island.wtW = weightW end
                 end
-                isl.fitFor = nil
+                island.fitFor = nil
             end
 
-            if isl.fitFor ~= gw then
-                isl.fitFor = gw
-                isl.fitName = Text.fitEllipsis(isl.label, font,
-                    gw - isl.wtW - 8, 24)
+            if island.fitFor ~= boardW then
+                island.fitFor = boardW
+                island.fitName = Text.fitEllipsis(island.label, font,
+                    boardW - island.wtW - 8, 24)
             end
-            self:drawText(isl.fitName, gv.x + 1, capY,
-                LABEL_COLOR.r, LABEL_COLOR.g, LABEL_COLOR.b, LABEL_COLOR.a,
-                font)
-            self:drawTextRight(isl.wtText, gv.x + gw - 1, capY,
-                LABEL_COLOR.r, LABEL_COLOR.g, LABEL_COLOR.b, LABEL_COLOR.a,
-                font)
+            self:drawText(island.fitName, gv.x + 1, capY,
+                labelColor.r, labelColor.g, labelColor.b, labelColor.a, font)
+            self:drawTextRight(island.wtText, gv.x + boardW - 1, capY,
+                labelColor.r, labelColor.g, labelColor.b, labelColor.a, font)
         end
     end
 end

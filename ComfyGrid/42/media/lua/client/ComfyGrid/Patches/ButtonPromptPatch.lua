@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -20,31 +20,32 @@ local BUTTON_W = 32
 local TEXT_PAD_X = 11
 local SHIFT = 16
 
-local BUTTONS = nil
+local buttonByKey = nil
 local function buttonOf(key)
-    if BUTTONS == nil then
-        BUTTONS = {
+    if buttonByKey == nil then
+        buttonByKey = {
             L3 = Joypad.LStickButton,
             R3 = Joypad.RStickButton,
             Back = Joypad.Back,
         }
     end
-    return BUTTONS[key]
+    return buttonByKey[key]
 end
 
 local function drawExtraRow(self, key, text, level, fontHgt, onRight)
     local tex = Joypad.ButtonTextures[buttonOf(key)]
     if tex == nil then return false end
     local yRow = self.y1 - ROW_H * (level + 1)
-    local bh = tex:getHeight()
+    local textureHeight = tex:getHeight()
     if onRight then
         local x = self.x2 + self.w2 - self.rmargin - BUTTON_W
-        self:drawTexture(tex, x, yRow + (ROW_H - bh) / 2, 0.9, 1, 1, 1)
+        self:drawTexture(tex, x, yRow + (ROW_H - textureHeight) / 2,
+            0.9, 1, 1, 1)
         self:drawTextRight(text, x - TEXT_PAD_X,
             yRow + (ROW_H - fontHgt) / 2, 1, 1, 1, 0.9, UIFont.NewLarge)
     else
         local x = self.x1 + self.lmargin
-        self:drawTexture(tex, x + SHIFT, yRow + (ROW_H - bh) / 2,
+        self:drawTexture(tex, x + SHIFT, yRow + (ROW_H - textureHeight) / 2,
             0.9, 1, 1, 1)
         self:drawText(text, x + BUTTON_W + TEXT_PAD_X + SHIFT,
             yRow + (ROW_H - fontHgt) / 2, 1, 1, 1, 0.9, UIFont.NewLarge)
@@ -77,9 +78,9 @@ local function drawStickRows(self)
             level = level + 1
         end
     end
-    local r3 = Input.promptFor(focus, "R3")
-    if r3 ~= nil then
-        drawExtraRow(self, "R3", r3, 1, fontHgt, true)
+    local rightStickText = Input.promptFor(focus, "R3")
+    if rightStickText ~= nil then
+        drawExtraRow(self, "R3", rightStickText, 1, fontHgt, true)
     end
 end
 

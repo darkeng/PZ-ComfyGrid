@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,6 +9,7 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
+require "ComfyGrid/UI/Icons"
 require "ComfyGrid/UI/StackRenderer"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
@@ -16,19 +17,21 @@ local TileCache = {}
 ComfyGrid.UI.TileCache = TileCache
 
 local Style = ComfyGrid.UI.Style
+local Icons = ComfyGrid.UI.Icons
 local StackRenderer = ComfyGrid.UI.StackRenderer
 local floor = math.floor
 
 TileCache.enabled = true
 
-local TTL_MS = 80
+local BASE_LIFETIME_MS = 80
 local RECORD_BUDGET = 12
-local MAX_ENTRIES = 1024
+local MAX_RECORDINGS = 1024
 local MAX_ARGS = 10
 local GOLDEN_FRACTION = 0.6180339887498949
-local NEAREST = "__nearest"
 
-local POS = {
+local NEAREST_FILTER_CALL = "__nearest"
+
+local POSITION_ARG_INDEX = {
     DrawTextureScaledColor = 2,
     DrawTextureScaled = 2,
     DrawTextureScaledAspect = 2,
@@ -39,158 +42,173 @@ local POS = {
     DrawTextCentre = 3,
 }
 
-local entries = {}
-local entryCount = 0
-local gen = 0
-local serial = 0
+local currentBoardRecordings = {}
+local recordingEpoch = 0
+local recordingCount = 0
+local globalGeneration = 0
+local recordingSerial = 0
 
-local replays, records, lives = 0, 0, 0
+local replayCount, recordCount, liveCount = 0, 0, 0
 
 function TileCache.stats()
-    return replays, records, lives, gen, entryCount
+    return replayCount, recordCount, liveCount, globalGeneration, recordingCount
 end
 
-local function bump()
-    gen = gen + 1
+local function invalidateAll()
+    globalGeneration = globalGeneration + 1
     local Capacity = ComfyGrid.Model and ComfyGrid.Model.Capacity
     if Capacity ~= nil and Capacity.flushWeights ~= nil then Capacity.flushWeights() end
 end
-Style.onScaleChanged(bump)
+Style.onScaleChanged(invalidateAll)
 for key in pairs(ComfyGrid.Settings.defaults) do
-    ComfyGrid.Settings.onChanged(key, bump)
+    ComfyGrid.Settings.onChanged(key, invalidateAll)
 end
 
 function TileCache.flush()
-    bump()
+    invalidateAll()
 end
 
-local budget = 0
-local boardView, boardGen, boardChange = nil, 0, 0
+local recordBudgetLeft = 0
+local currentBoardView, currentBoardGeneration, currentBoardChangeCount = nil, 0, 0
 local mouseWasDown = false
 local menuWasVisible = {}
 
-function TileCache.beginBoard(view, viewGen, changeCount)
-    budget = RECORD_BUDGET
-    boardView, boardGen, boardChange = view, viewGen or 0, changeCount or 0
-    local down = isMouseButtonDown(0) or isMouseButtonDown(1)
-    if mouseWasDown and not down then bump() end
-    mouseWasDown = down
-    local pn = view ~= nil and view.playerNum or 0
-    local menu = getPlayerContextMenu ~= nil and getPlayerContextMenu(pn) or nil
-    local jo = menu ~= nil and menu.javaObject or nil
-    local up = false
-    if jo ~= nil and jo:isVisible() then up = true end
-    if menuWasVisible[pn] and not up then bump() end
-    menuWasVisible[pn] = up
+function TileCache.beginBoard(view, viewGeneration, changeCount)
+    recordBudgetLeft = RECORD_BUDGET
+    currentBoardView = view
+    if view ~= nil then
+        local recordings = view.tileRecordings
+        if recordings == nil or view.tileRecordingsEpoch ~= recordingEpoch then
+            recordings = {}
+            view.tileRecordings = recordings
+            view.tileRecordingsEpoch = recordingEpoch
+        end
+        currentBoardRecordings = recordings
+    end
+    currentBoardGeneration = viewGeneration or 0
+    currentBoardChangeCount = changeCount or 0
+    local anyButtonDown = isMouseButtonDown(0) or isMouseButtonDown(1)
+    if mouseWasDown and not anyButtonDown then invalidateAll() end
+    mouseWasDown = anyButtonDown
+    local playerNum = view ~= nil and view.playerNum or 0
+    local menu = getPlayerContextMenu ~= nil and getPlayerContextMenu(playerNum) or nil
+    local menuJavaObject = menu ~= nil and menu.javaObject or nil
+    local menuVisible = false
+    if menuJavaObject ~= nil and menuJavaObject:isVisible() then menuVisible = true end
+    if menuWasVisible[playerNum] and not menuVisible then invalidateAll() end
+    menuWasVisible[playerNum] = menuVisible
 end
 
-local recEntry = nil
-local recReal = nil
+local recordingEntry = nil
+local recordingTarget = nil
 
-local function capture(e, name, fn, n, ...)
-    local p = POS[name]
-    if p == nil or n > MAX_ARGS then e.bad = true return end
-    local k = e.n + 1
-    local op = e.ops[k]
-    if op == nil then
-        op = {}
-        e.ops[k] = op
+local function appendCall(recording, methodName, javaMethod, argCount, ...)
+    local xArgIndex = POSITION_ARG_INDEX[methodName]
+    if xArgIndex == nil or argCount > MAX_ARGS then recording.uncacheable = true return end
+    local callIndex = recording.callCount + 1
+    local call = recording.calls[callIndex]
+    if call == nil then
+        call = {}
+        recording.calls[callIndex] = call
     end
-    op.name, op.fn, op.argc, op.pos = name, fn, n, p
-    for i = 1, n do op[i] = (select(i, ...)) end
-    if type(op[p]) ~= "number" or type(op[p + 1]) ~= "number" then
-        e.bad = true
+    call.methodName, call.javaMethod = methodName, javaMethod
+    call.argCount, call.xArgIndex = argCount, xArgIndex
+    for i = 1, argCount do call[i] = (select(i, ...)) end
+    if type(call[xArgIndex]) ~= "number" or type(call[xArgIndex + 1]) ~= "number" then
+        recording.uncacheable = true
         return
     end
-    e.n = k
+    recording.callCount = callIndex
 end
 
-local proxy = setmetatable({}, { __index = function(t, name)
-    local f = function(_, ...)
-        local real = recReal
-        local fn = real[name]
-        if recEntry ~= nil then capture(recEntry, name, fn, select("#", ...), ...) end
-        return fn(real, ...)
+local recordingProxy = setmetatable({}, { __index = function(proxyTable, methodName)
+    local forwarder = function(_, ...)
+        local target = recordingTarget
+        local javaMethod = target[methodName]
+        if recordingEntry ~= nil then
+            appendCall(recordingEntry, methodName, javaMethod, select("#", ...), ...)
+        end
+        return javaMethod(target, ...)
     end
-    rawset(t, name, f)
-    return f
+    rawset(proxyTable, methodName, forwarder)
+    return forwarder
 end })
 
-local function tapNearest(tex)
-    local e = recEntry
-    if e == nil then return end
-    local k = e.n + 1
-    local op = e.ops[k]
-    if op == nil then
-        op = {}
-        e.ops[k] = op
+local function recordNearestFilter(texture)
+    local recording = recordingEntry
+    if recording == nil then return end
+    local callIndex = recording.callCount + 1
+    local call = recording.calls[callIndex]
+    if call == nil then
+        call = {}
+        recording.calls[callIndex] = call
     end
-    op.name, op.fn, op.argc, op.pos = NEAREST, nil, 1, nil
-    op[1] = tex
-    e.n = k
+    call.methodName, call.javaMethod = NEAREST_FILTER_CALL, nil
+    call.argCount, call.xArgIndex = 1, nil
+    call[1] = texture
+    recording.callCount = callIndex
 end
 
-local function fluidOf(item)
-    local fc = item.getFluidContainer ~= nil and item:getFluidContainer() or nil
-    if fc == nil and item.getWorldItem ~= nil then
-        local world = item:getWorldItem()
-        if world ~= nil then fc = world:getFluidContainer() end
-    end
-    return fc
-end
-
-local function record(e, ctx, view, jo, now)
-    e.n = 0
-    e.bad = false
-    recEntry, recReal = e, jo
-    view.javaObject = proxy
-    StackRenderer.setNearestTap(tapNearest)
+local function recordTile(recording, ctx, view, javaObject, now)
+    recording.callCount = 0
+    recording.uncacheable = false
+    recordingEntry, recordingTarget = recording, javaObject
+    view.javaObject = recordingProxy
+    StackRenderer.setNearestTap(recordNearestFilter)
     local ok, err = pcall(StackRenderer.draw, ctx)
-    view.javaObject = jo
+    view.javaObject = javaObject
     StackRenderer.setNearestTap(nil)
-    recEntry, recReal = nil, nil
+    recordingEntry, recordingTarget = nil, nil
     if not ok then
-        e.bad = true
+        recording.uncacheable = true
         error(err, 0)
     end
     local item = ctx.item
-    e.front, e.count = item, ctx.stack.count
-    e.gen, e.view, e.jo = gen, view, jo
-    e.viewGen, e.change = boardGen, boardChange
-    e.cell, e.player, e.skip = Style.CELL, ctx.playerNum, ctx.skipWeightMark
-    e.ox, e.oy = ctx.x, ctx.y
-    local fc = fluidOf(item)
-    e.fluid = fc
-    e.fluidAmount = fc ~= nil and fc:getAmount() or nil
-    serial = serial + 1
-    e.expires = now + TTL_MS + floor(((serial * GOLDEN_FRACTION) % 1) * TTL_MS)
+    recording.front, recording.count = item, ctx.stack.count
+    recording.generation, recording.view = globalGeneration, view
+    recording.javaObject = javaObject
+    recording.viewGen = currentBoardGeneration
+    recording.changeCount = currentBoardChangeCount
+    recording.cellSize, recording.player = Style.CELL, ctx.playerNum
+    recording.skipWeightMark = ctx.skipWeightMark
+    recording.originX, recording.originY = ctx.x, ctx.y
+
+    local fluidContainer = Icons.fluidContainerOf(item)
+    recording.fluid = fluidContainer
+    recording.fluidAmount = fluidContainer ~= nil and fluidContainer:getAmount() or nil
+    recordingSerial = recordingSerial + 1
+    recording.expires = now + BASE_LIFETIME_MS
+        + floor(((recordingSerial * GOLDEN_FRACTION) % 1) * BASE_LIFETIME_MS)
 end
 
-local function valid(e, ctx, view, now)
-    return not e.bad and e.gen == gen and now < e.expires
-        and e.front == ctx.item and e.count == ctx.stack.count
-        and e.view == view and e.jo == view.javaObject
-        and e.viewGen == boardGen and e.change == boardChange
-        and e.cell == Style.CELL and e.player == ctx.playerNum
-        and e.skip == ctx.skipWeightMark
-        and (e.fluid == nil or e.fluid:getAmount() == e.fluidAmount)
+local function isRecordingValid(recording, ctx, view, javaObject, now)
+    return not recording.uncacheable and recording.generation == globalGeneration
+        and now < recording.expires
+        and recording.front == ctx.item and recording.count == ctx.stack.count
+        and recording.view == view and recording.javaObject == javaObject
+        and recording.viewGen == currentBoardGeneration
+        and recording.changeCount == currentBoardChangeCount
+        and recording.cellSize == Style.CELL and recording.player == ctx.playerNum
+        and recording.skipWeightMark == ctx.skipWeightMark
+        and (recording.fluid == nil
+            or recording.fluid:getAmount() == recording.fluidAmount)
 end
 
-local function replay(e, jo, dx, dy)
-    local ops = e.ops
-    for k = 1, e.n do
-        local op = ops[k]
-        if op.name == NEAREST then
-            StackRenderer.applyNearestTo(op[1])
+local function replayRecording(recording, javaObject, offsetX, offsetY)
+    local calls = recording.calls
+    for callIndex = 1, recording.callCount do
+        local call = calls[callIndex]
+        if call.methodName == NEAREST_FILTER_CALL then
+            StackRenderer.applyNearestTo(call[1])
         else
-            local p = op.pos
-            local x, y = op[p], op[p + 1]
-            if dx ~= 0 or dy ~= 0 then
-                op[p], op[p + 1] = x + dx, y + dy
-                op.fn(jo, unpack(op, 1, op.argc))
-                op[p], op[p + 1] = x, y
+            local xArgIndex = call.xArgIndex
+            local x, y = call[xArgIndex], call[xArgIndex + 1]
+            if offsetX ~= 0 or offsetY ~= 0 then
+                call[xArgIndex], call[xArgIndex + 1] = x + offsetX, y + offsetY
+                call.javaMethod(javaObject, unpack(call, 1, call.argCount))
+                call[xArgIndex], call[xArgIndex + 1] = x, y
             else
-                op.fn(jo, unpack(op, 1, op.argc))
+                call.javaMethod(javaObject, unpack(call, 1, call.argCount))
             end
         end
     end
@@ -199,34 +217,39 @@ end
 function TileCache.draw(ctx, now, live)
     local view = ctx.view
     local stack = ctx.stack
-    local jo = view ~= nil and view.javaObject or nil
-    if not TileCache.enabled or jo == nil or stack == nil or ctx.item == nil
-            or view ~= boardView then
-        lives = lives + 1
+    local javaObject = view ~= nil and view.javaObject or nil
+    if not TileCache.enabled or javaObject == nil or stack == nil or ctx.item == nil
+            or view ~= currentBoardView then
+        liveCount = liveCount + 1
         return StackRenderer.draw(ctx)
     end
-    local e = entries[stack]
-    if e ~= nil and not live and valid(e, ctx, view, now) then
-        replays = replays + 1
-        replay(e, jo, ctx.x - e.ox, ctx.y - e.oy)
+    local recording = currentBoardRecordings[stack]
+    if recording ~= nil and not live
+            and isRecordingValid(recording, ctx, view, javaObject, now) then
+        replayCount = replayCount + 1
+        replayRecording(recording, javaObject,
+            ctx.x - recording.originX, ctx.y - recording.originY)
         return
     end
-    if budget <= 0 then
+    if recordBudgetLeft <= 0 then
 
-        if e ~= nil then e.expires = 0 end
-        lives = lives + 1
+        if recording ~= nil then recording.expires = 0 end
+        liveCount = liveCount + 1
         return StackRenderer.draw(ctx)
     end
-    budget = budget - 1
-    records = records + 1
-    if e == nil then
-        if entryCount >= MAX_ENTRIES then
-            entries = {}
-            entryCount = 0
+    recordBudgetLeft = recordBudgetLeft - 1
+    recordCount = recordCount + 1
+    if recording == nil then
+        if recordingCount >= MAX_RECORDINGS then
+            recordingEpoch = recordingEpoch + 1
+            recordingCount = 0
+            currentBoardRecordings = {}
+            view.tileRecordings = currentBoardRecordings
+            view.tileRecordingsEpoch = recordingEpoch
         end
-        e = { ops = {}, n = 0 }
-        entries[stack] = e
-        entryCount = entryCount + 1
+        recording = { calls = {}, callCount = 0 }
+        currentBoardRecordings[stack] = recording
+        recordingCount = recordingCount + 1
     end
-    record(e, ctx, view, jo, now)
+    recordTile(recording, ctx, view, javaObject, now)
 end

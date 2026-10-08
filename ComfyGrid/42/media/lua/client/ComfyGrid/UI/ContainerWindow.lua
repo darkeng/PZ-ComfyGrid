@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -64,11 +64,10 @@ end
 
 ContainerWindow.inventoryOf = inventoryOf
 
-function ContainerWindow.slotOf(playerNum, item)
+local function slotOf(playerNum, item)
     if item == nil then return nil end
-    local CM = ComfyGrid.Model ~= nil and ComfyGrid.Model.ContainerModel or nil
-    if CM == nil or CM.getPlayerMain == nil then return nil end
-    local okM, model = pcall(CM.getPlayerMain, playerNum)
+    if ContainerModel.getPlayerMain == nil then return nil end
+    local okM, model = pcall(ContainerModel.getPlayerMain, playerNum)
     if not okM or model == nil or model.grid == nil then return nil end
     local stacks = model.grid.data ~= nil and model.grid.data.stacks or nil
     if stacks == nil then return nil end
@@ -81,63 +80,67 @@ function ContainerWindow.slotOf(playerNum, item)
     return nil
 end
 
-local function pageShowing(playerNum, cont)
-    if cont == nil then return nil end
-    for _, get in ipairs({ getPlayerInventory, getPlayerLoot }) do
-        local okP, pg = pcall(get, playerNum)
-        local pane = okP and pg ~= nil and pg.inventoryPane or nil
-        local host = pane ~= nil and pane.comfyHost or nil
-        if host ~= nil and host.showsInventory ~= nil then
-            local okS, shown = pcall(host.showsInventory, host, cont)
-            if okS and shown then return pg end
-        end
+local function pageHostShows(getPage, playerNum, container)
+    local okP, page = pcall(getPage, playerNum)
+    local pane = okP and page ~= nil and page.inventoryPane or nil
+    local host = pane ~= nil and pane.comfyHost or nil
+    if host ~= nil and host.showsInventory ~= nil then
+        local okS, shows = pcall(host.showsInventory, host, container)
+        if okS and shows then return page end
     end
     return nil
+end
+
+local function pageShowing(playerNum, container)
+    if container == nil then return nil end
+    return pageHostShows(getPlayerInventory, playerNum, container)
+        or pageHostShows(getPlayerLoot, playerNum, container)
+end
+
+ContainerWindow.pageShowing = pageShowing
+
+function ContainerWindow.boardShowing(playerNum, inv)
+    if inv == nil then return false end
+    local seat = playerNum or 0
+    if pageShowing(seat, inv) ~= nil then return true end
+    local okC, shows = pcall(ContainerWindow.showsInventory, seat, inv)
+    if okC and shows then return true end
+    return false
 end
 
 local function sourceStillOnScreen(self)
     local inv = self.openedIn
     if inv == nil then return true end
-    local seat = self.playerNum or 0
-    for _, get in ipairs({ getPlayerInventory, getPlayerLoot }) do
-        local okP, page = pcall(get, seat)
-        local pane = okP and page ~= nil and page.inventoryPane or nil
-        local host = pane ~= nil and pane.comfyHost or nil
-        if host ~= nil and host.showsInventory ~= nil then
-            local okS, shown = pcall(host.showsInventory, host, inv)
-            if okS and shown then return true end
-        end
-    end
-    if ContainerWindow.showsInventory ~= nil then
-        local okC, shown = pcall(ContainerWindow.showsInventory, seat, inv)
-        if okC and shown then return true end
-    end
-    return false
+    return ContainerWindow.boardShowing(self.playerNum, inv)
 end
 
 local function itemIsGone(item, playerNum)
     if item == nil then return true end
-    local okC, cont = pcall(item.getContainer, item)
-    if not okC or cont == nil then return true end
+    local okC, container = pcall(item.getContainer, item)
+    if not okC or container == nil then return true end
     local playerObj = playerNum ~= nil and getSpecificPlayer(playerNum) or nil
     if playerObj ~= nil then
-        local okE, eq = pcall(playerObj.isEquipped, playerObj, item)
-        if okE and eq then return true end
+        local okEquipped, equipped = pcall(playerObj.isEquipped, playerObj, item)
+        if okEquipped and equipped then return true end
     end
     return false
 end
 
 local function colsFor(slots)
-    local n = math.ceil(math.sqrt(math.max(1, slots or 1)))
-    if n < MIN_COLS then n = MIN_COLS elseif n > MAX_COLS then n = MAX_COLS end
-    return n
+    local cols = math.ceil(math.sqrt(math.max(1, slots or 1)))
+    if cols < MIN_COLS then
+        cols = MIN_COLS
+    elseif cols > MAX_COLS then
+        cols = MAX_COLS
+    end
+    return cols
 end
 
 local function widthFor(inv)
     local slots = nil
     if Capacity ~= nil and Capacity.slotsFor ~= nil then
-        local ok, n = pcall(Capacity.slotsFor, inv)
-        if ok then slots = n end
+        local okSlots, slotCount = pcall(Capacity.slotsFor, inv)
+        if okSlots then slots = slotCount end
     end
     return colsFor(slots) * Style.CELL_STRIDE + 2 * PAD
 end
@@ -222,14 +225,14 @@ function ContainerWindow.openFor(playerNum, item, anchorX, anchorY)
     end
     win.item = item
 
-    local okC, cont = pcall(item.getContainer, item)
-    win.openedIn = okC and cont or nil
-    win.openedSlot = ContainerWindow.slotOf(playerNum, item)
+    local okC, container = pcall(item.getContainer, item)
+    win.openedIn = okC and container or nil
+    win.openedSlot = slotOf(playerNum, item)
 
     local okPg, owner = pcall(pageShowing, playerNum, win.openedIn)
     local fallback = nil
-    local okF, pg = pcall(getPlayerInventory, playerNum)
-    if okF then fallback = pg end
+    local okF, playerPage = pcall(getPlayerInventory, playerNum)
+    if okF then fallback = playerPage end
     win.ownerPage = (okPg and owner) or fallback
     win:setWidth(widthFor(inv))
     win:setVisible(true)
@@ -247,11 +250,12 @@ function ContainerWindow.openFor(playerNum, item, anchorX, anchorY)
 end
 
 function ContainerWindow:clampToScreen()
-    local sw, sh = getCore():getScreenWidth(), getCore():getScreenHeight()
+    local screenW = getCore():getScreenWidth()
+    local screenH = getCore():getScreenHeight()
     local x, y = self.x, self.y
-    if x + self.width > sw then x = sw - self.width end
+    if x + self.width > screenW then x = screenW - self.width end
     if x < 0 then x = 0 end
-    if y + self.height > sh then y = sh - self.height end
+    if y + self.height > screenH then y = screenH - self.height end
     if y < 0 then y = 0 end
     if x ~= self.x then self:setX(x) end
     if y ~= self.y then self:setY(y) end
@@ -263,8 +267,8 @@ local function prerenderImpl(self)
 
     local page = self.ownerPage
     if page == nil then
-        local okP, pg = pcall(getPlayerInventory, self.playerNum)
-        page = okP and pg or nil
+        local okP, playerPage = pcall(getPlayerInventory, self.playerNum)
+        page = okP and playerPage or nil
     end
     if page == nil or not page:getIsVisible() then
         return ContainerWindow.closeFor(self.playerNum)
@@ -289,11 +293,11 @@ local function prerenderImpl(self)
         end
     end
 
-    local okC, cont = pcall(self.item.getContainer, self.item)
-    if okC and cont ~= self.openedIn then
+    local okC, container = pcall(self.item.getContainer, self.item)
+    if okC and container ~= self.openedIn then
         return ContainerWindow.closeFor(self.playerNum)
     end
-    local slot = ContainerWindow.slotOf(self.playerNum, self.item)
+    local slot = slotOf(self.playerNum, self.item)
     if slot ~= self.openedSlot then
         return ContainerWindow.closeFor(self.playerNum)
     end

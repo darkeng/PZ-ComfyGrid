@@ -1,13 +1,15 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/Core/Input"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Core/Util"
 require "ComfyGrid/Model/StackRules"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/Model/Capacity"
@@ -15,6 +17,7 @@ require "ComfyGrid/Model/Persistence"
 require "ComfyGrid/Model/ReflowPlan"
 
 local Log = ComfyGrid.Core.Log
+local Util = ComfyGrid.Core.Util
 local StackRules = ComfyGrid.Model.StackRules
 local ItemStack = ComfyGrid.Model.ItemStack
 local Capacity = ComfyGrid.Model.Capacity
@@ -37,20 +40,11 @@ local scratchMigrated = {}
 
 local scratchHome = {}
 
-local tableWipe = table.wipe
-local function wipe(t)
-    if tableWipe then
-        tableWipe(t)
-    else
-        for k in pairs(t) do t[k] = nil end
-    end
-end
+local scratchIdentityClaims = {}
 
-local function getHotbar(playerNum)
-    local ok, hotbar = pcall(getPlayerHotbar, playerNum)
-    if ok then return hotbar end
-    return nil
-end
+local wipe = Util.wipe
+
+local getHotbar = ComfyGrid.Core.Input.hotbarOf
 
 local function isItemExcluded(item, hotbar, excludeEquipped)
     if item:isHidden() then
@@ -78,50 +72,60 @@ local function isOwnMainInventory(self)
     return player:getInventory() == self.inventory
 end
 
-local OWNER_KINDS = { "BaseVehicle", "IsoPlayer", "IsoZombie", "IsoDeadBody",
-                      "IsoAnimal", "IsoObject" }
+local RUNG_LABEL = { player = "IsoPlayer", vehicle = "BaseVehicle", object = "IsoObject" }
 
-local function describeContainer(inventory)
+local MOVER_CLASSES = { "IsoAnimal", "IsoPlayer", "IsoZombie", "IsoDeadBody" }
+
+local function moverClassOf(owner)
+    for i = 1, #MOVER_CLASSES do
+        if instanceof(owner, MOVER_CLASSES[i]) then return MOVER_CLASSES[i] end
+    end
+    return "IsoMovingObject"
+end
+
+local function describeContainer(inventory, playerNum)
     if inventory == nil then return "?" end
     local okType, invType = pcall(inventory.getType, inventory)
     local name = (okType and invType ~= nil) and tostring(invType) or "?"
 
-    local okItem, item = pcall(inventory.getContainingItem, inventory)
-    if okItem and item ~= nil then
-        local okFull, full = pcall(item.getFullType, item)
-        if okFull and full ~= nil then
-            full = tostring(full)
-            if full ~= name and full ~= ("Base." .. name) then
-                return name .. "/" .. full
+    local okOwner, owner, rung = pcall(Persistence.ownerOf, inventory, playerNum)
+    if not okOwner then return name end
+
+    if rung == "bag" then
+
+        local okFullType, fullType = pcall(owner.getFullType, owner)
+        if okFullType and fullType ~= nil then
+            fullType = tostring(fullType)
+            if fullType ~= name and fullType ~= ("Base." .. name) then
+                return name .. "/" .. fullType
             end
         end
         return name
     end
 
-    local okParent, parent = pcall(inventory.getParent, inventory)
-    if okParent and parent ~= nil then
-        local okKind, kind = pcall(function()
-            for i = 1, #OWNER_KINDS do
-                if instanceof(parent, OWNER_KINDS[i]) then return OWNER_KINDS[i] end
-            end
-            return nil
-        end)
-        if okKind and kind ~= nil then return name .. "/" .. kind end
+    if rung == "mover" then
+        local okClass, className = pcall(moverClassOf, owner)
+        if okClass then return name .. "/" .. className end
+        return name
     end
+
+    local label = RUNG_LABEL[rung]
+    if label ~= nil then return name .. "/" .. label end
     return name
 end
 
 function SlotGrid:_snapshotItems()
-    local byId = self.itemById
-    local list = self.snapItems
-    local ids = self.snapIds
-    if byId == nil then
-        byId, list, ids = {}, {}, {}
-        self.itemById, self.snapItems, self.snapIds = byId, list, ids
+    local firstItemById = self.itemById
+    local snapshotItems = self.snapItems
+    local snapshotIds = self.snapIds
+    if firstItemById == nil then
+        firstItemById, snapshotItems, snapshotIds = {}, {}, {}
+        self.itemById, self.snapItems, self.snapIds =
+            firstItemById, snapshotItems, snapshotIds
     else
-        wipe(byId)
+        wipe(firstItemById)
     end
-    local n = 0
+    local entryCount = 0
     local items = self.inventory ~= nil and self.inventory:getItems() or nil
     if items ~= nil then
         for i = 0, items:size() - 1 do
@@ -129,39 +133,39 @@ function SlotGrid:_snapshotItems()
 
             if item ~= nil and instanceof(item, "InventoryItem") then
                 local id = item:getID()
-                n = n + 1
-                list[n] = item
-                ids[n] = id
-                if byId[id] == nil then byId[id] = item end
+                entryCount = entryCount + 1
+                snapshotItems[entryCount] = item
+                snapshotIds[entryCount] = id
+                if firstItemById[id] == nil then firstItemById[id] = item end
             end
         end
     end
 
-    for k = n + 1, self.snapCount or 0 do
-        list[k] = nil
-        ids[k] = nil
+    for staleIndex = entryCount + 1, self.snapCount or 0 do
+        snapshotItems[staleIndex] = nil
+        snapshotIds[staleIndex] = nil
     end
-    self.snapCount = n
+    self.snapCount = entryCount
 end
 
 function SlotGrid:new(inventory, persistentGridData, playerNum)
-    local o = setmetatable({}, self)
-    o.inventory = inventory
-    o.data = persistentGridData
-    o.data.stacks = o.data.stacks or {}
-    o.playerNum = playerNum
-    o.slotMap = {}
-    o.pendingClaims = nil
-    o.claimLanded = false
-    o.needsMoreReconcile = false
+    local grid = setmetatable({}, self)
+    grid.inventory = inventory
+    grid.data = persistentGridData
+    grid.data.stacks = grid.data.stacks or {}
+    grid.playerNum = playerNum
+    grid.slotMap = {}
+    grid.pendingClaims = nil
+    grid.claimLanded = false
+    grid.needsMoreReconcile = false
 
-    o.refusalLogged = false
-    o.refusalPasses = 0
+    grid.refusalLogged = false
+    grid.refusalPasses = 0
 
-    o.changeCount = 0
-    o:_rebuildSlotMap()
-    o:_recomputeSlotCount()
-    return o
+    grid.changeCount = 0
+    grid:_rebuildSlotMap()
+    grid:_recomputeSlotCount()
+    return grid
 end
 
 function SlotGrid:rebindData(newData)
@@ -187,12 +191,12 @@ end
 function SlotGrid:findStackFor(item)
     local stacks = self.data.stacks
     if #stacks == 0 then return nil end
-    local fullType = StackRules.identityOf(item)
+    local identity = StackRules.identityOf(item)
     local bucket = StackRules.bucketOf(item)
     local maxStack = StackRules.maxStackOf(item)
     for i = 1, #stacks do
         local stack = stacks[i]
-        if ItemStack.canAddPrecomputed(stack, fullType, bucket, maxStack) then
+        if ItemStack.canAddPrecomputed(stack, identity, bucket, maxStack) then
             return stack
         end
     end
@@ -203,16 +207,16 @@ function SlotGrid:firstFreeSlot(forId)
     local total = Capacity.slotsFor(self.inventory, self.playerNum)
     local highest = self:_highestOccupiedSlot()
     if highest + 1 > total then total = highest + 1 end
-    local map = self.slotMap
+    local slotMap = self.slotMap
     local reserved = nil
     local claims = self.pendingClaims
     if claims ~= nil then
         local now = getTimestampMs()
 
-        local own = forId ~= nil and claims[forId] or nil
-        if own ~= nil and now - own.ms <= PENDING_CLAIM_TTL_MS
-                and map[own.slot] == nil then
-            return own.slot
+        local ownClaim = forId ~= nil and claims[forId] or nil
+        if ownClaim ~= nil and now - ownClaim.ms <= PENDING_CLAIM_TTL_MS
+                and slotMap[ownClaim.slot] == nil then
+            return ownClaim.slot
         end
         for id, claim in pairs(claims) do
             if id ~= forId and now - claim.ms <= PENDING_CLAIM_TTL_MS then
@@ -222,7 +226,7 @@ function SlotGrid:firstFreeSlot(forId)
         end
     end
     for slot = 0, total - 1 do
-        if map[slot] == nil and (reserved == nil or not reserved[slot]) then
+        if slotMap[slot] == nil and (reserved == nil or not reserved[slot]) then
             return slot
         end
     end
@@ -303,18 +307,18 @@ end
 
 function SlotGrid:moveStack(stack, slot)
     if stack == nil or slot == nil or slot < 0 then return false end
-    local map = self.slotMap
-    local target = map[slot]
+    local slotMap = self.slotMap
+    local target = slotMap[slot]
     if target == stack or stack.slot == slot then
         return true
     end
 
     if target == nil then
-        if map[stack.slot] == stack then
-            map[stack.slot] = nil
+        if slotMap[stack.slot] == stack then
+            slotMap[stack.slot] = nil
         end
         stack.slot = slot
-        map[slot] = stack
+        slotMap[slot] = stack
 
         self:_recomputeSlotCount()
         return true
@@ -345,23 +349,69 @@ function SlotGrid:moveStack(stack, slot)
             break
         end
     end
-    if map[stack.slot] == stack then
-        map[stack.slot] = nil
+    if slotMap[stack.slot] == stack then
+        slotMap[stack.slot] = nil
     end
 
     self:_recomputeSlotCount()
     return true
 end
 
-function SlotGrid:swapStacks(a, b)
-    if a == nil or b == nil or a == b then return false end
-    local map = self.slotMap
-    if map[a.slot] ~= a or map[b.slot] ~= b then return false end
-    local slotA, slotB = a.slot, b.slot
-    a.slot, b.slot = slotB, slotA
-    map[slotA], map[slotB] = b, a
+function SlotGrid:swapStacks(firstStack, secondStack)
+    if firstStack == nil or secondStack == nil or firstStack == secondStack then
+        return false
+    end
+    local slotMap = self.slotMap
+    if slotMap[firstStack.slot] ~= firstStack
+            or slotMap[secondStack.slot] ~= secondStack then
+        return false
+    end
+    local firstSlot, secondSlot = firstStack.slot, secondStack.slot
+    firstStack.slot, secondStack.slot = secondSlot, firstSlot
+    slotMap[firstSlot], slotMap[secondSlot] = secondStack, firstStack
     self:_recomputeSlotCount()
     return true
+end
+
+local APPLY_LAYOUT_WORDING = {
+    malformed = "SlotGrid.applyLayout: malformed plan entry ",
+    duplicateBefore = "SlotGrid.applyLayout: plan assigns slot ",
+    duplicateAfter = " twice",
+    stale = "SlotGrid.applyLayout: stale plan (stack no longer at its slot)",
+    refused = "; layout refused",
+}
+local PLACE_STACKS_WORDING = {
+    malformed = "SlotGrid.placeStacks: malformed entry ",
+    duplicateBefore = "SlotGrid.placeStacks: two stacks on slot ",
+    duplicateAfter = "",
+    stale = "SlotGrid.placeStacks: stale plan (stack no longer at its slot)",
+    refused = "; placement refused",
+}
+
+local function verifyPlanEntries(slotMap, plan, wording)
+    local bySlot, planned = {}, {}
+    for i = 1, plan.n do
+        local entry = plan[i]
+        local stack = type(entry) == "table" and entry.stack or nil
+        local slot = type(entry) == "table" and entry.slot or nil
+        if type(stack) ~= "table" or type(slot) ~= "number"
+                or slot < 0 or slot ~= math.floor(slot) then
+            Log.warn(wording.malformed .. tostring(i) .. wording.refused)
+            return nil
+        end
+        if bySlot[slot] ~= nil then
+            Log.warn(wording.duplicateBefore .. tostring(slot)
+                .. wording.duplicateAfter .. wording.refused)
+            return nil
+        end
+        if slotMap[stack.slot] ~= stack then
+            Log.warn(wording.stale .. wording.refused)
+            return nil
+        end
+        bySlot[slot] = stack
+        planned[stack] = true
+    end
+    return bySlot, planned
 end
 
 function SlotGrid:applyLayout(plan)
@@ -375,32 +425,8 @@ function SlotGrid:applyLayout(plan)
     local stacks = self.data.stacks
     if type(stacks) ~= "table" then return false end
 
-    local map = self.slotMap
-    local bySlot, planned = {}, {}
-    for i = 1, plan.n do
-        local entry = plan[i]
-        local stack = type(entry) == "table" and entry.stack or nil
-        local slot = type(entry) == "table" and entry.slot or nil
-        if type(stack) ~= "table" or type(slot) ~= "number"
-                or slot < 0 or slot ~= math.floor(slot) then
-            Log.warn("SlotGrid.applyLayout: malformed plan entry "
-                .. tostring(i) .. "; layout refused")
-            return false
-        end
-        if bySlot[slot] ~= nil then
-            Log.warn("SlotGrid.applyLayout: plan assigns slot " .. tostring(slot)
-                .. " twice; layout refused")
-            return false
-        end
-
-        if map[stack.slot] ~= stack then
-            Log.warn("SlotGrid.applyLayout: stale plan (stack no longer at its"
-                .. " slot); layout refused")
-            return false
-        end
-        bySlot[slot] = stack
-        planned[stack] = true
-    end
+    local _, planned = verifyPlanEntries(self.slotMap, plan, APPLY_LAYOUT_WORDING)
+    if planned == nil then return false end
 
     for i = 1, #stacks do
         local stack = stacks[i]
@@ -427,32 +453,9 @@ function SlotGrid:placeStacks(plan)
     local stacks = self.data.stacks
     if type(stacks) ~= "table" then return false end
 
-    local map = self.slotMap
-    local bySlot, planned = {}, {}
-    for i = 1, plan.n do
-        local entry = plan[i]
-        local stack = type(entry) == "table" and entry.stack or nil
-        local slot = type(entry) == "table" and entry.slot or nil
-        if type(stack) ~= "table" or type(slot) ~= "number"
-                or slot < 0 or slot ~= math.floor(slot) then
-            Log.warn("SlotGrid.placeStacks: malformed entry " .. tostring(i)
-                .. "; placement refused")
-            return false
-        end
-        if bySlot[slot] ~= nil then
-            Log.warn("SlotGrid.placeStacks: two stacks on slot "
-                .. tostring(slot) .. "; placement refused")
-            return false
-        end
-
-        if map[stack.slot] ~= stack then
-            Log.warn("SlotGrid.placeStacks: stale plan (stack no longer at its"
-                .. " slot); placement refused")
-            return false
-        end
-        bySlot[slot] = stack
-        planned[stack] = true
-    end
+    local bySlot, planned = verifyPlanEntries(self.slotMap, plan,
+        PLACE_STACKS_WORDING)
+    if bySlot == nil then return false end
 
     for i = 1, #stacks do
         local stack = stacks[i]
@@ -473,47 +476,46 @@ function SlotGrid:placeStacks(plan)
 end
 
 function SlotGrid:reflowColumns(oldCols, newCols)
-    if ReflowPlan == nil then return true end
     local plan = ReflowPlan.build(self.data.stacks, oldCols, newCols)
     if plan == nil then return true end
     return self:applyLayout(plan) == true
 end
 
-function SlotGrid:splitToSlot(stack, ids, slot)
-    if stack == nil or ids == nil or slot == nil or slot < 0 then
+function SlotGrid:splitToSlot(stack, subsetIds, slot)
+    if stack == nil or subsetIds == nil or slot == nil or slot < 0 then
         return false
     end
-    local n = #ids
-    if n == 0 then return false end
-    for i = 1, n do
-        if not stack.itemIDs[ids[i]] then return false end
+    local subsetCount = #subsetIds
+    if subsetCount == 0 then return false end
+    for i = 1, subsetCount do
+        if not stack.itemIDs[subsetIds[i]] then return false end
     end
-    if n >= stack.count then
+    if subsetCount >= stack.count then
         return self:moveStack(stack, slot)
     end
 
     if slot == stack.slot then return true end
 
-    local map = self.slotMap
-    local target = map[slot]
+    local slotMap = self.slotMap
+    local target = slotMap[slot]
     if target ~= nil then
 
         local front = ItemStack.frontItem(stack, self.inventory)
         if front == nil or not ItemStack.canAdd(target, front) then
             return false
         end
-        local tids = target.itemIDs
+        local targetIds = target.itemIDs
         local moved = 0
-        for i = 1, n do
-            local id = ids[i]
+        for i = 1, subsetCount do
+            local id = subsetIds[i]
             stack.itemIDs[id] = nil
-            if not tids[id] then
-                tids[id] = true
+            if not targetIds[id] then
+                targetIds[id] = true
                 moved = moved + 1
             end
         end
         target.count = target.count + moved
-        stack.count = stack.count - n
+        stack.count = stack.count - subsetCount
         ItemStack.invalidateFront(target)
         ItemStack.invalidateFront(stack)
         noteMutation(self)
@@ -522,8 +524,8 @@ function SlotGrid:splitToSlot(stack, ids, slot)
 
     local newStack = nil
     local dropped = 0
-    for i = 1, n do
-        local id = ids[i]
+    for i = 1, subsetCount do
+        local id = subsetIds[i]
         stack.itemIDs[id] = nil
         if newStack == nil then
             local item = self.inventory:getItemWithID(id)
@@ -537,7 +539,7 @@ function SlotGrid:splitToSlot(stack, ids, slot)
             newStack.count = newStack.count + 1
         end
     end
-    stack.count = stack.count - n
+    stack.count = stack.count - subsetCount
     ItemStack.invalidateFront(stack)
     if newStack == nil then
 
@@ -546,7 +548,7 @@ function SlotGrid:splitToSlot(stack, ids, slot)
     end
     local stacks = self.data.stacks
     stacks[#stacks + 1] = newStack
-    map[slot] = newStack
+    slotMap[slot] = newStack
     noteMutation(self)
     return true
 end
@@ -572,7 +574,8 @@ end
 
 function SlotGrid:validate()
 
-    local identityClaims = {}
+    local identityClaims = scratchIdentityClaims
+    local identityClaimCount = 0
     local stacks = self.data.stacks
     local inventory = self.inventory
 
@@ -584,9 +587,9 @@ function SlotGrid:validate()
             and inventory ~= nil then
         local okItems, items = pcall(inventory.getItems, inventory)
         if okItems and items ~= nil and items:size() == 0 then
-            local okMD, _, persisted = pcall(Persistence.getModDataFor,
+            local okPersisted, persisted = pcall(Persistence.isPersistent,
                 inventory, self.playerNum)
-            emptyRead = okMD and persisted == true
+            emptyRead = okPersisted and persisted == true
         end
     end
     local seen = scratchSeen
@@ -595,29 +598,29 @@ function SlotGrid:validate()
     wipe(migrated)
 
     self:_snapshotItems()
-    local byId = self.itemById
+    local itemById = self.itemById
 
     local changed = false
-    local i = 1
-    while i <= #stacks do
-        local stack = stacks[i]
-        local ids = type(stack) == "table" and stack.itemIDs or nil
-        if type(ids) ~= "table" then
+    local stackIndex = 1
+    while stackIndex <= #stacks do
+        local stack = stacks[stackIndex]
+        local stackIds = type(stack) == "table" and stack.itemIDs or nil
+        if type(stackIds) ~= "table" then
 
             Log.warn("validate: dropping malformed stack entry (bad itemIDs)")
-            table.remove(stacks, i)
+            table.remove(stacks, stackIndex)
             changed = true
         else
             local kept = 0
 
             local migratedHere = 0
             local lastMigrant = nil
-            for id in pairs(ids) do
+            for id in pairs(stackIds) do
                 local drop = false
                 if seen[id] then
                     drop = true
                 else
-                    local item = byId[id]
+                    local item = itemById[id]
                     if item == nil then
 
                         drop = not emptyRead
@@ -643,7 +646,7 @@ function SlotGrid:validate()
                     end
                 end
                 if drop then
-                    ids[id] = nil
+                    stackIds[id] = nil
                     changed = true
 
                     ItemStack.invalidateFront(stack)
@@ -657,11 +660,12 @@ function SlotGrid:validate()
 
                 if migratedHere == 1 and lastMigrant ~= nil then
                     self:claimSlotForItem(lastMigrant:getID(), stack.slot)
-                    identityClaims[#identityClaims + 1] = lastMigrant:getID()
+                    identityClaimCount = identityClaimCount + 1
+                    identityClaims[identityClaimCount] = lastMigrant:getID()
                 end
-                table.remove(stacks, i)
+                table.remove(stacks, stackIndex)
             else
-                i = i + 1
+                stackIndex = stackIndex + 1
             end
         end
     end
@@ -672,8 +676,9 @@ function SlotGrid:validate()
         self:insertItem(migrated[j])
     end
 
-    for j = 1, #identityClaims do
+    for j = 1, identityClaimCount do
         self:releaseClaim(identityClaims[j])
+        identityClaims[j] = nil
     end
     wipe(migrated)
 
@@ -687,28 +692,28 @@ function SlotGrid:consolidateLoose()
     local inventory = self.inventory
     if type(stacks) ~= "table" or inventory == nil then return false end
 
-    local home = scratchHome
-    wipe(home)
+    local homeByKey = scratchHome
+    wipe(homeByKey)
     for i = 1, #stacks do
         local stack = stacks[i]
         if type(stack) == "table" and type(stack.itemIDs) == "table" then
             local key = tostring(stack.itemType) .. "|" .. tostring(stack.bucket)
-            local best = home[key]
+            local best = homeByKey[key]
             if best == nil or (stack.count or 0) > (best.count or 0) then
-                home[key] = stack
+                homeByKey[key] = stack
             end
         end
     end
 
     local moved = false
-    local i = 1
-    while i <= #stacks do
-        local stack = stacks[i]
+    local stackIndex = 1
+    while stackIndex <= #stacks do
+        local stack = stacks[stackIndex]
         local absorbed = false
         if type(stack) == "table" and type(stack.itemIDs) == "table"
                 and stack.count == 1 then
             local key = tostring(stack.itemType) .. "|" .. tostring(stack.bucket)
-            local target = home[key]
+            local target = homeByKey[key]
             if target ~= nil and target ~= stack then
                 local item = ItemStack.frontItem(stack, inventory)
 
@@ -718,15 +723,15 @@ function SlotGrid:consolidateLoose()
                     if self.slotMap[stack.slot] == stack then
                         self.slotMap[stack.slot] = nil
                     end
-                    table.remove(stacks, i)
+                    table.remove(stacks, stackIndex)
                     moved = true
                     absorbed = true
                 end
             end
         end
-        if not absorbed then i = i + 1 end
+        if not absorbed then stackIndex = stackIndex + 1 end
     end
-    wipe(home)
+    wipe(homeByKey)
 
     if moved then
         self:_rebuildSlotMap()
@@ -751,15 +756,15 @@ function SlotGrid:reconcile(snapshotIsCurrent)
     local claims = self.pendingClaims
     if claims ~= nil then
         local now = getTimestampMs()
-        local any = false
+        local anyLive = false
         for id, claim in pairs(claims) do
             if now - claim.ms > PENDING_CLAIM_TTL_MS then
                 claims[id] = nil
             else
-                any = true
+                anyLive = true
             end
         end
-        if not any then
+        if not anyLive then
             self.pendingClaims = nil
             claims = nil
         end
@@ -795,9 +800,9 @@ function SlotGrid:reconcile(snapshotIsCurrent)
             and TransferJobs.itemsFor(self.inventory) ~= nil
     end
 
-    for k = 1, self.snapCount do
-        local item = snapItems[k]
-        local id = snapIds[k]
+    for snapIndex = 1, self.snapCount do
+        local item = snapItems[snapIndex]
+        local id = snapIds[snapIndex]
 
         if positioned[id] ~= true
                 and not isItemExcluded(item, hotbar, excludeEquipped) then
@@ -847,11 +852,11 @@ function SlotGrid:reconcile(snapshotIsCurrent)
             self.refusalLogged = true
             Log.warn("reconcile: " .. failed
                 .. " item(s) refused insertion (container mismatch) in "
-                .. describeContainer(self.inventory)
+                .. describeContainer(self.inventory, self.playerNum)
                 .. "; retrying every pass until they settle")
         end
     elseif self.refusalLogged then
-        Log.info("reconcile: " .. describeContainer(self.inventory)
+        Log.info("reconcile: " .. describeContainer(self.inventory, self.playerNum)
             .. " settled after " .. self.refusalPasses .. " pass(es)")
         self.refusalLogged = false
         self.refusalPasses = 0
@@ -859,8 +864,8 @@ function SlotGrid:reconcile(snapshotIsCurrent)
 end
 
 function SlotGrid:_rebuildSlotMap()
-    local map = self.slotMap
-    wipe(map)
+    local slotMap = self.slotMap
+    wipe(slotMap)
     local stacks = self.data.stacks
     local losers = nil
     for i = 1, #stacks do
@@ -868,11 +873,11 @@ function SlotGrid:_rebuildSlotMap()
 
         if type(stack) == "table" then
             local slot = stack.slot
-            if type(slot) ~= "number" or slot < 0 or map[slot] ~= nil then
+            if type(slot) ~= "number" or slot < 0 or slotMap[slot] ~= nil then
                 losers = losers or {}
                 losers[#losers + 1] = stack
             else
-                map[slot] = stack
+                slotMap[slot] = stack
             end
         end
     end
@@ -883,7 +888,7 @@ function SlotGrid:_rebuildSlotMap()
             Log.warn("slot collision/corruption repaired; stack moved to slot "
                 .. slot)
             stack.slot = slot
-            map[slot] = stack
+            slotMap[slot] = stack
         end
     end
 end
@@ -906,8 +911,8 @@ function SlotGrid:_highestOccupiedSlot()
     for i = 1, #stacks do
 
         local stack = stacks[i]
-        local s = type(stack) == "table" and stack.slot or nil
-        if type(s) == "number" and s > maxSlot then maxSlot = s end
+        local slot = type(stack) == "table" and stack.slot or nil
+        if type(slot) == "number" and slot > maxSlot then maxSlot = slot end
     end
     return maxSlot
 end

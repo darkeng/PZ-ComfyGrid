@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -31,9 +31,9 @@ local function gameNameOf(tex)
         return base
     end
     if tex.getPath ~= nil then
-        local okP, p = pcall(tex.getPath, tex)
-        if okP and p ~= nil then
-            local pack = tostring(p):match("@pack/([^/]+)/")
+        local okPath, packPath = pcall(tex.getPath, tex)
+        if okPath and packPath ~= nil then
+            local pack = tostring(packPath):match("@pack/([^/]+)/")
             if pack ~= nil and not GAME_PACKS[pack] then return nil end
         end
     end
@@ -42,57 +42,67 @@ end
 
 function Icons.hiRes(tex)
     if tex == nil then return false end
-    local hi = hiByTex[tex]
-    if hi ~= nil then return hi end
-    hi = false
+    local hiRes = hiByTex[tex]
+    if hiRes ~= nil then return hiRes end
+    hiRes = false
 
     if Texture ~= nil and Texture.trygetTexture ~= nil and tex.getName ~= nil then
         local name = tex:getName()
         if name ~= nil and name ~= "" then
-            hi = Texture.trygetTexture(PREFIX .. name) or false
+            hiRes = Texture.trygetTexture(PREFIX .. name) or false
         end
     end
-    hiByTex[tex] = hi
-    if hi then hits = hits + 1 else misses = misses + 1 end
-    return hi
+    hiByTex[tex] = hiRes
+    if hiRes then hits = hits + 1 else misses = misses + 1 end
+    return hiRes
 end
 
 local gameArtByTex = {}
 
 function Icons.gameArt(tex)
     if tex == nil then return false end
-    local hi = gameArtByTex[tex]
-    if hi ~= nil then return hi end
-    hi = false
+    local hiRes = gameArtByTex[tex]
+    if hiRes ~= nil then return hiRes end
+    hiRes = false
     if Texture ~= nil and Texture.trygetTexture ~= nil and tex.getName ~= nil then
-        local okN, name = pcall(gameNameOf, tex)
-        if okN and name ~= nil then
-            hi = Texture.trygetTexture(PREFIX .. name) or false
+        local okName, name = pcall(gameNameOf, tex)
+        if okName and name ~= nil then
+            hiRes = Texture.trygetTexture(PREFIX .. name) or false
         end
     end
-    gameArtByTex[tex] = hi
-    return hi
+    gameArtByTex[tex] = hiRes
+    return hiRes
 end
 
 function Icons.stats()
     return hits, misses
 end
 
-function Icons.draw(view, item, x, y, alpha, w, h, hi)
-    if view == nil or item == nil then return end
-    if hi == nil then
-        hi = Icons.hiRes(item.getTex ~= nil and item:getTex() or nil)
+function Icons.fluidContainerOf(item)
+    local fluidContainer = item.getFluidContainer ~= nil and item:getFluidContainer() or nil
+    if fluidContainer == nil and item.getWorldItem ~= nil then
+        local world = item:getWorldItem()
+        if world ~= nil then fluidContainer = world:getFluidContainer() end
     end
-    local jo = view.javaObject
-    if not hi or jo == nil then
+    return fluidContainer
+end
+
+function Icons.draw(view, item, x, y, alpha, w, h, hiRes)
+    if view == nil or item == nil then return end
+    if hiRes == nil then
+        hiRes = Icons.hiRes(item.getTex ~= nil and item:getTex() or nil)
+    end
+    local javaObject = view.javaObject
+    if not hiRes or javaObject == nil then
         view:drawItemIcon(item, x, y, alpha, w, h)
         return
     end
 
-    local r, g, b = item:getR(), item:getG(), item:getB()
+    local itemRed, itemGreen, itemBlue = item:getR(), item:getG(), item:getB()
+    local tintRed, tintGreen, tintBlue = itemRed, itemGreen, itemBlue
     local colorMask = item:getTextureColorMask()
 
-    if colorMask ~= nil then r, g, b = 1, 1, 1 end
+    if colorMask ~= nil then tintRed, tintGreen, tintBlue = 1, 1, 1 end
 
     local fluid = item:getFluidContainer()
     if fluid == nil then
@@ -102,22 +112,24 @@ function Icons.draw(view, item, x, y, alpha, w, h, hi)
     local fluidMask = item:getTextureFluidMask()
 
     if fluid ~= nil and fluidMask ~= nil then
-        local col = fluid:getColor()
+        local fluidColor = fluid:getColor()
         local capacity = fluid:getCapacity()
 
-        jo:DrawTextureIcon(hi, x, y, w, h, r, g, b, alpha)
-        jo:DrawTextureIconMask(fluidMask,
+        javaObject:DrawTextureIcon(hiRes, x, y, w, h, tintRed, tintGreen, tintBlue, alpha)
+        javaObject:DrawTextureIconMask(fluidMask,
             capacity > 0 and (fluid:getAmount() / capacity) or 0,
             x, y, w, h,
-            col:getRedFloat(), col:getGreenFloat(), col:getBlueFloat(), alpha)
+            fluidColor:getRedFloat(), fluidColor:getGreenFloat(),
+            fluidColor:getBlueFloat(), alpha)
     else
-        jo:DrawTextureScaledAspect(hi, x, y, w, h, r, g, b, alpha)
+        javaObject:DrawTextureScaledAspect(hiRes, x, y, w, h,
+            tintRed, tintGreen, tintBlue, alpha)
     end
 
     if colorMask ~= nil then
 
-        jo:DrawTextureIconMask(Icons.hiRes(colorMask) or colorMask, 1.0,
+        javaObject:DrawTextureIconMask(Icons.hiRes(colorMask) or colorMask, 1.0,
             x, y, w, h,
-            item:getR(), item:getG(), item:getB(), alpha)
+            itemRed, itemGreen, itemBlue, alpha)
     end
 end

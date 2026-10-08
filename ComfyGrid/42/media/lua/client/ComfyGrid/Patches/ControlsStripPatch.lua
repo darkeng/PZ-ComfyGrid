@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -44,10 +44,10 @@ end
 local function mute(class)
     if class == nil or rawget(class, "_comfyMuted") then return false end
     class._comfyMuted = true
-    local og = class.shouldBeVisible
+    local og_shouldBeVisible = class.shouldBeVisible
     class.shouldBeVisible = function(self)
         if drawing then return false end
-        return og(self)
+        return og_shouldBeVisible(self)
     end
     return true
 end
@@ -68,33 +68,33 @@ local function muteTransfer()
 end
 
 local function muteObjectVerbs()
-    local list = ISLootWindowContainerControls_HandlerList
-    if type(list) ~= "table" then return 0 end
-    local n = 0
-    for i = 1, #list do
-        local class = list[i]
+    local handlerList = ISLootWindowContainerControls_HandlerList
+    if type(handlerList) ~= "table" then return 0 end
+    local mutedCount = 0
+    for i = 1, #handlerList do
+        local class = handlerList[i]
         if class ~= nil and class.displayToRight then
-            if mute(class) then n = n + 1 end
+            if mute(class) then mutedCount = mutedCount + 1 end
         end
     end
-    rightScanned = #list
-    return n
+    rightScanned = #handlerList
+    return mutedCount
 end
 
 local function wrapArrange(class, pageOf)
     if class == nil or class.arrange == nil then return false end
     local og_arrange = class.arrange
     function class:arrange()
-        local was = drawing
+        local drawingBefore = drawing
         drawing = comfyMode(pageOf(self))
 
-        local list = ISLootWindowContainerControls_HandlerList
-        if type(list) == "table" and #list ~= rightScanned then
+        local handlerList = ISLootWindowContainerControls_HandlerList
+        if type(handlerList) == "table" and #handlerList ~= rightScanned then
             muteObjectVerbs()
         end
 
         local ok, err = pcall(og_arrange, self)
-        drawing = was
+        drawing = drawingBefore
         if not ok then error(err) end
     end
     return true
@@ -111,12 +111,13 @@ Events.OnGameBoot.Add(function()
 
     local muted = muteTransfer()
     local objects = muteObjectVerbs()
-    local a = wrapArrange(ISInventoryWindowContainerControls,
+    local playerStripWrapped = wrapArrange(ISInventoryWindowContainerControls,
         function(self) return self.inventoryWindow end)
-    local b = wrapArrange(ISLootWindowContainerControls,
+    local lootStripWrapped = wrapArrange(ISLootWindowContainerControls,
         function(self) return self.lootWindow end)
 
     Log.info("ControlsStripPatch applied (" .. tostring(muted)
         .. " transfer + " .. tostring(objects) .. " object verbs muted"
-        .. ", strips: " .. tostring(a) .. "/" .. tostring(b) .. ")")
+        .. ", strips: " .. tostring(playerStripWrapped) .. "/"
+        .. tostring(lootStripWrapped) .. ")")
 end)

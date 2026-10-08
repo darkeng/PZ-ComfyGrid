@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -26,14 +26,20 @@ local Draw = ComfyGrid.UI.Draw
 local SHADOW_SPREAD = 12
 local SHADOW_ALPHA = 0.45
 
+WindowChrome.SHADOW_ALPHA = SHADOW_ALPHA
+
+function WindowChrome.shadowSpread()
+    return math.max(6, math.floor(SHADOW_SPREAD * (Style.SCALE or 1)))
+end
+
 local function abutsSibling(page)
     local ok, data = pcall(getPlayerData, page.player)
     if not ok or data == nil then return false end
     local other = page.onCharacter and data.lootInventory or data.playerInventory
     if other == nil or other == page then return false end
-    local vis = other.getIsVisible ~= nil and other:getIsVisible()
+    local otherVisible = other.getIsVisible ~= nil and other:getIsVisible()
         or other.visible == true
-    if not vis then return false end
+    if not otherVisible then return false end
 
     local ax, aw = page:getX(), page:getWidth()
     local bx, bw = other:getX(), other:getWidth()
@@ -50,62 +56,64 @@ function WindowChrome.shadow(page)
     if page.isCollapsed then return end
     if Draw == nil or Draw.shadow == nil then return end
     if abutsSibling(page) then return end
-    local spread = math.max(6, math.floor(SHADOW_SPREAD * (Style.SCALE or 1)))
-    Draw.shadow(page, 0, 0, page.width, page.height, spread, SHADOW_ALPHA)
+    Draw.shadow(page, 0, 0, page.width, page.height, WindowChrome.shadowSpread(),
+        SHADOW_ALPHA)
 end
 
 function WindowChrome.resizeGrips(page)
-    local rw = page.resizeWidget
-    if rw == nil or rw.height == nil or rw.height <= 0 then return end
+    local cornerWidget = page.resizeWidget
+    if cornerWidget == nil or cornerWidget.height == nil
+            or cornerWidget.height <= 0 then
+        return
+    end
     if page.width == nil or page.height == nil then return end
-    local rh = rw.height
-    local x, y = page.width - rh, page.height - rh
+    local gripSize = cornerWidget.height
+    local x, y = page.width - gripSize, page.height - gripSize
 
-    if not rw.resizing then
-        if rw.x ~= x then rw:setX(x) end
-        if rw.y ~= y then rw:setY(y) end
+    if not cornerWidget.resizing then
+        if cornerWidget.x ~= x then cornerWidget:setX(x) end
+        if cornerWidget.y ~= y then cornerWidget:setY(y) end
     end
 
-    local rw2 = page.resizeWidget2
-    if rw2 == nil or rw2.resizing then return end
-    if rw2.y ~= y then rw2:setY(y) end
-    if rw2.width ~= x then rw2:setWidth(x) end
+    local edgeWidget = page.resizeWidget2
+    if edgeWidget == nil or edgeWidget.resizing then return end
+    if edgeWidget.y ~= y then edgeWidget:setY(y) end
+    if edgeWidget.width ~= x then edgeWidget:setWidth(x) end
 end
 
 function WindowChrome.resync(page)
     local pane = page.inventoryPane
     if pane == nil or page.width == nil then return end
-    local bs = page.buttonSize
-    if bs == nil or page.onInventoryContainerSizeChanged == nil then return end
-    if pane.width == page.width - bs then return end
+    local buttonSize = page.buttonSize
+    if buttonSize == nil or page.onInventoryContainerSizeChanged == nil then
+        return
+    end
+    if pane.width == page.width - buttonSize then return end
     pcall(page.onInventoryContainerSizeChanged, page)
 end
 
 function WindowChrome.onLeft(page)
-    local S = ComfyGrid.Settings
-    if S == nil or S.get == nil then return false end
+    local Settings = ComfyGrid.Settings
+    if Settings == nil or Settings.get == nil then return false end
     local key = "CONTAINERS_LEFT_PLAYER"
     if page ~= nil and page.onCharacter == false then
         key = "CONTAINERS_LEFT_LOOT"
     end
-    return S.get(key) == true
+    return Settings.get(key) == true
 end
 
 function WindowChrome.side(page)
     local panel = page.containerButtonPanel
     local pane = page.inventoryPane
     if panel == nil or pane == nil or page.width == nil then return end
-    local bs = page.buttonSize
-    if bs == nil or bs <= 0 then return end
+    local buttonSize = page.buttonSize
+    if buttonSize == nil or buttonSize <= 0 then return end
     local left = pane.mode == "comfy" and WindowChrome.onLeft(page)
-    local px, vx = page.width - bs, 0
-    if left then px, vx = 0, bs end
-    if panel.x ~= px then panel:setX(px) end
-    if pane.x ~= vx then pane:setX(vx) end
+    local panelX, paneX = page.width - buttonSize, 0
+    if left then panelX, paneX = 0, buttonSize end
+    if panel.x ~= panelX then panel:setX(panelX) end
+    if pane.x ~= paneX then pane:setX(paneX) end
 
-    local wantRight = not left
-    if panel.anchorLeft ~= left then panel.anchorLeft = left end
-    if panel.anchorRight ~= wantRight then panel.anchorRight = wantRight end
 end
 
 local VANILLA_BUTTON_SIZES = { 32, 40, 48 }
@@ -122,61 +130,64 @@ function WindowChrome.buttonSizeFor(page)
     local base = vanillaButtonSize()
     local pane = page ~= nil and page.inventoryPane or nil
     if pane == nil or pane.mode ~= "comfy" then return base end
-    local bs = math.floor(base * (Style.SCALE or 1) + 0.5)
-    if bs < MIN_BUTTON then bs = MIN_BUTTON end
-    return bs
+    local buttonSize = math.floor(base * (Style.SCALE or 1) + 0.5)
+    if buttonSize < MIN_BUTTON then buttonSize = MIN_BUTTON end
+    return buttonSize
 end
 
-local function iconFor(bs)
+local function iconFor(buttonSize)
     local base = vanillaButtonSize()
     local vIcon = base - 2
     if vIcon > 32 then vIcon = 32 end
-    local icon = math.floor(bs * vIcon / base + 0.5)
-    if icon > bs - 2 then icon = bs - 2 end
+    local icon = math.floor(buttonSize * vIcon / base + 0.5)
+    if icon > buttonSize - 2 then icon = buttonSize - 2 end
     if icon < 1 then icon = 1 end
     return icon
 end
 
-local function fitArt(b, comfy)
-    local img = b.image
+local function fitArt(button, comfy)
+    local img = button.image
     if img == nil then return end
     if comfy then
-        if img == b._comfyArt then return end
+        if img == button._comfyArt then return end
         local Icons = ComfyGrid.UI ~= nil and ComfyGrid.UI.Icons or nil
-        local hi = Icons ~= nil and Icons.gameArt ~= nil and Icons.gameArt(img) or false
-        if hi then
-            b._comfyArtVanilla = img
-            b._comfyArt = hi
-            b:setImage(hi)
+        local hiResArt = Icons ~= nil and Icons.gameArt ~= nil
+            and Icons.gameArt(img) or false
+        if hiResArt then
+            button._comfyArtVanilla = img
+            button._comfyArt = hiResArt
+            button:setImage(hiResArt)
         end
         return
     end
 
-    if img == b._comfyArt and b._comfyArtVanilla ~= nil then
-        b:setImage(b._comfyArtVanilla)
+    if img == button._comfyArt and button._comfyArtVanilla ~= nil then
+        button:setImage(button._comfyArtVanilla)
     end
-    b._comfyArt = nil
-    b._comfyArtVanilla = nil
+    button._comfyArt = nil
+    button._comfyArtVanilla = nil
 end
 
-local function fitButton(b, bs, icon, comfy)
-    if b == nil or b.setWidth == nil then return end
-    fitArt(b, comfy)
-    if b.anchorRight ~= false then b:setAnchorRight(false) end
-    if b.anchorLeft ~= true then b:setAnchorLeft(true) end
-    if b:getX() ~= 0 then b:setX(0) end
-    if b:getWidth() ~= bs then b:setWidth(bs) end
-    if b:getHeight() ~= bs then b:setHeight(bs) end
-    if b.forcedWidthImage ~= icon or b.forcedHeightImage ~= icon then
-        b:forceImageSize(icon, icon)
+local function fitOneButton(button, buttonSize, iconSize, comfy)
+    if button == nil or button.setWidth == nil then return end
+    fitArt(button, comfy)
+    if button.anchorRight ~= false then button:setAnchorRight(false) end
+    if button.anchorLeft ~= true then button:setAnchorLeft(true) end
+    if button:getX() ~= 0 then button:setX(0) end
+    if button:getWidth() ~= buttonSize then button:setWidth(buttonSize) end
+    if button:getHeight() ~= buttonSize then button:setHeight(buttonSize) end
+    if button.forcedWidthImage ~= iconSize
+            or button.forcedHeightImage ~= iconSize then
+        button:forceImageSize(iconSize, iconSize)
     end
 end
 
-function WindowChrome.fitButton(page, b)
-    local bs = page ~= nil and page.buttonSize or nil
-    if bs == nil or bs <= 0 then return end
+function WindowChrome.fitButton(page, button)
+    local buttonSize = page ~= nil and page.buttonSize or nil
+    if buttonSize == nil or buttonSize <= 0 then return end
     local pane = page.inventoryPane
-    fitButton(b, bs, iconFor(bs), pane ~= nil and pane.mode == "comfy")
+    fitOneButton(button, buttonSize, iconFor(buttonSize),
+        pane ~= nil and pane.mode == "comfy")
 end
 
 function WindowChrome.fitButtons(page)
@@ -184,42 +195,46 @@ function WindowChrome.fitButtons(page)
     local panel = page.containerButtonPanel
     local pane = page.inventoryPane
     if panel == nil or pane == nil or page.width == nil then return end
-    local bs = WindowChrome.buttonSizeFor(page)
-    page.buttonSize = bs
-    page.minimumWidth = 256 + bs
-    if pane.width ~= page.width - bs then pane:setWidth(page.width - bs) end
-    if panel.width ~= bs then panel:setWidth(bs) end
+    local buttonSize = WindowChrome.buttonSizeFor(page)
+    page.buttonSize = buttonSize
+    page.minimumWidth = 256 + buttonSize
+    if pane.width ~= page.width - buttonSize then
+        pane:setWidth(page.width - buttonSize)
+    end
+    if panel.width ~= buttonSize then panel:setWidth(buttonSize) end
 
-    local icon = iconFor(bs)
+    local icon = iconFor(buttonSize)
     local comfy = pane.mode == "comfy"
 
     page._comfyButtonsComfy = comfy
     local pool = page.buttonPool
     if type(pool) == "table" then
-        for i = 1, #pool do fitButton(pool[i], bs, icon, comfy) end
+        for i = 1, #pool do fitOneButton(pool[i], buttonSize, icon, comfy) end
     end
-    local list = page.backpacks
-    if type(list) ~= "table" then return end
-    for i = 1, #list do fitButton(list[i], bs, icon, comfy) end
+    local buttons = page.backpacks
+    if type(buttons) ~= "table" then return end
+    for i = 1, #buttons do fitOneButton(buttons[i], buttonSize, icon, comfy) end
 
-    local CO = ComfyGrid.Model ~= nil and ComfyGrid.Model.ContainerOrder or nil
+    local ContainerOrder = ComfyGrid.Model ~= nil
+        and ComfyGrid.Model.ContainerOrder or nil
     local laid = false
-    if pane.mode == "comfy" and CO ~= nil and CO.sequenceFor ~= nil
-            and CO.layout ~= nil then
-        local ok, s = pcall(CO.sequenceFor, page)
-        if ok and s ~= nil then
-            laid = pcall(CO.layout, page)
+    if pane.mode == "comfy" and ContainerOrder ~= nil
+            and ContainerOrder.sequenceFor ~= nil
+            and ContainerOrder.layout ~= nil then
+        local ok, sequence = pcall(ContainerOrder.sequenceFor, page)
+        if ok and sequence ~= nil then
+            laid = pcall(ContainerOrder.layout, page)
         end
     end
-    if not laid and #list > 0 then
+    if not laid and #buttons > 0 then
         local y = -1
-        for i = 1, #list do
-            local b = list[i]
-            if b ~= nil and b:getY() ~= y then b:setY(y) end
-            y = y + bs
+        for i = 1, #buttons do
+            local button = buttons[i]
+            if button ~= nil and button:getY() ~= y then button:setY(y) end
+            y = y + buttonSize
         end
 
-        local last = list[#list]
+        local last = buttons[#buttons]
         if last ~= nil and panel.setScrollHeight ~= nil then
             panel:setScrollHeight(last:getBottom())
         end
@@ -230,13 +245,15 @@ end
 
 function WindowChrome.seam(page)
     if page.isCollapsed then return end
-    local rw = page.resizeWidget
-    if rw == nil or rw.height == nil or page.height == nil then return end
-    local sf = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
-    if sf == nil then return end
+    local cornerWidget = page.resizeWidget
+    if cornerWidget == nil or cornerWidget.height == nil or page.height == nil then
+        return
+    end
+    local surface = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
+    if surface == nil then return end
 
-    page:drawRect(0, math.floor(page.height - rw.height), page.width, 1, 0.85,
-        sf.line.r, sf.line.g, sf.line.b)
+    page:drawRect(0, math.floor(page.height - cornerWidget.height), page.width,
+        1, 0.85, surface.line.r, surface.line.g, surface.line.b)
 end
 
 local function buttonTopOnPage(buttonPanel, button)
@@ -251,31 +268,32 @@ function WindowChrome.selection(page)
     local panel = page.containerButtonPanel
     local buttons = page.backpacks
     if panel == nil or type(buttons) ~= "table" or #buttons == 0 then return end
-    local sf = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
-    if sf == nil or sf.accent == nil then return end
+    local surface = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
+    if surface == nil or surface.accent == nil then return end
 
     local selected = page.inventory
     if selected == nil then return end
 
-    local bs = page.buttonSize
-    if bs == nil or bs <= 0 then return end
-    local bar = math.max(2, math.floor(bs * 0.075 + 0.5))
-    local px = panel.x or 0
+    local buttonSize = page.buttonSize
+    if buttonSize == nil or buttonSize <= 0 then return end
+    local bar = math.max(2, math.floor(buttonSize * 0.075 + 0.5))
+    local panelX = panel.x or 0
 
-    local left = px == 0
-    local x = left and (px + bs - bar) or px
+    local left = panelX == 0
+    local x = left and (panelX + buttonSize - bar) or panelX
 
     local columnTop = panel.y or 0
     local columnBottom = columnTop + (panel.height or 0)
     for i = 1, #buttons do
-        local b = buttons[i]
-        if b ~= nil and b.inventory == selected and b.getY ~= nil then
-            local by = buttonTopOnPage(panel, b)
-            local bh = b:getHeight()
+        local button = buttons[i]
+        if button ~= nil and button.inventory == selected
+                and button.getY ~= nil then
+            local buttonTop = buttonTopOnPage(panel, button)
+            local buttonHeight = button:getHeight()
 
-            if by + bh > columnTop and by < columnBottom then
-                page:drawRect(x, by + 1, bar, math.max(1, bh - 2), 1,
-                    sf.accent.r, sf.accent.g, sf.accent.b)
+            if buttonTop + buttonHeight > columnTop and buttonTop < columnBottom then
+                page:drawRect(x, buttonTop + 1, bar, math.max(1, buttonHeight - 2),
+                    1, surface.accent.r, surface.accent.g, surface.accent.b)
             end
         end
     end
@@ -317,11 +335,16 @@ end
 local styled = {}
 
 local function repaintChrome(page)
-    local sf = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
-    if sf == nil or page == nil then return end
-    local bg, bo = page.backgroundColor, page.borderColor
-    if bg ~= nil then bg.r, bg.g, bg.b = sf.bg.r, sf.bg.g, sf.bg.b end
-    if bo ~= nil then bo.r, bo.g, bo.b = sf.line.r, sf.line.g, sf.line.b end
+    local surface = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
+    if surface == nil or page == nil then return end
+    local body, border = page.backgroundColor, page.borderColor
+    if body ~= nil then
+        body.r, body.g, body.b = surface.bg.r, surface.bg.g, surface.bg.b
+    end
+    if border ~= nil then
+        border.r, border.g, border.b = surface.line.r, surface.line.g,
+            surface.line.b
+    end
 
     local tex = Draw ~= nil and Draw.titlebarTexture ~= nil
         and Draw.titlebarTexture() or nil
@@ -342,23 +365,27 @@ end
 
 function WindowChrome.applyTo(page)
     if page._comfyChrome then return end
-    local sf = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
-    if sf == nil then return end
+    local surface = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
+    if surface == nil then return end
 
-    local bg, bo = page.backgroundColor, page.borderColor
+    local body, border = page.backgroundColor, page.borderColor
     page._comfyChromeSaved = {
-        bg = bg ~= nil and { r = bg.r, g = bg.g, b = bg.b, a = bg.a } or nil,
-        border = bo ~= nil and { r = bo.r, g = bo.g, b = bo.b, a = bo.a } or nil,
+        bg = body ~= nil and { r = body.r, g = body.g, b = body.b, a = body.a }
+            or nil,
+        border = border ~= nil
+            and { r = border.r, g = border.g, b = border.b, a = border.a } or nil,
         titlebar = page.titlebarbkg,
         statusbar = page.statusbarbkg,
         resizeimage = page.resizeimage,
         titleBarHeight = rawget(page, "titleBarHeight"),
     }
 
-    local ba = bg ~= nil and bg.a or 0.8
-    local boa = bo ~= nil and bo.a or 1
-    page.backgroundColor = { r = sf.bg.r, g = sf.bg.g, b = sf.bg.b, a = ba }
-    page.borderColor = { r = sf.line.r, g = sf.line.g, b = sf.line.b, a = boa }
+    local bodyAlpha = body ~= nil and body.a or 0.8
+    local borderAlpha = border ~= nil and border.a or 1
+    page.backgroundColor = { r = surface.bg.r, g = surface.bg.g,
+        b = surface.bg.b, a = bodyAlpha }
+    page.borderColor = { r = surface.line.r, g = surface.line.g,
+        b = surface.line.b, a = borderAlpha }
 
     local tex = Draw ~= nil and Draw.titlebarTexture ~= nil
         and Draw.titlebarTexture() or nil
@@ -446,24 +473,27 @@ function WindowChrome.restore(page)
 end
 
 function WindowChrome.styleButtons(page)
-    local sf = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
+    local surface = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
     local buttons = page ~= nil and page.backpacks or nil
-    if sf == nil or type(buttons) ~= "table" then return end
+    if surface == nil or type(buttons) ~= "table" then return end
     local selected = page.inventory
     for i = 1, #buttons do
-        local b = buttons[i]
-        if b ~= nil and b.setBackgroundRGBA ~= nil then
-            if b.inventory == selected then
+        local button = buttons[i]
+        if button ~= nil and button.setBackgroundRGBA ~= nil then
+            if button.inventory == selected then
 
-                b:setBackgroundRGBA(sf.cardHi.r, sf.cardHi.g, sf.cardHi.b, 1)
-                b:setBorderRGBA(sf.accent.r, sf.accent.g, sf.accent.b, 0.9)
+                button:setBackgroundRGBA(surface.cardHi.r, surface.cardHi.g,
+                    surface.cardHi.b, 1)
+                button:setBorderRGBA(surface.accent.r, surface.accent.g,
+                    surface.accent.b, 0.9)
             else
-                b:setBackgroundRGBA(0, 0, 0, 0)
-                b:setBorderRGBA(sf.line.r, sf.line.g, sf.line.b, 0.45)
+                button:setBackgroundRGBA(0, 0, 0, 0)
+                button:setBorderRGBA(surface.line.r, surface.line.g,
+                    surface.line.b, 0.45)
             end
-            if b.setBackgroundColorMouseOverRGBA ~= nil then
-                b:setBackgroundColorMouseOverRGBA(sf.card.r, sf.card.g,
-                    sf.card.b, 1)
+            if button.setBackgroundColorMouseOverRGBA ~= nil then
+                button:setBackgroundColorMouseOverRGBA(surface.card.r,
+                    surface.card.g, surface.card.b, 1)
             end
         end
     end

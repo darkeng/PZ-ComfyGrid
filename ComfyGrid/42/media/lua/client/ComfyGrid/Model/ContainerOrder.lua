@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -24,25 +24,27 @@ ContainerOrder.SELF_KEY = "self"
 function ContainerOrder.keyFor(inventory, playerObj)
     if inventory == nil then return nil end
     if playerObj ~= nil then
-        local okI, own = pcall(playerObj.getInventory, playerObj)
-        if okI and own == inventory then return ContainerOrder.SELF_KEY end
+        local okInventory, ownInventory = pcall(playerObj.getInventory, playerObj)
+        if okInventory and ownInventory == inventory then
+            return ContainerOrder.SELF_KEY
+        end
     end
-    local okC, item = pcall(inventory.getContainingItem, inventory)
-    if not okC or item == nil then return nil end
-    local okT, full = pcall(item.getFullType, item)
-    if not okT or full == nil then return nil end
-    return full
+    local okContaining, item = pcall(inventory.getContainingItem, inventory)
+    if not okContaining or item == nil then return nil end
+    local okFullType, fullType = pcall(item.getFullType, item)
+    if not okFullType or fullType == nil then return nil end
+    return fullType
 end
 
 local function seedClass(inventory, playerObj)
     if playerObj == nil then return 1 end
-    local okI, own = pcall(playerObj.getInventory, playerObj)
-    if okI and own == inventory then return 0 end
+    local okInventory, ownInventory = pcall(playerObj.getInventory, playerObj)
+    if okInventory and ownInventory == inventory then return 0 end
     if playerObj.isHandItem == nil then return 1 end
-    local okC, item = pcall(inventory.getContainingItem, inventory)
-    if not okC or item == nil then return 1 end
-    local okH, held = pcall(playerObj.isHandItem, playerObj, item)
-    if okH and held == true then return 2 end
+    local okContaining, item = pcall(inventory.getContainingItem, inventory)
+    if not okContaining or item == nil then return 1 end
+    local okHeld, held = pcall(playerObj.isHandItem, playerObj, item)
+    if okHeld and held == true then return 2 end
     return 1
 end
 
@@ -52,80 +54,72 @@ end
 
 function ContainerOrder.isPinned(inventory, playerObj, playerNum)
     if inventory == nil then return false end
-    local Settings = ComfyGrid.Settings
-    local layout = Settings ~= nil and Settings.get ~= nil
-        and Settings.get("PLAYER_LAYOUT") or nil
-    if layout ~= "compact" then return false end
-
-    if ContainerOrder.isMain(inventory, playerObj) then return false end
-    local Capacity = ComfyGrid.Model and ComfyGrid.Model.Capacity
     local Plan = ComfyGrid.Model and ComfyGrid.Model.SectionPlan
-    if Capacity == nil or Plan == nil then return false end
-    local ok, slots = pcall(Capacity.slotsFor, inventory, playerNum)
-    if not ok or slots == nil then return false end
-    return slots <= Plan.POCKET_MAX_SLOTS
+    if Plan == nil or Plan.isPocket == nil then return false end
+    return Plan.isPocket(inventory, playerObj, playerNum)
 end
 
-local memo = {}
+local storedKeysByPlayer = {}
 
 local function prefKey(playerNum)
     return "ComfyOrder" .. tostring(playerNum or 0)
 end
 
 function ContainerOrder.get(playerNum)
-    local list = memo[playerNum or 0]
-    if list == nil then
-        list = {}
+    local storedKeys = storedKeysByPlayer[playerNum or 0]
+    if storedKeys == nil then
+        storedKeys = {}
         local raw = Prefs.get(prefKey(playerNum))
         if type(raw) == "string" and raw ~= "" then
-            for part in string.gmatch(raw, "[^|]+") do
-                list[#list + 1] = part
+            for storedKey in string.gmatch(raw, "[^|]+") do
+                storedKeys[#storedKeys + 1] = storedKey
             end
         end
-        memo[playerNum or 0] = list
+        storedKeysByPlayer[playerNum or 0] = storedKeys
     end
-    return list
+    return storedKeys
 end
 
 function ContainerOrder.set(playerNum, keys)
-    local copy, seen = {}, {}
+    local uniqueKeys, seen = {}, {}
     for i = 1, #keys do
-        local k = keys[i]
+        local key = keys[i]
 
-        if type(k) == "string" and k ~= "" and not seen[k] then
-            seen[k] = true
-            copy[#copy + 1] = k
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            uniqueKeys[#uniqueKeys + 1] = key
         end
     end
-    memo[playerNum or 0] = copy
-    Prefs.set(prefKey(playerNum), table.concat(copy, "|"))
+    storedKeysByPlayer[playerNum or 0] = uniqueKeys
+    Prefs.set(prefKey(playerNum), table.concat(uniqueKeys, "|"))
 end
 
-function ContainerOrder.clear(playerNum)
-    ContainerOrder.set(playerNum, {})
+local sequenceByPage = setmetatable({}, { __mode = "k" })
+
+local rankScratch = {}
+
+local function byRankThenIndex(entryA, entryB)
+    if entryA.rank ~= entryB.rank then return entryA.rank < entryB.rank end
+    return entryA.index < entryB.index
 end
-
-local seq = setmetatable({}, { __mode = "k" })
-
-local scratch = {}
 
 function ContainerOrder.sequenceFor(page)
     if page == nil then return nil end
-    local s = seq[page]
-    if s == nil then return nil end
+    local sequence = sequenceByPage[page]
+    if sequence == nil then return nil end
 
-    if type(page.backpacks) ~= "table" or #s ~= #page.backpacks then
+    if type(page.backpacks) ~= "table" or #sequence ~= #page.backpacks then
         return nil
     end
-    return s
+    return sequence
 end
 
 function ContainerOrder.layout(page, floatIndex, floatY)
-    local s = seq[page]
+    local sequence = sequenceByPage[page]
     local size = page.buttonSize or 0
-    if s == nil or size <= 0 then return end
-    for i = 1, #s do
-        local button = s[i]
+    if sequence == nil or size <= 0 then return end
+    for i = 1, #sequence do
+        local button = sequence[i]
         if button ~= nil then
 
             local y = (i == floatIndex) and floatY or (((i - 1) * size) - 1)
@@ -135,35 +129,37 @@ function ContainerOrder.layout(page, floatIndex, floatY)
 
     local panel = page.containerButtonPanel
     if panel ~= nil and panel.setScrollHeight ~= nil then
-        panel:setScrollHeight(#s * size - 1)
+        panel:setScrollHeight(#sequence * size - 1)
     end
 end
 
 function ContainerOrder.apply(page)
     if page == nil then return false end
-    local list = page.backpacks
+    local buttons = page.backpacks
     local pane = page.inventoryPane
 
-    if page.onCharacter ~= true or type(list) ~= "table" or #list < 2
+    if page.onCharacter ~= true or type(buttons) ~= "table" or #buttons < 2
             or pane == nil or pane.mode ~= "comfy" then
-        seq[page] = nil
+        sequenceByPage[page] = nil
         return false
     end
 
     local playerObj = getSpecificPlayer(page.player)
     local placed = ContainerOrder.get(page.player)
-    local pos = nil
+    local storedIndexByKey = nil
     if #placed > 0 then
-        pos = {}
+        storedIndexByKey = {}
         for i = 1, #placed do
-            if pos[placed[i]] == nil then pos[placed[i]] = i end
+            if storedIndexByKey[placed[i]] == nil then
+                storedIndexByKey[placed[i]] = i
+            end
         end
     end
 
-    local n = #list
-    for i = n + 1, #scratch do scratch[i] = nil end
-    for i = 1, n do
-        local button = list[i]
+    local buttonCount = #buttons
+    for i = buttonCount + 1, #rankScratch do rankScratch[i] = nil end
+    for i = 1, buttonCount do
+        local button = buttons[i]
         local inv = button ~= nil and button.inventory or nil
         local rank = UNPLACED + 1
         if inv ~= nil then
@@ -172,67 +168,64 @@ function ContainerOrder.apply(page)
                 rank = -1
             else
                 rank = UNPLACED + seedClass(inv, playerObj)
-                if pos ~= nil then
+                if storedIndexByKey ~= nil then
                     local key = ContainerOrder.keyFor(inv, playerObj)
-                    local at = key ~= nil and pos[key] or nil
-                    if at ~= nil then rank = at end
+                    local storedIndex = key ~= nil and storedIndexByKey[key] or nil
+                    if storedIndex ~= nil then rank = storedIndex end
                 end
             end
         end
-        local e = scratch[i]
-        if e == nil then
-            e = {}
-            scratch[i] = e
+        local rankEntry = rankScratch[i]
+        if rankEntry == nil then
+            rankEntry = {}
+            rankScratch[i] = rankEntry
         end
-        e.button, e.rank, e.index = button, rank, i
+        rankEntry.button, rankEntry.rank, rankEntry.index = button, rank, i
     end
 
-    table.sort(scratch, function(a, b)
-        if a.rank ~= b.rank then return a.rank < b.rank end
-        return a.index < b.index
-    end)
+    table.sort(rankScratch, byRankThenIndex)
 
-    local s = seq[page]
-    if s == nil then
-        s = {}
-        seq[page] = s
+    local sequence = sequenceByPage[page]
+    if sequence == nil then
+        sequence = {}
+        sequenceByPage[page] = sequence
     end
-    for i = #s, n + 1, -1 do s[i] = nil end
+    for i = #sequence, buttonCount + 1, -1 do sequence[i] = nil end
     local moved = false
-    for i = 1, n do
-        s[i] = scratch[i].button
-        if scratch[i].index ~= i then moved = true end
+    for i = 1, buttonCount do
+        sequence[i] = rankScratch[i].button
+        if rankScratch[i].index ~= i then moved = true end
     end
     ContainerOrder.layout(page)
     return moved
 end
 
 function ContainerOrder.preview(page, inv, target)
-    local s = ContainerOrder.sequenceFor(page)
-    if s == nil then return nil end
-    local at = nil
-    for i = 1, #s do
-        if s[i] ~= nil and s[i].inventory == inv then
-            at = i
+    local sequence = ContainerOrder.sequenceFor(page)
+    if sequence == nil then return nil end
+    local currentIndex = nil
+    for i = 1, #sequence do
+        if sequence[i] ~= nil and sequence[i].inventory == inv then
+            currentIndex = i
             break
         end
     end
-    if at == nil then return nil end
+    if currentIndex == nil then return nil end
 
     local playerObj = getSpecificPlayer(page.player)
-    local lo = 1
-    while lo <= #s and s[lo] ~= nil
-            and ContainerOrder.isPinned(s[lo].inventory, playerObj,
-                page.player) do
-        lo = lo + 1
+    local firstMovable = 1
+    while firstMovable <= #sequence and sequence[firstMovable] ~= nil
+            and ContainerOrder.isPinned(sequence[firstMovable].inventory,
+                playerObj, page.player) do
+        firstMovable = firstMovable + 1
     end
-    if target < lo then target = lo end
-    if target > #s then target = #s end
-    if target ~= at then
-        table.insert(s, target, table.remove(s, at))
-        at = target
+    if target < firstMovable then target = firstMovable end
+    if target > #sequence then target = #sequence end
+    if target ~= currentIndex then
+        table.insert(sequence, target, table.remove(sequence, currentIndex))
+        currentIndex = target
     end
-    return at
+    return currentIndex
 end
 
 function ContainerOrder.commit(page)
@@ -242,26 +235,26 @@ function ContainerOrder.commit(page)
 end
 
 function ContainerOrder.indexOf(page, inv)
-    local s = ContainerOrder.sequenceFor(page)
-    if s == nil then return nil end
-    for i = 1, #s do
-        if s[i] ~= nil and s[i].inventory == inv then return i end
+    local sequence = ContainerOrder.sequenceFor(page)
+    if sequence == nil then return nil end
+    for i = 1, #sequence do
+        if sequence[i] ~= nil and sequence[i].inventory == inv then return i end
     end
     return nil
 end
 
 function ContainerOrder.keysOf(page)
-    local out = {}
-    local s = ContainerOrder.sequenceFor(page)
-    if s == nil then return out end
+    local keys = {}
+    local sequence = ContainerOrder.sequenceFor(page)
+    if sequence == nil then return keys end
     local playerObj = getSpecificPlayer(page.player)
-    for i = 1, #s do
-        local b = s[i]
-        local key = b ~= nil and ContainerOrder.keyFor(b.inventory, playerObj)
-            or nil
-        if key ~= nil then out[#out + 1] = key end
+    for i = 1, #sequence do
+        local button = sequence[i]
+        local key = button ~= nil
+            and ContainerOrder.keyFor(button.inventory, playerObj) or nil
+        if key ~= nil then keys[#keys + 1] = key end
     end
-    return out
+    return keys
 end
 
 Events.OnRefreshInventoryWindowContainers.Add(function(page, stage)

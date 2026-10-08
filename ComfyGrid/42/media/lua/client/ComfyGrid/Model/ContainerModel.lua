@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -42,7 +42,7 @@ local GOLDEN_FRACTION = 0.6180339887498949
 local modelSerial = 0
 
 local function newModel(inventory, playerNum, isPlayerMain)
-    local self = setmetatable({
+    local model = setmetatable({
         inventory = inventory,
         playerNum = playerNum,
         isPlayerMain = isPlayerMain == true,
@@ -52,17 +52,17 @@ local function newModel(inventory, playerNum, isPlayerMain)
         lastRefreshMs = 0,
     }, ContainerModel)
 
-    if not self.isPlayerMain then
+    if not model.isPlayerMain then
         modelSerial = modelSerial + 1
-        local phase = (modelSerial * GOLDEN_FRACTION) % 1
-        self.phaseMs = math.floor(phase * OTHER_REFRESH_MS)
+        local phaseFraction = (modelSerial * GOLDEN_FRACTION) % 1
+        model.phaseMs = math.floor(phaseFraction * OTHER_REFRESH_MS)
     end
-    self:refresh(true)
+    model:refresh(true)
 
-    if self.phaseMs ~= nil then
-        self.lastRefreshMs = self.lastRefreshMs - self.phaseMs
+    if model.phaseMs ~= nil then
+        model.lastRefreshMs = model.lastRefreshMs - model.phaseMs
     end
-    return self
+    return model
 end
 
 function ContainerModel:shouldRefresh()
@@ -80,6 +80,10 @@ function ContainerModel:pollIntervalAt(now)
         return PLAYER_REFRESH_MS
     end
     return PLAYER_IDLE_REFRESH_MS
+end
+
+function ContainerModel:armPublishOnArrival(itemId)
+    self.publishOnArrival = { id = itemId, ms = getTimestampMs() }
 end
 
 function ContainerModel:markViewed()
@@ -113,14 +117,14 @@ function ContainerModel:refresh(force)
         Persistence.queueSync(self.inventory)
     end
 
-    local pending = self.publishOnArrival
-    if pending ~= nil then
+    local arrivalPublish = self.publishOnArrival
+    if arrivalPublish ~= nil then
         local okItem, item = pcall(self.inventory.getItemWithID, self.inventory,
-            pending.id)
+            arrivalPublish.id)
         if okItem and item ~= nil then
             self.publishOnArrival = nil
             Persistence.queueSync(self.inventory)
-        elseif getTimestampMs() - pending.ms > PUBLISH_ON_ARRIVAL_TTL_MS then
+        elseif getTimestampMs() - arrivalPublish.ms > PUBLISH_ON_ARRIVAL_TTL_MS then
             self.publishOnArrival = nil
         end
     end

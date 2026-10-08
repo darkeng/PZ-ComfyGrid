@@ -1,12 +1,13 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/Core/Util"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/Interact/QuickMove"
 require "ComfyGrid/Interact/ContextMenu"
@@ -16,12 +17,11 @@ ComfyGrid.Interact = ComfyGrid.Interact or {}
 local PadPopup = {}
 ComfyGrid.Interact.PadPopup = PadPopup
 
+local Util = ComfyGrid.Core.Util
 local Style = ComfyGrid.UI.Style
 local QuickMove = ComfyGrid.Interact.QuickMove
 local ContextMenu = ComfyGrid.Interact.ContextMenu
 local PadCarry = ComfyGrid.Interact.PadCarry
-
-local BOARD_X = 4
 
 function PadPopup.focus(popup, page)
     if popup == nil then return end
@@ -43,14 +43,12 @@ function PadPopup.cursorFor(popup)
     return popup.padTile
 end
 
-function PadPopup._dir(popup, dx, dy)
-    local n = popup.tiles ~= nil and #popup.tiles or 0
-    if n < 1 then return end
+local function onDirPress(popup, dx, dy)
+    local tileCount = popup.tiles ~= nil and #popup.tiles or 0
+    if tileCount < 1 then return end
     local cols = popup.cols or 1
     local rows = popup.rowsTotal or 1
-    local slot = popup.padTile or 0
-    if slot >= n then slot = n - 1 end
-    if slot < 0 then slot = 0 end
+    local slot = Util.clamp(popup.padTile or 0, 0, tileCount - 1)
     local col = slot % cols
     local row = math.floor(slot / cols)
     local ncol = col + dx
@@ -60,26 +58,26 @@ function PadPopup._dir(popup, dx, dy)
     if nrow < 0 then nrow = 0 end
     if nrow > rows - 1 then nrow = rows - 1 end
     local nslot = nrow * cols + ncol
-    if nslot >= n then nslot = n - 1 end
+    if nslot >= tileCount then nslot = tileCount - 1 end
     popup.padTile = nslot
 
     if popup.yOffset ~= nil then
-        local stride = Style.CELL_STRIDE or 46
+        local stride = Style.CELL_STRIDE
         local cell = Style.CELL or 45
         local rowTop = math.floor(nslot / cols) * stride
-        local bh = (popup.height or 0) - (popup.titleH or 0) - 4
-        local off = popup.yOffset
-        if rowTop < off then
-            off = rowTop
-        elseif rowTop + cell > off + bh then
-            off = rowTop + cell - bh
+        local boardHeight = popup:padVisibleBoardHeight()
+        local scrollOffset = popup.yOffset
+        if rowTop < scrollOffset then
+            scrollOffset = rowTop
+        elseif rowTop + cell > scrollOffset + boardHeight then
+            scrollOffset = rowTop + cell - boardHeight
         end
-        if off < 0 then off = 0 end
-        popup.yOffset = off
+        if scrollOffset < 0 then scrollOffset = 0 end
+        popup.yOffset = scrollOffset
     end
 end
 
-function PadPopup._button(popup, button)
+local function onButtonPress(popup, button)
     local seat = popup.playerNum or 0
     if button == Joypad.BButton then
 
@@ -133,13 +131,12 @@ function PadPopup._button(popup, button)
             Input.quickMoveSeatSelections(popup._padReturnPage, seat, nil)
         end
     elseif button == Joypad.YButton then
-        local cols = popup.cols or 1
-        local px, py = Style.pixelForSlot(idx, cols)
-        local cell = Style.CELL or 45
-        local off = popup.yOffset or 0
+
+        local tileX, tileY = popup:padTileXY(idx)
+        local cell = Style.CELL
         ContextMenu.openForItems(seat, { item },
-            popup:getAbsoluteX() + BOARD_X + px + cell,
-            popup:getAbsoluteY() + (popup.titleH or 18) + py - off + cell,
+            popup:getAbsoluteX() + tileX + cell,
+            popup:getAbsoluteY() + tileY + cell,
             popup)
     end
 end
@@ -148,19 +145,19 @@ function PadPopup.attach(popupClass)
 
     popupClass.disableJoypadNavigation = true
     function popupClass:onJoypadDown(button, _joypadData)
-        PadPopup._button(self, button)
+        onButtonPress(self, button)
     end
     function popupClass:onJoypadDirUp(_joypadData)
-        PadPopup._dir(self, 0, -1)
+        onDirPress(self, 0, -1)
     end
     function popupClass:onJoypadDirDown(_joypadData)
-        PadPopup._dir(self, 0, 1)
+        onDirPress(self, 0, 1)
     end
     function popupClass:onJoypadDirLeft(_joypadData)
-        PadPopup._dir(self, -1, 0)
+        onDirPress(self, -1, 0)
     end
     function popupClass:onJoypadDirRight(_joypadData)
-        PadPopup._dir(self, 1, 0)
+        onDirPress(self, 1, 0)
     end
 end
 

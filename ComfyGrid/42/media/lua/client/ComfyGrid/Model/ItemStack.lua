@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -60,9 +60,9 @@ function ItemStack.canAdd(stack, item)
         and stack.count < StackRules.maxStackOf(item)
 end
 
-function ItemStack.canAddPrecomputed(stack, fullType, bucket, maxStack)
+function ItemStack.canAddPrecomputed(stack, identity, bucket, maxStack)
     if stack.count == 0 then return false end
-    return stack.itemType == fullType
+    return stack.itemType == identity
         and stack.bucket == bucket
         and stack.count < maxStack
 end
@@ -129,19 +129,9 @@ function ItemStack.weightOf(stack, inventory)
     for id in pairs(stack.itemIDs) do
         local item = inventory:getItemWithID(id)
         if item ~= nil and item.getUnequippedWeight ~= nil then
-            local ok, w = pcall(item.getUnequippedWeight, item)
-            if ok and type(w) == "number" then total = total + w end
+            local ok, itemWeight = pcall(item.getUnequippedWeight, item)
+            if ok and type(itemWeight) == "number" then total = total + itemWeight end
         end
     end
     return total
-end
-
-function ItemStack.split(stack, n)
-    local ids = {}
-    if not n or n <= 0 then return ids end
-    for id in pairs(stack.itemIDs) do
-        ids[#ids + 1] = id
-        if #ids >= n then break end
-    end
-    return ids
 end

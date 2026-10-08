@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,17 +10,18 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Model/ContainerOrder"
 require "ComfyGrid/Settings"
+require "ComfyGrid/Interact/DragAndDrop"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Interact = ComfyGrid.Interact or {}
 local ContainerDrag = {}
 ComfyGrid.Interact.ContainerDrag = ContainerDrag
 
 local Log = ComfyGrid.Core.Log
-local Order = ComfyGrid.Model.ContainerOrder
+local ContainerOrder = ComfyGrid.Model.ContainerOrder
 
-local THRESHOLD = 8
+local THRESHOLD = ComfyGrid.Interact.DragAndDrop.DRAG_THRESHOLD_PX
 
-local drag = nil
+local reorderGesture = nil
 
 local suppressClick = false
 
@@ -31,33 +32,34 @@ local function comfyPlayerPage(page)
     return type(page.backpacks) == "table" and #page.backpacks > 1
 end
 
-local function movable(inv, playerNum)
-    if inv == nil then return false end
-    return not Order.isPinned(inv, getSpecificPlayer(playerNum), playerNum)
+local function movable(container, playerNum)
+    if container == nil then return false end
+    return not ContainerOrder.isPinned(container, getSpecificPlayer(playerNum),
+        playerNum)
 end
 
 function ContainerDrag.arm(page, button)
-    drag = nil
+    reorderGesture = nil
 
     suppressClick = false
     if not comfyPlayerPage(page) then return end
 
     if ISMouseDrag ~= nil and ISMouseDrag.dragging ~= nil then return end
-    local inv = button ~= nil and button.inventory or nil
-    if inv == nil or not movable(inv, page.player) then return end
-    local at = Order.indexOf(page, inv)
-    if at == nil then return end
-    drag = {
+    local container = button ~= nil and button.inventory or nil
+    if container == nil or not movable(container, page.player) then return end
+    local index = ContainerOrder.indexOf(page, container)
+    if index == nil then return end
+    reorderGesture = {
         page = page,
-        inv = inv,
-        anchor = at,
+        container = container,
+        anchor = index,
         startY = getMouseY(),
         active = false,
     }
 end
 
-function ContainerDrag.isActive()
-    return drag ~= nil and drag.active == true
+local function isActive()
+    return reorderGesture ~= nil and reorderGesture.active == true
 end
 
 function ContainerDrag.consumeClick()
@@ -65,53 +67,51 @@ function ContainerDrag.consumeClick()
         suppressClick = false
         return true
     end
-    return ContainerDrag.isActive()
-end
-
-local function commit(page)
-    Order.commit(page)
+    return isActive()
 end
 
 function ContainerDrag.update(page)
-    if drag == nil or drag.page ~= page then return end
+    local gesture = reorderGesture
+    if gesture == nil or gesture.page ~= page then return end
 
     if not comfyPlayerPage(page) then
-        drag = nil
+        reorderGesture = nil
         return
     end
 
-    local down = isMouseButtonDown ~= nil and isMouseButtonDown(0) or false
-    local at = Order.indexOf(page, drag.inv)
-    if at == nil then
+    local buttonHeld = isMouseButtonDown ~= nil and isMouseButtonDown(0) or false
+    local index = ContainerOrder.indexOf(page, gesture.container)
+    if index == nil then
 
-        drag = nil
+        reorderGesture = nil
         return
     end
 
-    if not down then
-        if drag.active then
+    if not buttonHeld then
+        if gesture.active then
             suppressClick = true
-            local ok, err = pcall(commit, page)
+
+            local ok, err = pcall(ContainerOrder.commit, page)
             if not ok then
                 Log.warn("ContainerDrag: commit failed: " .. tostring(err))
-                Order.apply(page)
+                ContainerOrder.apply(page)
             end
         end
-        drag = nil
+        reorderGesture = nil
         return
     end
 
     local size = page.buttonSize or 0
     if size <= 0 then return end
-    local dy = getMouseY() - drag.startY
-    if not drag.active then
+    local dy = getMouseY() - gesture.startY
+    if not gesture.active then
         if dy > -THRESHOLD and dy < THRESHOLD then return end
-        drag.active = true
+        gesture.active = true
     end
 
-    at = Order.preview(page, drag.inv,
-        drag.anchor + math.floor(dy / size + 0.5)) or at
-    Order.layout(page, at, ((drag.anchor - 1) * size) - 1 + dy)
+    index = ContainerOrder.preview(page, gesture.container,
+        gesture.anchor + math.floor(dy / size + 0.5)) or index
+    ContainerOrder.layout(page, index, ((gesture.anchor - 1) * size) - 1 + dy)
 end
 
 Events.OnGameBoot.Add(function()

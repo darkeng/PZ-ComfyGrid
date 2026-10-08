@@ -1,38 +1,37 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
-require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Model/Equipment"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Chrome/SectionRule"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/Model/ItemSearch"
 require "ComfyGrid/UI/StackRenderer"
+require "ComfyGrid/UI/StripGestures"
 require "ComfyGrid/Interact/DragAndDrop"
-require "ComfyGrid/Interact/Transfer"
 require "ComfyGrid/Interact/Unequip"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
 local Log = ComfyGrid.Core.Log
 local Text = ComfyGrid.Core.Text
-local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local Equipment = ComfyGrid.Model.Equipment
 local Style = ComfyGrid.UI.Style
 local SectionRule = ComfyGrid.UI.Chrome.SectionRule
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local ItemSearch = ComfyGrid.Model.ItemSearch
 local StackRenderer = ComfyGrid.UI.StackRenderer
+local StripGestures = ComfyGrid.UI.StripGestures
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
-local Transfer = ComfyGrid.Interact.Transfer
 local Unequip = ComfyGrid.Interact.Unequip
 
 local EquipmentStrip = ISUIElement:derive("ComfyEquipStrip")
@@ -41,6 +40,7 @@ ComfyGrid.UI.EquipmentStrip = EquipmentStrip
 local MIN_COLS = 2
 
 local ROW_GAP = 4
+EquipmentStrip.ROW_GAP = ROW_GAP
 
 local ANCHORS = {
     { key = "Face",      col = "l", y = 0.00, dy = -1 },
@@ -59,9 +59,6 @@ local POPUP_SIDE = { l = "right", c = "right", r = "left" }
 
 local DRAWER_ROWS = 2
 local DRAWER_SLOTS = 10
-
-local DEFAULT_BG = { r = 0.09, g = 0.09, b = 0.11, a = 0.85 }
-local LABEL = { r = 0.62, g = 0.62, b = 0.68, a = 0.9 }
 
 local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0 }
 
@@ -87,10 +84,11 @@ local function hoverLabelFor(key)
         local label = Text.tr("IGUI_ComfyGrid_Slot" .. key,
             Equipment.displayNameFor(key) or key)
         local width = 0
-        local tm = getTextManager and getTextManager() or nil
-        if tm ~= nil and Style.FONT ~= nil then
-            local ok, w = pcall(tm.MeasureStringX, tm, Style.FONT, label)
-            width = ok and w or 0
+        local textManager = getTextManager and getTextManager() or nil
+        if textManager ~= nil and Style.FONT ~= nil then
+            local ok, measured = pcall(textManager.MeasureStringX, textManager,
+                Style.FONT, label)
+            width = ok and measured or 0
         end
         info = { label = label, width = width }
         hoverLabelCache[key] = info
@@ -98,9 +96,29 @@ local function hoverLabelFor(key)
     return info
 end
 
+local countTextCache = {}
+local countWidthCache = {}
+local function countLabelFor(count)
+    local text = countTextCache[count]
+    if text ~= nil then return text, countWidthCache[count] end
+    text = tostring(count)
+    local countWidth = 0
+    local textManager = getTextManager and getTextManager() or nil
+    if textManager ~= nil then
+        local ok, measured = pcall(textManager.MeasureStringX, textManager,
+            Style.FONT, text)
+        countWidth = ok and measured or 0
+        countTextCache[count] = text
+        countWidthCache[count] = countWidth
+    end
+    return text, countWidth
+end
+
 Style.onScaleChanged(function()
-    for k in pairs(labelCache) do labelCache[k] = nil end
-    for k in pairs(hoverLabelCache) do hoverLabelCache[k] = nil end
+    for key in pairs(labelCache) do labelCache[key] = nil end
+    for key in pairs(hoverLabelCache) do hoverLabelCache[key] = nil end
+    for count in pairs(countTextCache) do countTextCache[count] = nil end
+    for count in pairs(countWidthCache) do countWidthCache[count] = nil end
 end)
 
 local GHOST_ITEMS = {
@@ -127,8 +145,8 @@ local function ghostTexFor(key)
     if fullType ~= nil and instanceItem ~= nil then
         local ok, item = pcall(instanceItem, fullType)
         if ok and item ~= nil and item.getTex ~= nil then
-            local okT, t = pcall(item.getTex, item)
-            if okT then tex = t end
+            local textureRead, texture = pcall(item.getTex, item)
+            if textureRead then tex = texture end
         end
     end
     ghostTexCache[key] = tex or false
@@ -173,6 +191,7 @@ function EquipmentStrip:new(x, y, playerNum)
     o.playerNum = playerNum or 0
     o.entries = {}
     o.entryCount = 0
+
     o.availWidth = nil
     o.cols = MIN_COLS
     o.rows = 1
@@ -185,9 +204,7 @@ function EquipmentStrip:new(x, y, playerNum)
     o.drawerKey = nil
     o.drawerPool = {}
     o.drawerY = 0
-    o.drawerCount = 0
     o.hoverIdx = nil
-    o.sizeDirty = false
     o.pressedIdx = nil
     o.pressedId = nil
     o.dragDidStart = false
@@ -206,12 +223,12 @@ function EquipmentStrip:setLayout(mode)
 end
 
 function EquipmentStrip:setFigureBox(x, y, w, h)
-    local f = self.figure
-    if f == nil then
-        f = {}
-        self.figure = f
+    local figureBox = self.figure
+    if figureBox == nil then
+        figureBox = {}
+        self.figure = figureBox
     end
-    f.x, f.y, f.w, f.h = x, y, w, h
+    figureBox.x, figureBox.y, figureBox.w, figureBox.h = x, y, w, h
 end
 
 function EquipmentStrip.anchorsTop()
@@ -235,30 +252,35 @@ function EquipmentStrip.anchorsHeight(figureH, trayRows, width)
         + Style.FONT_H + EquipmentStrip.drawerRows(width) * Style.CELL_STRIDE + 1
 end
 
+local minFigureHeightStride = false
+local minFigureHeightAnswer = nil
 function EquipmentStrip.minFigureHeight()
     local stride = Style.CELL_STRIDE
-    local need = 0
+    if stride == minFigureHeightStride then return minFigureHeightAnswer end
+    local requiredHeight = 0
     for i = 1, #ANCHORS do
         for j = 1, #ANCHORS do
-            local a, b = ANCHORS[i], ANCHORS[j]
-            if a.col == b.col and b.y > a.y then
-                local tiles = (b.dy or 0) - (a.dy or 0)
+            local upper, lower = ANCHORS[i], ANCHORS[j]
+            if upper.col == lower.col and lower.y > upper.y then
+                local tiles = (lower.dy or 0) - (upper.dy or 0)
                 if tiles < 1 then
-                    local h = stride * (1 - tiles) / (b.y - a.y)
-                    if h > need then need = h end
+                    local height = stride * (1 - tiles) / (lower.y - upper.y)
+                    if height > requiredHeight then requiredHeight = height end
                 end
             end
         end
     end
 
-    return math.ceil(need) + 1
+    minFigureHeightStride = stride
+    minFigureHeightAnswer = math.ceil(requiredHeight) + 1
+    return minFigureHeightAnswer
 end
 
 local function tileXY(self, idx)
     if self.layout == "anchors" then
-        local p = self.tilePos[idx + 1]
-        if p == nil then return 0, 0 end
-        return p.x, p.y
+        local pos = self.tilePos[idx + 1]
+        if pos == nil then return 0, 0 end
+        return pos.x, pos.y
     end
     return Style.pixelForSlot(idx, self.cols)
 end
@@ -283,8 +305,8 @@ end
 
 function EquipmentStrip:tileAnchor(groupKey)
     for i = 1, self.entryCount do
-        local e = self.entries[i]
-        if e ~= nil and e.key == groupKey then
+        local entry = self.entries[i]
+        if entry ~= nil and entry.key == groupKey then
             local x, y = tileXY(self, i - 1)
             local side = "below"
             if self.layout == "anchors" then
@@ -309,13 +331,21 @@ end
 
 local function pointDrawerAt(self, idx)
     if self.layout ~= "anchors" or idx == nil then return end
-    local e = self.entries[idx + 1]
-    if e ~= nil and e.key ~= nil then self.drawerKey = e.key end
+    local entry = self.entries[idx + 1]
+    if entry ~= nil and entry.key ~= nil then self.drawerKey = entry.key end
 end
 
 local function updateHover(self)
     self.hoverIdx = tileAt(self, self:getMouseX(), self:getMouseY())
     pointDrawerAt(self, self.hoverIdx)
+end
+
+local function itemAt(self, x, y)
+    local idx = tileAt(self, x, y)
+    if idx == nil then return nil end
+    local entry = self.entries[idx + 1]
+    local top = entry ~= nil and entry.items[1] or nil
+    return top, idx
 end
 
 function EquipmentStrip:padFocusChanged(idx)
@@ -332,86 +362,91 @@ end
 
 local function drawerEntry(self, group, slot, item)
     local pool = self.drawerPool
-    local e = pool[slot]
-    if e == nil then
-        e = { items = {} }
-        pool[slot] = e
+    local drawerSlotEntry = pool[slot]
+    if drawerSlotEntry == nil then
+        drawerSlotEntry = { items = {} }
+        pool[slot] = drawerSlotEntry
     end
-    local items = e.items
+    local items = drawerSlotEntry.items
     for j = #items, 1, -1 do items[j] = nil end
     items[1] = item
-    e.key = group.key
-    e.hand = group.hand
-    e.dynamic = group.dynamic
-    return e
+    drawerSlotEntry.key = group.key
+    drawerSlotEntry.hand = group.hand
+    drawerSlotEntry.dynamic = group.dynamic
+    return drawerSlotEntry
 end
 
-local function anchorEntry(self, n, group)
-    self.entries[n] = group
+local function anchorEntry(self, tileCount, group)
+    self.entries[tileCount] = group
     return group
 end
 
 local function groupFor(self, key)
     for i = 1, self.groupCount do
-        local g = self.groups[i]
-        if g.key == key then return g end
+        local group = self.groups[i]
+        if group.key == key then return group end
     end
     return nil
 end
 
-local function placeTile(self, n, x, y)
-    local pos = self.tilePos[n]
+local function placeTile(self, tileCount, x, y)
+    local pos = self.tilePos[tileCount]
     if pos == nil then
         pos = {}
-        self.tilePos[n] = pos
+        self.tilePos[tileCount] = pos
     end
     pos.x, pos.y = x, y
 end
 
-local function layoutAnchors(self, playerObj)
-    self.groupCount = Equipment.collect(playerObj, self.groups)
-    local stride = Style.CELL_STRIDE
-    local cell = Style.CELL
-    local f = self.figure
-    local w = self.availWidth or self.width
-    if f == nil then
+local FALLBACK_FIGURE = { x = 0, y = 0, w = 0, h = 0 }
 
-        f = { x = 0, y = 0, w = 0, h = math.max(cell, self.height) }
-    end
+local function anchorColumns(stripWidth, cell)
+    local leftColumnX = 0
+    local rightColumnX = stripWidth - cell
+    local centreColumnX = math.floor((stripWidth - cell) / 2)
 
-    local colL = 0
-    local colR = w - cell
-    local colC = math.floor((w - cell) / 2)
+    if rightColumnX < leftColumnX then rightColumnX = leftColumnX end
+    if centreColumnX < leftColumnX then centreColumnX = leftColumnX end
+    if centreColumnX > rightColumnX then centreColumnX = rightColumnX end
+    return leftColumnX, centreColumnX, rightColumnX
+end
 
-    if colR < colL then colR = colL end
-    if colC < colL then colC = colL end
-    if colC > colR then colC = colR end
-
-    local n = 0
+local function placeAnchorTiles(self, figureBox, stripWidth, stride, cell)
+    local leftColumnX, centreColumnX, rightColumnX =
+        anchorColumns(stripWidth, cell)
+    local tileCount = 0
     for i = 1, #ANCHORS do
-        local a = ANCHORS[i]
-        local g = groupFor(self, a.key)
+        local anchor = ANCHORS[i]
+        local group = groupFor(self, anchor.key)
 
-        if g ~= nil then
-            n = n + 1
-            anchorEntry(self, n, g)
-            local x = colC
-            if a.col == "l" then x = colL elseif a.col == "r" then x = colR end
-            local dy = (a.dy or 0) * stride
-            placeTile(self, n, x, f.y + math.floor(f.h * a.y + 0.5) + dy)
+        if group ~= nil then
+            tileCount = tileCount + 1
+            anchorEntry(self, tileCount, group)
+            local x = centreColumnX
+            if anchor.col == "l" then
+                x = leftColumnX
+            elseif anchor.col == "r" then
+                x = rightColumnX
+            end
+            local dy = (anchor.dy or 0) * stride
+            placeTile(self, tileCount, x,
+                figureBox.y + math.floor(figureBox.h * anchor.y + 0.5) + dy)
         end
     end
-    self.anchorCount = n
+    self.anchorCount = tileCount
+    return tileCount
+end
 
-    local trayY = f.y + f.h + ROW_GAP
-    local trayCols = math.max(1, math.floor((w - 1) / stride))
+local function placeTrayTiles(self, tileCount, figureBox, stripWidth, stride)
+    local trayY = figureBox.y + figureBox.h + ROW_GAP
+    local trayCols = columnsFor(stripWidth)
     local tray = 0
     for i = 1, self.groupCount do
-        local g = self.groups[i]
-        if g.dynamic then
-            n = n + 1
-            anchorEntry(self, n, g)
-            placeTile(self, n, (tray % trayCols) * stride,
+        local group = self.groups[i]
+        if group.dynamic then
+            tileCount = tileCount + 1
+            anchorEntry(self, tileCount, group)
+            placeTile(self, tileCount, (tray % trayCols) * stride,
                 trayY + math.floor(tray / trayCols) * stride)
             tray = tray + 1
         end
@@ -420,44 +455,71 @@ local function layoutAnchors(self, playerObj)
 
     self.trayRows = trayRows
     self.drawerY = trayY + trayRows * stride + (tray > 0 and ROW_GAP or 0)
+    return tileCount
+end
 
-    local shown = self.drawerKey ~= nil and groupFor(self, self.drawerKey)
+local function drawerGroupOf(self)
+    local drawerGroup = self.drawerKey ~= nil and groupFor(self, self.drawerKey)
         or nil
-    if shown == nil then
+    if drawerGroup == nil then
 
-        local best, bestN = nil, 1
+        local deepestGroup, deepestLayerCount = nil, 1
         for i = 1, self.groupCount do
-            local g = self.groups[i]
-            if #g.items > bestN then best, bestN = g, #g.items end
+            local group = self.groups[i]
+            if #group.items > deepestLayerCount then
+                deepestGroup, deepestLayerCount = group, #group.items
+            end
         end
-        shown = best
-        self.drawerKey = best ~= nil and best.key or nil
+        drawerGroup = deepestGroup
+        self.drawerKey = deepestGroup ~= nil and deepestGroup.key or nil
     end
-    self.drawerCount = 0
-    if shown ~= nil then
-        local cols = columnsFor(w)
-        local top = self.drawerY + Style.FONT_H
-        local max = cols * EquipmentStrip.drawerRows(w)
-        for j = 1, #shown.items do
-            if j > max then break end
-            n = n + 1
-            self.entries[n] = drawerEntry(self, shown, j, shown.items[j])
-            placeTile(self, n, ((j - 1) % cols) * stride,
-                top + math.floor((j - 1) / cols) * stride)
-            self.drawerCount = self.drawerCount + 1
-        end
+    return drawerGroup
+end
+
+local function placeDrawerTiles(self, tileCount, drawerGroup, stripWidth,
+        stride)
+    if drawerGroup == nil then return tileCount end
+    local cols = columnsFor(stripWidth)
+    local top = self.drawerY + Style.FONT_H
+    local drawerCapacity = cols * EquipmentStrip.drawerRows(stripWidth)
+    for j = 1, #drawerGroup.items do
+        if j > drawerCapacity then break end
+        tileCount = tileCount + 1
+        self.entries[tileCount] = drawerEntry(self, drawerGroup, j,
+            drawerGroup.items[j])
+        placeTile(self, tileCount, ((j - 1) % cols) * stride,
+            top + math.floor((j - 1) / cols) * stride)
+    end
+    return tileCount
+end
+
+local function layoutAnchors(self, playerObj)
+    self.groupCount = Equipment.collect(playerObj, self.groups)
+    local stride = Style.CELL_STRIDE
+    local cell = Style.CELL
+    local figureBox = self.figure
+    local stripWidth = self.availWidth or self.width
+    if figureBox == nil then
+
+        figureBox = FALLBACK_FIGURE
+        figureBox.h = math.max(cell, self.height)
     end
 
-    self.entryCount = n
-    self.cols = math.max(1, math.floor((w - 1) / stride))
+    local tileCount = placeAnchorTiles(self, figureBox, stripWidth, stride,
+        cell)
+    tileCount = placeTrayTiles(self, tileCount, figureBox, stripWidth, stride)
+    tileCount = placeDrawerTiles(self, tileCount, drawerGroupOf(self),
+        stripWidth, stride)
+
+    self.entryCount = tileCount
+    self.cols = columnsFor(stripWidth)
     self.rows = 1
-    local h = self.drawerY + Style.FONT_H
-        + EquipmentStrip.drawerRows(w) * stride + 1
+    local stripHeight = self.drawerY + Style.FONT_H
+        + EquipmentStrip.drawerRows(stripWidth) * stride + 1
 
-    if self.width ~= w or self.height ~= h then
-        self:setWidth(w)
-        self:setHeight(h)
-        self.sizeDirty = true
+    if self.width ~= stripWidth or self.height ~= stripHeight then
+        self:setWidth(stripWidth)
+        self:setHeight(stripHeight)
         updateHover(self)
     end
 end
@@ -483,11 +545,10 @@ local function prerenderImpl(self)
     end
     self.cols = cols
     self.rows = math.max(1, math.ceil(self.entryCount / cols))
-    local w, h = Style.gridPixelSize(self.cols, self.rows)
-    if w ~= self.width or h ~= self.height then
-        self:setWidth(w)
-        self:setHeight(h)
-        self.sizeDirty = true
+    local stripWidth, stripHeight = Style.gridPixelSize(self.cols, self.rows)
+    if stripWidth ~= self.width or stripHeight ~= self.height then
+        self:setWidth(stripWidth)
+        self:setHeight(stripHeight)
         updateHover(self)
     end
 end
@@ -503,48 +564,44 @@ end
 local function drawDrawerRule(self)
     if self.drawerKey == nil then return end
     local band = Style.FONT_H
-    local g = nil
-    for i = 1, self.groupCount do
-        if self.groups[i].key == self.drawerKey then g = self.groups[i] break end
-    end
-    local count = g ~= nil and #g.items or 0
+    local group = groupFor(self, self.drawerKey)
+    local count = group ~= nil and #group.items or 0
     local rightPad = 0
     if count > 1 then
 
-        local text = tostring(count)
-        local tm = getTextManager and getTextManager() or nil
-        local tw = 0
-        if tm ~= nil then
-            local ok, m = pcall(tm.MeasureStringX, tm, Style.FONT, text)
-            tw = ok and m or 0
-        end
-        local c = SectionRule.TEXT
-        self:drawText(text, self.width - SectionRule.PAD - tw,
-            self.drawerY + 1, c.r, c.g, c.b, c.a, Style.FONT)
-        rightPad = tw + 6
+        local text, countWidth = countLabelFor(count)
+        local textColor = SectionRule.TEXT
+        self:drawText(text, self.width - SectionRule.PAD - countWidth,
+            self.drawerY + 1, textColor.r, textColor.g, textColor.b,
+            textColor.a, Style.FONT)
+        rightPad = countWidth + 6
     end
     SectionRule.draw(self, hoverLabelFor(self.drawerKey), self.drawerY,
         band, rightPad)
 end
 
-local function renderImpl(self)
-    local anchors = self.layout == "anchors"
-    local cols = self.cols
-    local rows = self.rows
-    local w, h
+local function paintBackdrop(self, anchors)
     if anchors then
-        w, h = self.width, self.height
-    else
-        w, h = Style.gridPixelSize(cols, rows)
-    end
-    local colors = Style.COLORS
-    local bg = colors and colors.BOARD_BG or DEFAULT_BG
-
-    if not anchors then
-        self:drawRect(0, 0, w, h, bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
-    else
         drawDrawerRule(self)
+        return
     end
+    local stripWidth, stripHeight = Style.gridPixelSize(self.cols, self.rows)
+    local colors = Style.COLORS
+    local bg = colors.BOARD_BG
+    self:drawRect(0, 0, stripWidth, stripHeight, bg.a or 1, bg.r or 0,
+        bg.g or 0, bg.b or 0)
+end
+
+local function emptyChipAt(self, idx)
+    local entry = self.entries[idx + 1]
+    if entry ~= nil and entry.items[1] == nil then
+        return hoverLabelFor(entry.key)
+    end
+    return nil
+end
+
+local function renderImpl(self)
+    paintBackdrop(self, self.layout == "anchors")
 
     local entries = self.entries
     local font = Style.FONT
@@ -552,19 +609,8 @@ local function renderImpl(self)
 
     local currentAction = StackRenderer.currentActionOf(self.playerNum)
 
-    local ItemApply = ComfyGrid.Interact.ItemApply
-    local applySrc = ItemApply ~= nil and ItemApply.dragSource() or nil
-    local applyPlayer = nil
-    local applyPulse = 1
-    if applySrc ~= nil then
-        applyPlayer = getSpecificPlayer(self.playerNum)
-        if applyPlayer == nil then applySrc = nil end
-        applyPulse = SlotRenderer.applyPulse()
-    end
-
-    local searchMarks = ItemSearch.marksFor(self.playerNum)
-    local searchPulse = 1
-    if searchMarks ~= nil then searchPulse = SlotRenderer.applyPulse() end
+    local ItemApply, applySrc, applyPlayer, applyPulse, searchMarks,
+        searchPulse = StripGestures.tileHints(self.playerNum)
     ctx.view = self
     ctx.playerNum = self.playerNum
     for i = 1, self.entryCount do
@@ -597,67 +643,18 @@ local function renderImpl(self)
                 SlotRenderer.drawApplyHint(ctx, applyPulse)
             end
 
-            local jd = StackRenderer.jobDeltaOf(top, currentAction)
-            if jd ~= nil then
-                StackRenderer.drawJobOverlay(self, tx, ty, jd)
+            local jobDelta = StackRenderer.jobDeltaOf(top, currentAction)
+            if jobDelta ~= nil then
+                StackRenderer.drawJobOverlay(self, tx, ty, jobDelta)
             end
         else
 
-            ctx.stack = nil
-            ctx.item = nil
-            ctx.slot = i - 1
-            ctx.x = tx
-            ctx.y = ty
-            SlotRenderer.drawSocket(ctx)
-            local tex = ghostTexFor(entry.key)
-            if tex ~= nil then
-                SlotRenderer.drawGhost(self, tex, tx, ty)
-            elseif font ~= nil then
-                self:drawTextCentre(labelFor(entry.key), tx + cell / 2,
-                    ty + math.floor(cell / 2) - 7, LABEL.r, LABEL.g, LABEL.b,
-                    LABEL.a, font)
-            end
+            StripGestures.drawEmptySocket(self, ctx, i - 1, tx, ty, entry.key,
+                ghostTexFor, labelFor, font, cell)
         end
     end
 
-    local hover = self.hoverIdx
-    if hover ~= nil and hover < self.entryCount and self:isMouseOver() then
-        local hx, hy = tileXY(self, hover)
-        ctx.stack = nil
-        ctx.item = nil
-        ctx.slot = hover
-        ctx.x = hx
-        ctx.y = hy
-        SlotRenderer.drawHover(ctx)
-
-        local entry = entries[hover + 1]
-        if entry ~= nil and entry.items[1] == nil then
-            SlotRenderer.drawNameChip(self, hoverLabelFor(entry.key), hx, hy, font)
-        end
-    end
-
-    local Pad = ComfyGrid.Interact and ComfyGrid.Interact.PadFocus
-    local padIdx = Pad ~= nil and Pad.cursorFor ~= nil and Pad.cursorFor(self)
-        or nil
-    if padIdx ~= nil and padIdx < self.entryCount then
-        local px, py = tileXY(self, padIdx)
-        SlotRenderer.drawSelection(self, px, py)
-        ctx.stack = nil
-        ctx.item = nil
-        ctx.slot = padIdx
-        ctx.x = px
-        ctx.y = py
-        SlotRenderer.drawHover(ctx)
-        local entry = entries[padIdx + 1]
-        if entry ~= nil and entry.items[1] == nil then
-            SlotRenderer.drawNameChip(self, hoverLabelFor(entry.key), px, py,
-                font)
-        end
-        local Carry = ComfyGrid.Interact.PadCarry
-        if Carry ~= nil and Carry.renderAt ~= nil then
-            Carry.renderAt(self, px, py)
-        end
-    end
+    StripGestures.drawCursors(self, ctx, font, tileXY, emptyChipAt)
 end
 
 function EquipmentStrip:render()
@@ -668,23 +665,68 @@ function EquipmentStrip:render()
     end
 end
 
-local function sourceGridSlotOf(entry, playerNum)
-    local tag = entry.comfyStacks or entry.comfyStack
-    if type(tag) == "table" and tag.itemIDs == nil then tag = tag[1] end
-    if type(tag) ~= "table" or tag.itemIDs == nil
-            or type(tag.slot) ~= "number" then
-        return nil, nil
+local function isTwoHanded(item)
+    return item.isTwoHandWeapon ~= nil and item:isTwoHandWeapon() or false
+end
+
+local function applyOntoTile(entry, dragged, playerObj)
+    local ItemApply = ComfyGrid.Interact.ItemApply
+    local top = entry.items[1]
+    if ItemApply == nil or top == nil then return false end
+    local srcItems = ItemApply.liveItemsOf(dragged)
+    if srcItems ~= nil and ItemApply.tryApply(srcItems, top, playerObj) then
+        return true
     end
-    local CM = ComfyGrid.Model and ComfyGrid.Model.ContainerModel
-    local model = CM ~= nil and CM.getPlayerMain ~= nil
-        and CM.getPlayerMain(playerNum) or nil
-    local grid = model ~= nil and model.grid or nil
-    if grid == nil or grid.claimSlotForItem == nil then return nil, nil end
-    local stacks = grid.data.stacks
-    for i = 1, #stacks do
-        if stacks[i] == tag then return tag.slot, grid end
+    return false
+end
+
+local function firstEquippable(dragged, groupKey)
+    for i = 1, #dragged do
+        local items = dragged[i].items
+        if type(items) == "table" then
+            local first = ComfyGrid.Core.VanillaStacks.firstRealIndex(items)
+            for j = first, #items do
+                local item = items[j]
+                if item ~= nil and item:getContainer() ~= nil
+                        and Equipment.itemMatchesGroup(item, groupKey) then
+                    return item, dragged[i]
+                end
+            end
+        end
     end
     return nil, nil
+end
+
+local function equipIntoHand(self, entry, item, playerObj)
+
+    if isForceDropHeavyItem(item) then
+        ISInventoryPaneContextMenu.equipHeavyItem(playerObj, item)
+        return nil
+    end
+    local getter = entry.hand == "primary"
+        and playerObj.getPrimaryHandItem
+        or playerObj.getSecondaryHandItem
+    local heldRead, heldItem = pcall(getter, playerObj)
+    local displaced = heldRead and heldItem or nil
+    ISInventoryPaneContextMenu.equipWeapon(item, entry.hand == "primary",
+        isTwoHanded(item), self.playerNum)
+    return displaced
+end
+
+local function seatDisplaced(self, entry, fromIdx, displaced, draggedEntry)
+    local fromEntry = fromIdx ~= nil and self.entries[fromIdx + 1] or nil
+    if fromEntry ~= nil and fromEntry.hand ~= nil and entry.hand ~= nil then
+
+        ISInventoryPaneContextMenu.equipWeapon(displaced,
+            fromEntry.hand == "primary", isTwoHanded(displaced),
+            self.playerNum)
+        return
+    end
+    local srcSlot, mainGrid =
+        StripGestures.sourceGridSlotOf(draggedEntry, self.playerNum)
+    if srcSlot ~= nil then
+        mainGrid:claimSlotForItem(displaced:getID(), srcSlot)
+    end
 end
 
 local function resolveEquipDrop(self, idx, fromIdx)
@@ -694,68 +736,18 @@ local function resolveEquipDrop(self, idx, fromIdx)
     if dragged == nil then return end
     local playerObj = getSpecificPlayer(self.playerNum)
     if playerObj == nil then return end
-
-    local ItemApply = ComfyGrid.Interact.ItemApply
-    local top = entry.items[1]
-    if ItemApply ~= nil and top ~= nil then
-        local srcItems = ItemApply.liveItemsOf(dragged)
-        if srcItems ~= nil and ItemApply.tryApply(srcItems, top, playerObj) then
-            return
-        end
+    if applyOntoTile(entry, dragged, playerObj) then return end
+    local item, draggedEntry = firstEquippable(dragged, entry.key)
+    if item == nil then return end
+    local displaced
+    if entry.hand ~= nil then
+        displaced = equipIntoHand(self, entry, item, playerObj)
+    else
+        displaced = Equipment.findDisplacedWorn(playerObj, item)
+        ISInventoryPaneContextMenu.onWearItems({ item }, self.playerNum)
     end
-    for i = 1, #dragged do
-        local items = dragged[i].items
-        if type(items) == "table" then
-            local first = (#items >= 2) and 2 or 1
-            for j = first, #items do
-                local item = items[j]
-                if item ~= nil and item:getContainer() ~= nil
-                        and Equipment.itemMatchesGroup(item, entry.key) then
-                    local displaced
-                    if entry.hand ~= nil then
-
-                        if isForceDropHeavyItem(item) then
-                            ISInventoryPaneContextMenu.equipHeavyItem(
-                                playerObj, item)
-                            return
-                        end
-                        local getter = entry.hand == "primary"
-                            and playerObj.getPrimaryHandItem
-                            or playerObj.getSecondaryHandItem
-                        local okH, held = pcall(getter, playerObj)
-                        displaced = okH and held or nil
-
-                        local twoHands = item.isTwoHandWeapon ~= nil
-                            and item:isTwoHandWeapon() or false
-                        ISInventoryPaneContextMenu.equipWeapon(item,
-                            entry.hand == "primary", twoHands, self.playerNum)
-                    else
-                        displaced = Equipment.findDisplacedWorn(playerObj, item)
-                        ISInventoryPaneContextMenu.onWearItems({ item },
-                            self.playerNum)
-                    end
-                    if displaced ~= nil and displaced ~= item then
-                        local fromEntry = fromIdx ~= nil
-                            and self.entries[fromIdx + 1] or nil
-                        if fromEntry ~= nil and fromEntry.hand ~= nil
-                                and entry.hand ~= nil then
-
-                            local dTwo = displaced.isTwoHandWeapon ~= nil
-                                and displaced:isTwoHandWeapon() or false
-                            ISInventoryPaneContextMenu.equipWeapon(displaced,
-                                fromEntry.hand == "primary", dTwo, self.playerNum)
-                        else
-                            local srcSlot, mainGrid =
-                                sourceGridSlotOf(dragged[i], self.playerNum)
-                            if srcSlot ~= nil then
-                                mainGrid:claimSlotForItem(displaced:getID(), srcSlot)
-                            end
-                        end
-                    end
-                    return
-                end
-            end
-        end
+    if displaced ~= nil and displaced ~= item then
+        seatDisplaced(self, entry, fromIdx, displaced, draggedEntry)
     end
 end
 
@@ -764,40 +756,20 @@ function EquipmentStrip:resolvePadDrop(idx)
 end
 
 local function mouseDownImpl(self, x, y)
-    if DragAndDrop.isDragOwner(self) and not DragAndDrop.isDragging() then
-        DragAndDrop.endDrag()
-    end
-    self.pressedIdx = nil
-    self.pressedId = nil
-    self.dragDidStart = false
-    local idx = tileAt(self, x, y)
-    if idx == nil then return end
-    local entry = self.entries[idx + 1]
-    local top = entry ~= nil and entry.items[1] or nil
+    StripGestures.beginPress(self)
+    local top, idx = itemAt(self, x, y)
     if top == nil then return end
 
     if Unequip.pressClaims(top, self.playerNum, "unequip") then return end
 
-    local payload = { VanillaStacks.fromItems({ top }) }
-    if payload[1] == nil then return end
-    DragAndDrop.prepareDrag(self, payload, x, y)
-    self.pressedIdx = idx
-    self.pressedId = top:getID()
+    StripGestures.armItemDrag(self, idx, top, x, y)
 end
 
 local function mouseUpImpl(self, x, y)
 
     if not DragAndDrop.isDragging() then
-        local upIdx = tileAt(self, x, y)
-        local upEntry = upIdx ~= nil and self.entries[upIdx + 1] or nil
-        local upTop = upEntry ~= nil and upEntry.items[1] or nil
-        if upTop ~= nil
-                and Unequip.releaseClaims(self, upTop, self.playerNum, "unequip") then
-            if DragAndDrop.isDragOwner(self) then DragAndDrop.endDrag() end
-            self.pressedIdx = nil
-            self.pressedId = nil
-            return
-        end
+        local upTop = itemAt(self, x, y)
+        if StripGestures.releaseClaimed(self, upTop, "unequip") then return end
     end
     if DragAndDrop.isDragging() then
         local poked = x == 0 and y == 0 and DragAndDrop.isDragOwner(self)
@@ -836,51 +808,9 @@ local function mouseUpImpl(self, x, y)
     self.pressedId = nil
 end
 
-local function dragCancelImpl(self)
-    local id = self.pressedId
-    self.pressedIdx = nil
-    self.pressedId = nil
-    if id == nil then return end
-
-    if not DragAndDrop.releaseDropsToFloor(self.playerNum) then return end
-    local playerObj = getSpecificPlayer(self.playerNum)
-    if playerObj == nil then return end
-    local item = playerObj:getInventory():getItemWithID(id)
-    if item ~= nil then
-        Transfer.dropToFloor({ item }, playerObj)
-    end
-end
-
 function EquipmentStrip:onComfyDragCancelled()
-    local ok, err = pcall(dragCancelImpl, self)
+    local ok, err = pcall(StripGestures.dropPressedToFloor, self)
     if not ok then reportMouseError(err) end
-end
-
-local function mouseUpOutsideImpl(self, _x, _y)
-    if not DragAndDrop.isDragOwner(self) then return end
-    if DragAndDrop.isDragging() then
-        DragAndDrop.cancelDrag(self, self.onComfyDragCancelled)
-    else
-        DragAndDrop.endDrag()
-        self.pressedIdx = nil
-        self.pressedId = nil
-    end
-end
-
-local function rightMouseUpImpl(self, x, y)
-    if DragAndDrop.isDragging() then return end
-    if DragAndDrop.isDragOwner(self) then
-        DragAndDrop.endDrag()
-        self.pressedIdx = nil
-        self.pressedId = nil
-    end
-    local idx = tileAt(self, x, y)
-    local entry = idx ~= nil and self.entries[idx + 1] or nil
-    local top = entry ~= nil and entry.items[1] or nil
-    if top == nil then return end
-
-    ISInventoryPaneContextMenu.createMenu(self.playerNum, true, { top },
-        getMouseX(), getMouseY())
 end
 
 function EquipmentStrip:onMouseDown(x, y)
@@ -899,29 +829,19 @@ function EquipmentStrip:onMouseUp(x, y)
     return true
 end
 
-function EquipmentStrip:onMouseUpOutside(x, y)
-    local ok, err = pcall(mouseUpOutsideImpl, self, x, y)
+function EquipmentStrip:onMouseUpOutside(_x, _y)
+    local ok, err = pcall(StripGestures.releaseOutside, self)
     if not ok then reportMouseError(err) end
 end
 
 function EquipmentStrip:onMouseMove(_dx, _dy)
     updateHover(self)
-    if DragAndDrop == nil then return end
-    DragAndDrop.startDrag(self)
-    if not self.dragDidStart and DragAndDrop.isDragging()
-            and DragAndDrop.isDragOwner(self) then
-        self.dragDidStart = true
-    end
+    StripGestures.promoteDrag(self)
 end
 
 function EquipmentStrip:onMouseMoveOutside(_dx, _dy)
     self.hoverIdx = nil
-    if DragAndDrop == nil then return end
-    DragAndDrop.startDrag(self)
-    if not self.dragDidStart and DragAndDrop.isDragging()
-            and DragAndDrop.isDragOwner(self) then
-        self.dragDidStart = true
-    end
+    StripGestures.promoteDrag(self)
 end
 
 function EquipmentStrip.onRightMouseDown(_self, _x, _y)
@@ -929,7 +849,7 @@ function EquipmentStrip.onRightMouseDown(_self, _x, _y)
 end
 
 function EquipmentStrip:onRightMouseUp(x, y)
-    local ok, err = pcall(rightMouseUpImpl, self, x, y)
+    local ok, err = pcall(StripGestures.openMenuAt, self, x, y, itemAt)
     if not ok then reportMouseError(err) end
     return true
 end

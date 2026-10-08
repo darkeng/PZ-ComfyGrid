@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -148,10 +148,12 @@ end
 
 local ENGINE_TEXT_INSET = 2
 
+local function fontLineHeight(font)
+    return getTextManager():getFontFromEnum(font):getLineHeight()
+end
+
 local function lineHeightOf(font)
-    local measured, lineHeight = pcall(function()
-        return getTextManager():getFontFromEnum(font):getLineHeight()
-    end)
+    local measured, lineHeight = pcall(fontLineHeight, font)
     if measured and type(lineHeight) == "number" and lineHeight > 0 then return lineHeight end
     return Style.FONT_H or 16
 end

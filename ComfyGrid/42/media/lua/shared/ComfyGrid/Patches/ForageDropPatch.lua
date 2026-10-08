@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -20,19 +20,19 @@ local function staleEntriesIn(container)
     if not okItems or items == nil then return nil end
     local okSize, size = pcall(items.size, items)
     if not okSize or type(size) ~= "number" then return nil end
-    local out = nil
+    local staleItems = nil
     for i = 0, size - 1 do
         local okGet, item = pcall(items.get, items, i)
         if okGet and item ~= nil and item.getContainer ~= nil then
             local okOwner, owner = pcall(item.getContainer, item)
-            local okWorld, world = pcall(item.getWorldItem, item)
-            if okOwner and owner == nil and okWorld and world ~= nil then
-                out = out or {}
-                out[#out + 1] = item
+            local okWorld, worldItem = pcall(item.getWorldItem, item)
+            if okOwner and owner == nil and okWorld and worldItem ~= nil then
+                staleItems = staleItems or {}
+                staleItems[#staleItems + 1] = item
             end
         end
     end
-    return out
+    return staleItems
 end
 
 function ForageDropPatch.sweep(container)
@@ -57,13 +57,13 @@ function ForageDropPatch.sweep(container)
 end
 
 function ForageDropPatch.afterDrop(character, target)
-    local main = nil
+    local mainInventory = nil
     if character ~= nil then
         local okInv, inventory = pcall(character.getInventory, character)
-        if okInv then main = inventory end
+        if okInv then mainInventory = inventory end
     end
-    local evicted = ForageDropPatch.sweep(main)
-    if target ~= nil and target ~= main then
+    local evicted = ForageDropPatch.sweep(mainInventory)
+    if target ~= nil and target ~= mainInventory then
         evicted = evicted + ForageDropPatch.sweep(target)
     end
     return evicted

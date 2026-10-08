@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,7 +10,6 @@ require "ISUI/ISUI3DModel"
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/UI/Style"
-require "ComfyGrid/UI/Draw"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -31,8 +30,8 @@ local function silhouetteFor(female)
     local key = female and "female_base" or "male_base"
     local tex = silCache[key]
     if tex == nil then
-        local ok, t = pcall(getTexture, SIL_PATH .. key .. ".png")
-        tex = (ok and t) or false
+        local ok, texture = pcall(getTexture, SIL_PATH .. key .. ".png")
+        tex = (ok and texture) or false
         silCache[key] = tex
     end
     if tex == false then return nil end
@@ -47,8 +46,8 @@ end
 
 function Avatar._onClothingUpdated(character)
     if character == nil or character.getPlayerNum == nil then return end
-    local ok, n = pcall(character.getPlayerNum, character)
-    if ok and type(n) == "number" then dirty[n] = true end
+    local ok, playerNum = pcall(character.getPlayerNum, character)
+    if ok and type(playerNum) == "number" then dirty[playerNum] = true end
 end
 
 local lastError = nil
@@ -61,9 +60,9 @@ local function report(where, err)
 end
 
 local function wantsModel()
-    local S = ComfyGrid.Settings
-    if S == nil or S.get == nil then return true end
-    return S.get("EQUIPMENT_AVATAR") ~= "silhouette"
+    local Settings = ComfyGrid.Settings
+    if Settings == nil or Settings.get == nil then return true end
+    return Settings.get("EQUIPMENT_AVATAR") ~= "silhouette"
 end
 
 function Avatar:new(x, y, w, h, playerNum)
@@ -98,28 +97,28 @@ end
 local function ensureModel(self)
     local playerObj = getSpecificPlayer(self.playerNum)
     if playerObj == nil then return nil end
-    local m = self.model
-    if m == nil then
-        m = ISUI3DModel:new(0, 0, self.width, self.height)
-        self:addChild(m)
-        m:setState("idle")
-        m:setDirection(IsoDirections.S)
-        m:setIsometric(false)
-        m:setZoom(ZOOM)
-        self.model = m
+    local model = self.model
+    if model == nil then
+        model = ISUI3DModel:new(0, 0, self.width, self.height)
+        self:addChild(model)
+        model:setState("idle")
+        model:setDirection(IsoDirections.S)
+        model:setIsometric(false)
+        model:setZoom(ZOOM)
+        self.model = model
     end
 
     if self.modelChar ~= playerObj or dirty[self.playerNum] then
-        m:setCharacter(playerObj)
+        model:setCharacter(playerObj)
         self.modelChar = playerObj
         dirty[self.playerNum] = nil
     end
-    return m
+    return model
 end
 
 function Avatar:hideModel()
-    local m = self.model
-    if m ~= nil and m:getIsVisible() then m:setVisible(false) end
+    local model = self.model
+    if model ~= nil and model:getIsVisible() then model:setVisible(false) end
 end
 
 local function prerenderImpl(self)
@@ -128,18 +127,20 @@ local function prerenderImpl(self)
         self:hideModel()
         return
     end
-    local m = ensureModel(self)
-    if m == nil then return end
-    if not m:getIsVisible() then m:setVisible(true) end
+    local model = ensureModel(self)
+    if model == nil then return end
+    if not model:getIsVisible() then model:setVisible(true) end
     local w, h = self:figureBox()
-    if m.width ~= w then m:setWidth(w) end
-    if m.height ~= h then m:setHeight(h) end
+    if model.width ~= w then model:setWidth(w) end
+    if model.height ~= h then model:setHeight(h) end
 end
 
 function Avatar:prerender()
     local ok, err = pcall(prerenderImpl, self)
     if not ok then report("prerender", err) end
 end
+
+local FALLBACK_TINT = { r = 0.19, g = 0.17, b = 0.15 }
 
 local function renderImpl(self)
     if wantsModel() then return end
@@ -152,9 +153,9 @@ local function renderImpl(self)
     local w, h = self:figureBox()
     local x = math.floor((self.width - w) / 2)
     local y = 0
-    local sf = Style.COLORS and Style.COLORS.SURFACE
-    local c = sf ~= nil and sf.cardHi or { r = 0.19, g = 0.17, b = 0.15 }
-    self:drawTextureScaled(tex, x, y, w, h, 0.85, c.r, c.g, c.b)
+    local surface = Style.COLORS and Style.COLORS.SURFACE
+    local tint = surface ~= nil and surface.cardHi or FALLBACK_TINT
+    self:drawTextureScaled(tex, x, y, w, h, 0.85, tint.r, tint.g, tint.b)
 end
 
 function Avatar:render()
@@ -166,9 +167,9 @@ if not ComfyGrid._avatarClothingHooked then
     ComfyGrid._avatarClothingHooked = true
     if Events ~= nil and Events.OnClothingUpdated ~= nil then
         Events.OnClothingUpdated.Add(function(character)
-            local A = ComfyGrid.UI and ComfyGrid.UI.Avatar
-            if A ~= nil and A._onClothingUpdated ~= nil then
-                A._onClothingUpdated(character)
+            local AvatarModule = ComfyGrid.UI and ComfyGrid.UI.Avatar
+            if AvatarModule ~= nil and AvatarModule._onClothingUpdated ~= nil then
+                AvatarModule._onClothingUpdated(character)
             end
         end)
     end

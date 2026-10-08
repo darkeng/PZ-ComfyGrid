@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -43,9 +43,10 @@ local RIGHT_CHIPS = {
       tipKey = "IGUI_ComfyGrid_ChipLayoutSectionsTip",
       tipEN = "Show every container within reach.",
       tipFor = function(_page)
-          local S = ComfyGrid.Settings
-          local v = S ~= nil and S.get ~= nil and S.get("LOOT_LAYOUT") or nil
-          if v == "sections" then
+          local Settings = ComfyGrid.Settings
+          local layout = Settings ~= nil and Settings.get ~= nil
+              and Settings.get("LOOT_LAYOUT") or nil
+          if layout == "sections" then
               return "IGUI_ComfyGrid_ChipLayoutSingleTip",
                   "Show one container at a time."
           end
@@ -56,17 +57,18 @@ local RIGHT_CHIPS = {
       when = function(page) return page.onCharacter ~= true end,
 
       active = function(_page)
-          local S = ComfyGrid.Settings
-          return S ~= nil and S.get ~= nil and S.get("LOOT_LAYOUT") == "sections"
+          local Settings = ComfyGrid.Settings
+          return Settings ~= nil and Settings.get ~= nil
+              and Settings.get("LOOT_LAYOUT") == "sections"
       end },
 
     { id = "equip", tex = function() return Draw.personTexture() end,
       tipKey = "IGUI_ComfyGrid_ChipEquipTip",
       tipEN = "Show the equipment window.",
       tipFor = function(page)
-          local W = ComfyGrid.UI and ComfyGrid.UI.EquipWindow
-          local view = W ~= nil and W.viewOf ~= nil and W.viewOf(page.player)
-              or "strip"
+          local EquipWindow = ComfyGrid.UI and ComfyGrid.UI.EquipWindow
+          local view = EquipWindow ~= nil and EquipWindow.viewOf ~= nil
+              and EquipWindow.viewOf(page.player) or "strip"
           if view == "strip" then
               return "IGUI_ComfyGrid_ChipEquipTip", "Show the equipment window."
           elseif view == "window" then
@@ -78,9 +80,11 @@ local RIGHT_CHIPS = {
       end,
       when = function(page) return page.onCharacter == true end,
       active = function(page)
-          local W = ComfyGrid.UI and ComfyGrid.UI.EquipWindow
-          return W ~= nil and W.isOn ~= nil and W.isOn(page.player) == true
+          local EquipWindow = ComfyGrid.UI and ComfyGrid.UI.EquipWindow
+          return EquipWindow ~= nil and EquipWindow.isOn ~= nil
+              and EquipWindow.isOn(page.player) == true
       end },
+
     { id = "settings", tex = function() return Draw.gearTexture() end,
       tipKey = "IGUI_ComfyGrid_ChipSettingsTip",
       tipEN = "Comfy Grid settings.",
@@ -95,18 +99,20 @@ end
 
 local tips = {}
 local function tipOf(def, page)
-    local key, en = def.tipKey, def.tipEN
+    local tipKey, tipEnglish = def.tipKey, def.tipEN
     if def.tipFor ~= nil then
-        local ok, k, e = pcall(def.tipFor, page)
-        if ok and k ~= nil then key, en = k, e end
+        local ok, stateTipKey, stateTipEnglish = pcall(def.tipFor, page)
+        if ok and stateTipKey ~= nil then
+            tipKey, tipEnglish = stateTipKey, stateTipEnglish
+        end
     end
-    if key == nil then return nil end
-    local t = tips[key]
-    if t == nil then
-        t = Text.tr(key, en)
-        tips[key] = t
+    if tipKey == nil then return nil end
+    local tipText = tips[tipKey]
+    if tipText == nil then
+        tipText = Text.tr(tipKey, tipEnglish)
+        tips[tipKey] = tipText
     end
-    return t
+    return tipText
 end
 
 local VANILLA_BUTTONS = {
@@ -145,11 +151,11 @@ function WindowStrip:prerender()
     local page = self.page
     if page == nil then return end
 
-    local h = page.titleBarHeight ~= nil and page:titleBarHeight()
+    local bandHeight = page.titleBarHeight ~= nil and page:titleBarHeight()
         or WindowStrip.height()
-    if self.height ~= h then self:setHeight(h) end
-    local w = page.width or self.width
-    if self.width ~= w then self:setWidth(w) end
+    if self.height ~= bandHeight then self:setHeight(bandHeight) end
+    local bandWidth = page.width or self.width
+    if self.width ~= bandWidth then self:setWidth(bandWidth) end
 
     hideVanillaButtons(page)
 
@@ -162,21 +168,21 @@ function WindowStrip:prerender()
     self.chips.padHot = padId
     self.chipsLeft.padHot = padId
 
-    local sf = Style.COLORS and Style.COLORS.SURFACE
-    if sf == nil then return end
+    local surface = Style.COLORS and Style.COLORS.SURFACE
+    if surface == nil then return end
 
-    self:drawRect(0, 0, self.width, self.height, 1, sf.panel.r, sf.panel.g,
-        sf.panel.b)
-    self:drawRect(0, self.height - 1, self.width, 1, 0.85, sf.line.r,
-        sf.line.g, sf.line.b)
+    self:drawRect(0, 0, self.width, self.height, 1, surface.panel.r,
+        surface.panel.g, surface.panel.b)
+    self:drawRect(0, self.height - 1, self.width, 1, 0.85, surface.line.r,
+        surface.line.g, surface.line.b)
 
     local right = self.spec.right or RIGHT_CHIPS
     self.chips:reset(self.width - PAD, 0, self.height)
     for i = 1, #right do
         local def = right[i]
         if chipWanted(def, page) then
-            local on = def.active ~= nil and def.active(page) or false
-            self.chips:add(def.id, def.tex(), tipOf(def, page), on)
+            local isActive = def.active ~= nil and def.active(page) or false
+            self.chips:add(def.id, def.tex(), tipOf(def, page), isActive)
         end
     end
     local left = self.spec.left or LEFT_CHIPS
@@ -219,27 +225,34 @@ end
 function ACTIONS.pin(self)
     local page = self.page
     if page == nil then return end
-    local fn = page.pin and page.collapse or page.setPinned
-    if fn == nil then return end
-    local ok, err = pcall(fn, page)
+    local toggle = page.pin and page.collapse or page.setPinned
+    if toggle == nil then return end
+    local ok, err = pcall(toggle, page)
     if not ok then Log.warn("WindowStrip: pin failed: " .. tostring(err)) end
 end
 
 function ACTIONS.layout(_self)
-    local S = ComfyGrid.Settings
-    if S == nil or S.get == nil or S.set == nil then return end
+    local Settings = ComfyGrid.Settings
+    if Settings == nil or Settings.get == nil or Settings.set == nil then return end
 
-    local want = "sections"
-    if S.get("LOOT_LAYOUT") == "sections" then want = "single" end
-    local ok, err = pcall(S.set, "LOOT_LAYOUT", want)
-    if not ok then Log.warn("WindowStrip: layout failed: " .. tostring(err)) end
+    local nextLayout = "sections"
+    if Settings.get("LOOT_LAYOUT") == "sections" then nextLayout = "single" end
+    local ok, err = pcall(Settings.set, "LOOT_LAYOUT", nextLayout)
+    if not ok then
+        Log.warn("WindowStrip: layout failed: " .. tostring(err))
+        return
+    end
+
+    if Settings.save ~= nil then pcall(Settings.save) end
 end
 
 function ACTIONS.equip(self)
     local page = self.page
-    local W = ComfyGrid.UI and ComfyGrid.UI.EquipWindow
-    if page == nil or W == nil or W.toggle == nil then return end
-    local ok, err = pcall(W.toggle, page.player)
+    local EquipWindow = ComfyGrid.UI and ComfyGrid.UI.EquipWindow
+    if page == nil or EquipWindow == nil or EquipWindow.toggle == nil then
+        return
+    end
+    local ok, err = pcall(EquipWindow.toggle, page.player)
     if not ok then
         Log.warn("WindowStrip: equipment window failed: " .. tostring(err))
     end
@@ -255,8 +268,8 @@ function ACTIONS.settings(self)
     end
 end
 
-function WindowStrip:onChip(x, y)
-    return self.chips:hit(x, y) ~= nil or self.chipsLeft:hit(x, y) ~= nil
+function WindowStrip:chipAt(x, y)
+    return self.chips:hit(x, y) or self.chipsLeft:hit(x, y)
 end
 
 function WindowStrip:onMouseDown(x, y)
@@ -264,7 +277,7 @@ function WindowStrip:onMouseDown(x, y)
     local field = self.searchField
     self.pressBeganOnPlate = field ~= nil and field:plateContains(x, y)
     if self.pressBeganOnPlate then return true end
-    return self:onChip(x, y)
+    return self:chipAt(x, y) ~= nil
 end
 
 function WindowStrip:onMouseUpOutside(_x, _y)
@@ -283,9 +296,9 @@ function WindowStrip:padChipCount()
 end
 
 function WindowStrip:padChipAt(slot)
-    local l = self.chipsLeft.count
-    if slot < l then return self.chipsLeft:idAt(slot + 1) end
-    return self.chips:idAt(self.chips.count - (slot - l))
+    local leftCount = self.chipsLeft.count
+    if slot < leftCount then return self.chipsLeft:idAt(slot + 1) end
+    return self.chips:idAt(self.chips.count - (slot - leftCount))
 end
 
 function WindowStrip:padActivateChip(slot)
@@ -306,7 +319,7 @@ function WindowStrip:onMouseUp(x, y)
         return true
     end
 
-    local id = self.chips:hit(x, y) or self.chipsLeft:hit(x, y)
+    local id = self:chipAt(x, y)
     if id == nil then return false end
     self:activateChip(id)
     return true

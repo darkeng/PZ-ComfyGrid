@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,6 +9,7 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
+require "ComfyGrid/Core/GameMode"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Model = ComfyGrid.Model or {}
 local Equipment = {}
@@ -92,8 +93,8 @@ local LOCATION_GROUP = {
 
 local function normalize(id)
     id = tostring(id)
-    local cut = id:match("[%.:]([^%.:]+)$")
-    if cut ~= nil then id = cut end
+    local unprefixed = id:match("[%.:]([^%.:]+)$")
+    if unprefixed ~= nil then id = unprefixed end
     id = id:gsub("[^%w]", ""):lower()
     return id
 end
@@ -106,6 +107,7 @@ end
 local reportedLocations = {}
 local Log = ComfyGrid.Core.Log
 local Text = ComfyGrid.Core.Text
+local GameMode = ComfyGrid.Core.GameMode
 
 local displayNames = {}
 
@@ -131,12 +133,12 @@ local itemsByGroup = {}
 local dynamicKeys = {}
 
 local function listFor(groupKey)
-    local list = itemsByGroup[groupKey]
-    if list == nil then
-        list = {}
-        itemsByGroup[groupKey] = list
+    local groupItems = itemsByGroup[groupKey]
+    if groupItems == nil then
+        groupItems = {}
+        itemsByGroup[groupKey] = groupItems
     end
-    return list
+    return groupItems
 end
 
 function Equipment.displayNameFor(key)
@@ -145,23 +147,23 @@ function Equipment.displayNameFor(key)
     return name
 end
 
-local function emitEntry(out, n, key, hand, dynamic)
-    n = n + 1
-    local entry = out[n]
+local function emitEntry(entries, entryCount, key, hand, dynamic)
+    entryCount = entryCount + 1
+    local entry = entries[entryCount]
     if entry == nil then
         entry = {}
-        out[n] = entry
+        entries[entryCount] = entry
     end
     entry.key = key
     entry.hand = hand
     entry.items = listFor(key)
     entry.dynamic = dynamic
-    return n
+    return entryCount
 end
 
-function Equipment.collect(playerObj, out)
-    for _, list in pairs(itemsByGroup) do
-        for i = #list, 1, -1 do list[i] = nil end
+function Equipment.collect(playerObj, entries)
+    for _, groupItems in pairs(itemsByGroup) do
+        for i = #groupItems, 1, -1 do groupItems[i] = nil end
     end
     for i = #dynamicKeys, 1, -1 do dynamicKeys[i] = nil end
 
@@ -180,8 +182,8 @@ function Equipment.collect(playerObj, out)
                 local item = nil
                 if wornEntry ~= nil then
                     if wornEntry.getItem ~= nil then
-                        local okItem, it = pcall(wornEntry.getItem, wornEntry)
-                        item = okItem and it or nil
+                        local okItem, wornItem = pcall(wornEntry.getItem, wornEntry)
+                        item = okItem and wornItem or nil
                     elseif instanceof(wornEntry, "InventoryItem") then
                         item = wornEntry
                     end
@@ -206,18 +208,19 @@ function Equipment.collect(playerObj, out)
                         else
                             groupKey = pretty
                             if displayNames[groupKey] == nil then
-                                local pretty2 = nil
+                                local translatedName = nil
                                 if rawLoc ~= nil and rawLoc.getTranslationName ~= nil then
-                                    local okN, n = pcall(rawLoc.getTranslationName, rawLoc)
-                                    if okN and n ~= nil then
-                                        pretty2 = Text.tr(
-                                            "UI_ClothingType_" .. tostring(n), nil)
+                                    local okName, translationId = pcall(
+                                        rawLoc.getTranslationName, rawLoc)
+                                    if okName and translationId ~= nil then
+                                        translatedName = Text.tr("UI_ClothingType_"
+                                            .. tostring(translationId), nil)
                                     end
                                 end
-                                displayNames[groupKey] = pretty2 or false
+                                displayNames[groupKey] = translatedName or false
                             end
-                            local list = itemsByGroup[groupKey]
-                            if list == nil or #list == 0 then
+                            local groupItems = itemsByGroup[groupKey]
+                            if groupItems == nil or #groupItems == 0 then
                                 dynamicKeys[#dynamicKeys + 1] = groupKey
                             end
                         end
@@ -229,93 +232,94 @@ function Equipment.collect(playerObj, out)
             end
         end
 
-        local okP, primary = pcall(playerObj.getPrimaryHandItem, playerObj)
-        if okP and primary ~= nil then
+        local okPrimary, primary = pcall(playerObj.getPrimaryHandItem, playerObj)
+        if okPrimary and primary ~= nil then
             listFor("Primary")[1] = primary
         end
-        local okS, secondary = pcall(playerObj.getSecondaryHandItem, playerObj)
-        if okS and secondary ~= nil then
+        local okSecondary, secondary = pcall(playerObj.getSecondaryHandItem, playerObj)
+        if okSecondary and secondary ~= nil then
             listFor("Secondary")[1] = secondary
         end
     end
 
-    local n = 0
+    local entryCount = 0
     local GROUPS = Equipment.GROUPS
     for i = 1, #GROUPS do
-        n = emitEntry(out, n, GROUPS[i].key, GROUPS[i].hand, nil)
+        entryCount = emitEntry(entries, entryCount, GROUPS[i].key, GROUPS[i].hand, nil)
     end
     for i = 1, #dynamicKeys do
-        n = emitEntry(out, n, dynamicKeys[i], nil, true)
+        entryCount = emitEntry(entries, entryCount, dynamicKeys[i], nil, true)
     end
-    return n
+    return entryCount
+end
+
+local function targetLocationOf(item)
+    if item.getBodyLocation ~= nil then
+        local ok, loc = pcall(item.getBodyLocation, item)
+        if ok and loc ~= nil and tostring(loc) ~= "" then
+            return tostring(loc)
+        end
+    end
+    if item.canBeEquipped ~= nil then
+        local ok, loc = pcall(item.canBeEquipped, item)
+        if ok and loc ~= nil and tostring(loc) ~= "" then
+            return tostring(loc)
+        end
+    end
+    return nil
 end
 
 function Equipment.findDisplacedWorn(playerObj, item)
     if playerObj == nil or item == nil then return nil end
-    local target = nil
-    if item.getBodyLocation ~= nil then
-        local ok, loc = pcall(item.getBodyLocation, item)
-        if ok and loc ~= nil and tostring(loc) ~= "" then
-            target = tostring(loc)
-        end
-    end
-    if target == nil and item.canBeEquipped ~= nil then
-        local ok, loc = pcall(item.canBeEquipped, item)
-        if ok and loc ~= nil and tostring(loc) ~= "" then
-            target = tostring(loc)
-        end
-    end
+    local target = targetLocationOf(item)
     if target == nil then return nil end
     target = normalize(target)
-    local okW, worn = pcall(playerObj.getWornItems, playerObj)
-    if not okW or worn == nil then return nil end
+    local okWorn, worn = pcall(playerObj.getWornItems, playerObj)
+    if not okWorn or worn == nil then return nil end
     for i = 1, worn:size() do
         local entry = worn:get(i - 1)
-        local wItem = nil
+        local wornItem = nil
         if entry ~= nil and entry.getItem ~= nil then
-            local okI, it = pcall(entry.getItem, entry)
-            wItem = okI and it or nil
+            local okItem, entryItem = pcall(entry.getItem, entry)
+            wornItem = okItem and entryItem or nil
         end
-        if wItem ~= nil and wItem ~= item and entry.getLocation ~= nil then
-            local okL, loc = pcall(entry.getLocation, entry)
-            if okL and loc ~= nil and normalize(loc) == target then
-                return wItem
+        if wornItem ~= nil and wornItem ~= item and entry.getLocation ~= nil then
+            local okLocation, loc = pcall(entry.getLocation, entry)
+            if okLocation and loc ~= nil and normalize(loc) == target then
+                return wornItem
             end
         end
     end
     return nil
 end
 
-local function handAccepts(item)
-    local okCore, core = pcall(getCore)
-    if okCore and core ~= nil and core.getGameMode ~= nil then
-        local okMode, mode = pcall(core.getGameMode, core)
-        if okMode and tostring(mode) == "Tutorial" then return false end
-    end
+function Equipment.handAccepts(item)
+    if item == nil then return false end
+    if GameMode.isTutorial() then return false end
     if item.getScriptItem ~= nil then
-        local okS, script = pcall(item.getScriptItem, item)
-        if okS and script ~= nil and script.getReplaceWhenUnequip ~= nil then
-            local okR, replace = pcall(script.getReplaceWhenUnequip, script)
-            if okR and replace then return false end
+        local okScript, script = pcall(item.getScriptItem, item)
+        if okScript and script ~= nil and script.getReplaceWhenUnequip ~= nil then
+            local okReplace, replace = pcall(script.getReplaceWhenUnequip, script)
+            if okReplace and replace then return false end
         end
     end
     if item.IsWeapon ~= nil then
-        local okW, isWeapon = pcall(item.IsWeapon, item)
-        if okW and isWeapon then
-            local okC, condition = pcall(item.getCondition, item)
-            if okC and type(condition) == "number" then
+        local okWeapon, isWeapon = pcall(item.IsWeapon, item)
+        if okWeapon and isWeapon then
+            local okCondition, condition = pcall(item.getCondition, item)
+            if okCondition and type(condition) == "number" then
                 return condition > 0
             end
             return true
         end
     end
     if item.IsFood ~= nil then
-        local okF, isFood = pcall(item.IsFood, item)
-        if okF and isFood then return false end
+        local okFood, isFood = pcall(item.IsFood, item)
+        if okFood and isFood then return false end
     end
     if item.IsClothing ~= nil then
-        local okCl, isClothing = pcall(item.IsClothing, item)
-        if okCl and isClothing then return false end
+        local okClothing, isClothing = pcall(item.IsClothing, item)
+        if okClothing and isClothing then return false end
     end
     return true
 end
@@ -323,21 +327,9 @@ end
 function Equipment.itemMatchesGroup(item, groupKey)
     if item == nil then return false end
     if groupKey == "Primary" or groupKey == "Secondary" then
-        return handAccepts(item)
+        return Equipment.handAccepts(item)
     end
-    local location = nil
-    if item.getBodyLocation ~= nil then
-        local ok, loc = pcall(item.getBodyLocation, item)
-        if ok and loc ~= nil and tostring(loc) ~= "" then
-            location = tostring(loc)
-        end
-    end
-    if location == nil and item.canBeEquipped ~= nil then
-        local ok, loc = pcall(item.canBeEquipped, item)
-        if ok and loc ~= nil and tostring(loc) ~= "" then
-            location = tostring(loc)
-        end
-    end
+    local location = targetLocationOf(item)
     if location == nil then return false end
 
     local group = LOCATION_GROUP[location] or NORMALIZED[normalize(location)]

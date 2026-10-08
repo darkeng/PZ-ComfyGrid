@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -43,24 +43,24 @@ Style.SMALL_H = 16
 
 local scaleListeners = {}
 
-function Style.onScaleChanged(fn)
-    scaleListeners[#scaleListeners + 1] = fn
+function Style.onScaleChanged(listener)
+    scaleListeners[#scaleListeners + 1] = listener
 end
 
 local pickFont
 
 local function recompute(force)
-    local eff = Util.clamp(Style.USER_SCALE * Style.FONT_SCALE,
+    local effectiveScale = Util.clamp(Style.USER_SCALE * Style.FONT_SCALE,
         MIN_SCALE, MAX_EFFECTIVE)
     local oldScale = Style.SCALE
-    local textureSize = floor(40 * eff)
-    local pad = floor(2 * eff)
+    local textureSize = floor(40 * effectiveScale)
+    local pad = floor(2 * effectiveScale)
     local cell = textureSize + 2 * pad + 1
 
-    if not force and eff == oldScale and cell == Style.CELL then
+    if not force and effectiveScale == oldScale and cell == Style.CELL then
         return
     end
-    Style.SCALE = eff
+    Style.SCALE = effectiveScale
     Style.TEXTURE_SIZE = textureSize
     Style.PAD = pad
     Style.CELL = cell
@@ -71,18 +71,18 @@ local function recompute(force)
     Style.BAR_INSET = barInset
     for i = 1, #scaleListeners do
 
-        local ok, err = pcall(scaleListeners[i], eff, oldScale)
+        local ok, err = pcall(scaleListeners[i], effectiveScale, oldScale)
         if not ok then
             Log.warn("Style scale listener failed: " .. tostring(err))
         end
     end
 end
 
-function Style.applyScale(s)
-    if type(s) ~= "number" then
-        s = Settings.defaults.SCALE
+function Style.applyScale(userScale)
+    if type(userScale) ~= "number" then
+        userScale = Settings.defaults.SCALE
     end
-    Style.USER_SCALE = Util.clamp(s, MIN_SCALE, MAX_SCALE)
+    Style.USER_SCALE = Util.clamp(userScale, MIN_SCALE, MAX_SCALE)
 
     recompute(pickFont())
 end
@@ -97,28 +97,36 @@ local function ladder()
     return ladderCache
 end
 
-local function rungFor(eff)
-    if eff >= 1.9 then return 3 end
-    if eff >= 1.5 then return 2 end
+local function rungFor(effectiveScale)
+    if effectiveScale >= 1.9 then return 3 end
+    if effectiveScale >= 1.5 then return 2 end
     return 1
 end
 
-function pickFont()
+function pickFont(textManager, smallHeight)
     if UIFont == nil then return false end
-    local tm = type(getTextManager) == "function" and getTextManager() or nil
-    if tm == nil then return false end
-    local eff = Util.clamp(Style.USER_SCALE * Style.FONT_SCALE,
+    if textManager == nil then
+        textManager = type(getTextManager) == "function" and getTextManager() or nil
+    end
+    if textManager == nil then return false end
+    local effectiveScale = Util.clamp(Style.USER_SCALE * Style.FONT_SCALE,
         MIN_SCALE, MAX_EFFECTIVE)
     local rungs = ladder()
-    local font = rungs ~= nil and rungs[rungFor(eff)] or UIFont.Small
+    local font = rungs ~= nil and rungs[rungFor(effectiveScale)] or UIFont.Small
     local changed = false
     if font ~= nil and font ~= Style.FONT then
         Style.FONT = font
         changed = true
     end
-    local h = tm:getFontHeight(Style.FONT)
-    if type(h) == "number" and h > 0 and h ~= Style.FONT_H then
-        Style.FONT_H = h
+
+    local fontHeight
+    if smallHeight ~= nil and rungs ~= nil and Style.FONT == rungs[1] then
+        fontHeight = smallHeight
+    else
+        fontHeight = textManager:getFontHeight(Style.FONT)
+    end
+    if type(fontHeight) == "number" and fontHeight > 0 and fontHeight ~= Style.FONT_H then
+        Style.FONT_H = fontHeight
         changed = true
     end
     return changed
@@ -127,21 +135,22 @@ end
 function Style.refreshFont()
     if UIFont == nil then return end
     local changed = false
-    local tm = type(getTextManager) == "function" and getTextManager() or nil
-    if tm ~= nil then
+    local textManager = type(getTextManager) == "function" and getTextManager() or nil
+    if textManager ~= nil then
 
-        local small = tm:getFontHeight(UIFont.Small)
-        if type(small) == "number" and small > 0 and small ~= Style.SMALL_H then
-            Style.SMALL_H = small
+        local smallHeight = textManager:getFontHeight(UIFont.Small)
+        if type(smallHeight) == "number" and smallHeight > 0
+                and smallHeight ~= Style.SMALL_H then
+            Style.SMALL_H = smallHeight
             changed = true
         end
 
-        local fs = Style.SMALL_H / SMALLEST_FONT_H
-        if fs > 0 and fs ~= Style.FONT_SCALE then
-            Style.FONT_SCALE = fs
+        local fontScale = Style.SMALL_H / SMALLEST_FONT_H
+        if fontScale > 0 and fontScale ~= Style.FONT_SCALE then
+            Style.FONT_SCALE = fontScale
             changed = true
         end
-        if pickFont() then changed = true end
+        if pickFont(textManager, smallHeight) then changed = true end
     end
     if changed then
         recompute(true)
@@ -230,7 +239,47 @@ Style.COLORS = {
     SELECTED = { r = 0.35, g = 0.75, b = 1.0, a = 0.90 },
 
     APPLY = { r = 0.42, g = 0.92, b = 0.50, a = 0.90 },
+
+    UNWANTED_CELL = { r = 0.115, g = 0.115, b = 0.120, a = 0.72 },
+
+    FROZEN_CELL = { r = 0.17, g = 0.34, b = 0.46, a = 1.0 },
+
+    BROKEN_WASH = { r = 0.0, g = 0.0, b = 0.0, a = 0.35 },
+
+    BULK_MARK = { r = 0.82, g = 0.65, b = 0.38, a = 0.9 },
+
+    PLACEHOLDER_TEXT = { r = 1.0, g = 1.0, b = 1.0, a = 1.0 },
+
+    HIGHLIGHT = { r = 1.0, g = 1.0, b = 1.0 },
+
+    SOCKET_FILL = { r = 0.115, g = 0.11, b = 0.135, a = 1.0 },
+    SOCKET_EDGE = { r = 0.44, g = 0.39, b = 0.29, a = 0.8 },
+
+    SOCKET_GHOST = { r = 0.72, g = 0.72, b = 0.78, a = 0.30 },
+
+    NAME_CHIP_BG = { r = 0.05, g = 0.05, b = 0.06, a = 0.88 },
+    NAME_CHIP_TEXT = { r = 0.92, g = 0.92, b = 0.95, a = 1.0 },
+
+    SHADOW = { r = 0.0, g = 0.0, b = 0.0 },
+
+    BODY_TEXT = { r = 0.86, g = 0.84, b = 0.80, a = 1.0 },
+
+    EMPTY_SLOT_LABEL = { r = 0.62, g = 0.62, b = 0.68, a = 0.9 },
+
+    POCKET_LABEL = { r = 0.62, g = 0.62, b = 0.68, a = 0.9 },
+    POCKET_ACCENTS = {
+        { r = 0.82, g = 0.65, b = 0.38, a = 0.9 },
+        { r = 0.35, g = 0.75, b = 1.00, a = 0.9 },
+        { r = 0.59, g = 0.78, b = 0.47, a = 0.9 },
+        { r = 0.71, g = 0.55, b = 0.86, a = 0.9 },
+    },
+
+    REFUSED_WASH = { r = 1.0, g = 0.25, b = 0.2, a = 0.28 },
+
+    POPUP_CHROME = { r = 0.44, g = 0.39, b = 0.29, a = 0.8 },
 }
+
+Style.CHROME_LINE_ALPHA = 0.8
 
 Style.COLORS.CATEGORY = {
     Food       = { r = 0.10, g = 0.22, b = 0.10, a = 1.0 },
@@ -266,10 +315,10 @@ do
 
     local Categories = ComfyGrid.Model and ComfyGrid.Model.Categories
     if Categories ~= nil and Categories.BUCKET ~= nil then
-        local cats = Style.COLORS.CATEGORY
-        for cat, bucket in pairs(Categories.BUCKET) do
-            if cats[cat] == nil then
-                cats[cat] = BUCKET_TINT[bucket] or cats.default
+        local categoryTints = Style.COLORS.CATEGORY
+        for category, bucket in pairs(Categories.BUCKET) do
+            if categoryTints[category] == nil then
+                categoryTints[category] = BUCKET_TINT[bucket] or categoryTints.default
             end
         end
     end
@@ -282,29 +331,29 @@ local BAND_TINTS = {
     BUCKET_TINT.literature, BUCKET_TINT.containers,
 }
 
-function Style.tintForCategory(cat)
-    if cat == nil then return Style.COLORS.CATEGORY.default end
-    local memo = catTint[cat]
+function Style.tintForCategory(category)
+    if category == nil then return Style.COLORS.CATEGORY.default end
+    local memo = catTint[category]
     if memo ~= nil then return memo end
 
-    local tint = Style.COLORS.CATEGORY[cat]
+    local tint = Style.COLORS.CATEGORY[category]
     if tint == nil then
         local Categories = ComfyGrid.Model and ComfyGrid.Model.Categories
         local bucket = nil
         if Categories ~= nil and Categories.bucketForCategory ~= nil then
-            bucket = Categories.bucketForCategory(cat)
+            bucket = Categories.bucketForCategory(category)
         end
         if bucket ~= nil then
             tint = BUCKET_TINT[bucket]
         else
 
-            local h = 0
-            for i = 1, #cat do h = h + string.byte(cat, i) end
-            tint = BAND_TINTS[(h % #BAND_TINTS) + 1]
+            local byteSum = 0
+            for i = 1, #category do byteSum = byteSum + string.byte(category, i) end
+            tint = BAND_TINTS[(byteSum % #BAND_TINTS) + 1]
         end
     end
     tint = tint or Style.COLORS.CATEGORY.default
-    catTint[cat] = tint
+    catTint[category] = tint
     return tint
 end
 
@@ -312,8 +361,8 @@ Style.THEME = "amber"
 
 local paletteListeners = {}
 
-function Style.onPaletteChanged(fn)
-    paletteListeners[#paletteListeners + 1] = fn
+function Style.onPaletteChanged(listener)
+    paletteListeners[#paletteListeners + 1] = listener
 end
 
 local function writeColor(dst, src)
@@ -325,11 +374,11 @@ end
 local baseCategory = {}
 
 do
-    local function snapshot(t)
-        if t == nil then return end
-        for _, c in pairs(t) do
-            if type(c) == "table" and c.r ~= nil and baseCategory[c] == nil then
-                baseCategory[c] = { r = c.r, g = c.g, b = c.b }
+    local function snapshot(palette)
+        if palette == nil then return end
+        for _, color in pairs(palette) do
+            if type(color) == "table" and color.r ~= nil and baseCategory[color] == nil then
+                baseCategory[color] = { r = color.r, g = color.g, b = color.b }
             end
         end
     end
@@ -337,17 +386,17 @@ do
     snapshot(Style.COLORS.BUCKET)
 end
 
-local function recolorCategories(sat, bri)
-    sat = sat or 1
-    bri = bri or 1
+local function recolorCategories(saturation, brightness)
+    saturation = saturation or 1
+    brightness = brightness or 1
     for live, base in pairs(baseCategory) do
-        local l = 0.299 * base.r + 0.587 * base.g + 0.114 * base.b
-        local r = (l + (base.r - l) * sat) * bri
-        local g = (l + (base.g - l) * sat) * bri
-        local b = (l + (base.b - l) * sat) * bri
-        live.r = r < 0 and 0 or (r > 1 and 1 or r)
-        live.g = g < 0 and 0 or (g > 1 and 1 or g)
-        live.b = b < 0 and 0 or (b > 1 and 1 or b)
+        local luma = 0.299 * base.r + 0.587 * base.g + 0.114 * base.b
+        local red = (luma + (base.r - luma) * saturation) * brightness
+        local green = (luma + (base.g - luma) * saturation) * brightness
+        local blue = (luma + (base.b - luma) * saturation) * brightness
+        live.r = red < 0 and 0 or (red > 1 and 1 or red)
+        live.g = green < 0 and 0 or (green > 1 and 1 or green)
+        live.b = blue < 0 and 0 or (blue > 1 and 1 or blue)
     end
 end
 
@@ -355,18 +404,18 @@ local LADDER = { "dark", "bg", "panel", "card", "cardHi", "line", "accent" }
 
 function Style.applyPalette(name, theme)
     if type(theme) ~= "table" then return end
-    local C = Style.COLORS
-    local sf = C.SURFACE
+    local colors = Style.COLORS
+    local surface = colors.SURFACE
     if type(theme.surface) == "table" then
         for i = 1, #LADDER do
-            writeColor(sf[LADDER[i]], theme.surface[LADDER[i]])
+            writeColor(surface[LADDER[i]], theme.surface[LADDER[i]])
         end
     end
 
-    writeColor(C.BOARD_BG, theme.board or sf.bg)
-    writeColor(C.EMPTY_CELL, theme.emptyCell or sf.card)
-    writeColor(C.COUNT_TEXT, theme.countText)
-    writeColor(C.COUNT_SHADOW, theme.countShadow)
+    writeColor(colors.BOARD_BG, theme.board or surface.bg)
+    writeColor(colors.EMPTY_CELL, theme.emptyCell or surface.card)
+    writeColor(colors.COUNT_TEXT, theme.countText)
+    writeColor(colors.COUNT_SHADOW, theme.countShadow)
     recolorCategories(theme.categorySaturation, theme.categoryBrightness)
     Style.THEME = name or Style.THEME
     for i = 1, #paletteListeners do
@@ -394,9 +443,9 @@ if Events ~= nil and Events.OnRenderTick ~= nil
         and not ComfyGrid._styleFontTickHooked then
     ComfyGrid._styleFontTickHooked = true
     Events.OnRenderTick.Add(function()
-        local S = ComfyGrid.UI ~= nil and ComfyGrid.UI.Style or nil
-        if S ~= nil and S.refreshFont ~= nil then
-            S.refreshFont()
+        local LiveStyle = ComfyGrid.UI ~= nil and ComfyGrid.UI.Style or nil
+        if LiveStyle ~= nil and LiveStyle.refreshFont ~= nil then
+            LiveStyle.refreshFont()
         end
     end)
 end

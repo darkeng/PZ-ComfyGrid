@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -14,7 +14,9 @@ ComfyGrid.Model.ContainerStatus = ContainerStatus
 
 local REFRESH_MS = 1000
 
-local cache = setmetatable({}, { __mode = "k" })
+local MAX_ENTRIES = 256
+local statusByContainer = {}
+local entryCount = 0
 
 local function fireStatus(parent)
     if parent == nil then return nil end
@@ -22,58 +24,73 @@ local function fireStatus(parent)
     if not okSq or square == nil then return nil end
 
     if CCampfireSystem ~= nil and CCampfireSystem.instance ~= nil then
-        local okC, campfire = pcall(
+        local okCampfire, campfire = pcall(
             CCampfireSystem.instance.getLuaObjectOnSquare,
             CCampfireSystem.instance, square)
-        if okC and campfire ~= nil and campfire.fuelAmt ~= nil then
-            local okT, txt = pcall(ISCampingMenu.timeString,
+        if okCampfire and campfire ~= nil and campfire.fuelAmt ~= nil then
+            local okTime, timeText = pcall(ISCampingMenu.timeString,
                 luautils.round(campfire.fuelAmt))
-            if okT and txt ~= nil then return txt end
+            if okTime and timeText ~= nil then return timeText end
             return nil
         end
     end
 
-    local okF, isFire = pcall(parent.isFireInteractionObject, parent)
-    if not okF or not isFire then return nil end
+    local okFire, isFire = pcall(parent.isFireInteractionObject, parent)
+    if not okFire or not isFire then return nil end
 
-    local okB, isBBQ = pcall(parent.isPropaneBBQ, parent)
-    if okB and isBBQ then
-        local okT, hasTank = pcall(parent.hasPropaneTank, parent)
-        if okT and not hasTank then
+    local okBBQ, isBBQ = pcall(parent.isPropaneBBQ, parent)
+    if okBBQ and isBBQ then
+        local okTank, hasTank = pcall(parent.hasPropaneTank, parent)
+        if okTank and not hasTank then
             return getText("IGUI_BBQ_NeedsPropaneTank")
         end
     end
-    local okA, amount = pcall(parent.getFuelAmount, parent)
-    if not okA or amount == nil then return nil end
-    local okT, txt = pcall(ISCampingMenu.timeString, amount)
-    return okT and txt or nil
+    local okAmount, amount = pcall(parent.getFuelAmount, parent)
+    if not okAmount or amount == nil then return nil end
+    local okFuelTime, fuelTimeText = pcall(ISCampingMenu.timeString, amount)
+    return okFuelTime and fuelTimeText or nil
 end
 
-local function compute(inventory)
-    local parts = nil
-    local okP, parent = pcall(inventory.getParent, inventory)
-    if okP and parent ~= nil then
+local function computeStatus(inventory)
+    local statusText = nil
+    local okParent, parent = pcall(inventory.getParent, inventory)
+    if okParent and parent ~= nil then
         local fire = fireStatus(parent)
-        if fire ~= nil then parts = fire end
+        if fire ~= nil then statusText = fire end
     end
 
-    local okO, occupied = pcall(inventory.isOccupiedVehicleSeat, inventory)
-    if okO and occupied then
+    local okOccupied, occupied = pcall(inventory.isOccupiedVehicleSeat, inventory)
+    if okOccupied and occupied then
         local note = getText("IGUI_invpage_Occupied")
-        parts = parts ~= nil and (parts .. " " .. note) or note
+        statusText = statusText ~= nil and (statusText .. " " .. note) or note
     end
-    return parts
+    return statusText
 end
 
 function ContainerStatus.of(inventory)
     if inventory == nil then return nil end
     local now = getTimestampMs ~= nil and getTimestampMs() or 0
-    local entry = cache[inventory]
+    local entry = statusByContainer[inventory]
     if entry ~= nil and now - entry.stamp < REFRESH_MS then
         return entry.text
     end
-    local ok, text = pcall(compute, inventory)
+    local ok, text = pcall(computeStatus, inventory)
     if not ok then text = nil end
-    cache[inventory] = { stamp = now, text = text }
+    if entry == nil then
+        if entryCount >= MAX_ENTRIES then
+            statusByContainer = {}
+            entryCount = 0
+        end
+        entry = {}
+        statusByContainer[inventory] = entry
+        entryCount = entryCount + 1
+    end
+
+    entry.stamp = now
+    entry.text = text
     return text
+end
+
+function ContainerStatus.cachedCount()
+    return entryCount, MAX_ENTRIES
 end

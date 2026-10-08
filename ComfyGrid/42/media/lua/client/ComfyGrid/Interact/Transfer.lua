@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,6 +9,7 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Model/ItemStack"
+require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Interact/TransferJobs"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Interact = ComfyGrid.Interact or {}
@@ -17,6 +18,7 @@ ComfyGrid.Interact.Transfer = Transfer
 
 local Log = ComfyGrid.Core.Log
 local ItemStack = ComfyGrid.Model.ItemStack
+local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local TransferJobs = ComfyGrid.Interact.TransferJobs
 
 local function releaseFromCharacter(item, playerObj, playerNum)
@@ -37,6 +39,7 @@ local function isFloor(inventory)
     local ok, invType = pcall(inventory.getType, inventory)
     return ok and tostring(invType) == "floor"
 end
+Transfer.isFloor = isFloor
 
 local function isCorpseGrabFromVehicle(item, src, destInventory, playerObj)
 
@@ -73,24 +76,25 @@ local function newWeightBudget(destInventory, playerObj)
     local destSq = destInventory:hasWorldItem()
         and destInventory:getWorldItem():getSquare() or nil
     return function(item)
-        local w = item:getUnequippedWeight()
+        local itemWeight = item:getUnequippedWeight()
         local newToFloor = toFloor
         if destSq == nil or not item:isOnGroundOrInsideBagOnSquare(destSq) then
-            newToFloor = toFloor + w
+            newToFloor = toFloor + itemWeight
         end
-        if not destInventory:hasRoomFor(playerObj, total + w, newToFloor) then
+        if not destInventory:hasRoomFor(playerObj, total + itemWeight,
+                newToFloor) then
             return false
         end
-        total = total + w
+        total = total + itemWeight
         toFloor = newToFloor
         return true
     end
 end
 
 local function admissionFor(destInventory, playerObj, skipBudget)
-    local floor = isFloor(destInventory)
-    if floor or skipBudget then
-        return floor, alwaysAdmit
+    local destIsFloor = isFloor(destInventory)
+    if destIsFloor or skipBudget then
+        return destIsFloor, alwaysAdmit
     end
     return false, newWeightBudget(destInventory, playerObj)
 end
@@ -99,8 +103,8 @@ local function sortLightestFirst(items)
     local index = {}
     for i = 1, #items do index[items[i]] = i end
     table.sort(items, function(a, b)
-        local wa, wb = a:getUnequippedWeight(), b:getUnequippedWeight()
-        if wa ~= wb then return wa < wb end
+        local weightA, weightB = a:getUnequippedWeight(), b:getUnequippedWeight()
+        if weightA ~= weightB then return weightA < weightB end
         return index[a] < index[b]
     end)
 end
@@ -209,8 +213,8 @@ function Transfer.moveItems(items, destInventory, playerObj, destSlot,
 
     local queued = 0
 
-    for g = 1, #order do
-        local src = order[g]
+    for groupIndex = 1, #order do
+        local src = order[groupIndex]
         local group = groups[src]
         for i = 1, #group do
 
@@ -234,32 +238,37 @@ function Transfer.moveItems(items, destInventory, playerObj, destSlot,
     return queued + extra
 end
 
+local function appendStackItems(items, stack, srcInventory, caller)
+    if type(stack) == "table" and stack.itemIDs ~= nil then
+        if srcInventory ~= nil then
+
+            local live = ItemStack.getItems(stack, srcInventory)
+            for i = 1, #live do
+                items[#items + 1] = live[i]
+            end
+        else
+            Log.warn(caller
+                .. ": plain grid stack without srcInventory; skipped")
+        end
+    elseif type(stack) == "table" and stack.items ~= nil then
+
+        local itemCount = #stack.items
+        local first = VanillaStacks.firstRealIndex(stack.items)
+        for i = first, itemCount do
+            items[#items + 1] = stack.items[i]
+        end
+    elseif stack ~= nil and instanceof(stack, "InventoryItem") then
+        items[#items + 1] = stack
+    end
+end
+
 function Transfer.moveStacks(stacks, destInventory, playerObj, destSlot,
         srcInventory, skipBudget)
     if not stacks then return 0 end
     local items = {}
-    for s = 1, #stacks do
-        local stack = stacks[s]
-        if type(stack) == "table" and stack.itemIDs ~= nil then
-            if srcInventory ~= nil then
-
-                local live = ItemStack.getItems(stack, srcInventory)
-                for i = 1, #live do
-                    items[#items + 1] = live[i]
-                end
-            else
-                Log.warn("Transfer.moveStacks: plain grid stack without srcInventory; skipped")
-            end
-        elseif type(stack) == "table" and stack.items ~= nil then
-
-            local n = #stack.items
-            local first = (n >= 2) and 2 or 1
-            for i = first, n do
-                items[#items + 1] = stack.items[i]
-            end
-        elseif stack ~= nil and instanceof(stack, "InventoryItem") then
-            items[#items + 1] = stack
-        end
+    for stackIndex = 1, #stacks do
+        appendStackItems(items, stacks[stackIndex], srcInventory,
+            "Transfer.moveStacks")
     end
     return Transfer.moveItems(items, destInventory, playerObj, destSlot, nil,
         skipBudget)
@@ -275,25 +284,12 @@ function Transfer.moveStacksOrdered(stacks, destInventory, playerObj, slots, src
 
     local plan = {}
     local admittedTotal = 0
-    for s = 1, #stacks do
-        local stack = stacks[s]
-        local slot = slots and slots[s] or nil
+    for stackIndex = 1, #stacks do
+        local slot = slots and slots[stackIndex] or nil
 
         local items = {}
-        if type(stack) == "table" and stack.itemIDs ~= nil then
-            if srcInventory ~= nil then
-                local live = ItemStack.getItems(stack, srcInventory)
-                for i = 1, #live do items[#items + 1] = live[i] end
-            else
-                Log.warn("Transfer.moveStacksOrdered: plain grid stack without srcInventory; skipped")
-            end
-        elseif type(stack) == "table" and stack.items ~= nil then
-            local n = #stack.items
-            local first = (n >= 2) and 2 or 1
-            for i = first, n do items[#items + 1] = stack.items[i] end
-        elseif stack ~= nil and instanceof(stack, "InventoryItem") then
-            items[#items + 1] = stack
-        end
+        appendStackItems(items, stacks[stackIndex], srcInventory,
+            "Transfer.moveStacksOrdered")
 
         local admitted = {}
         local sources = {}
@@ -307,7 +303,7 @@ function Transfer.moveStacksOrdered(stacks, destInventory, playerObj, slots, src
             end
         end
         admittedTotal = admittedTotal + #admitted
-        plan[s] = { slot = slot, admitted = admitted, sources = sources }
+        plan[stackIndex] = { slot = slot, admitted = admitted, sources = sources }
     end
     if admittedTotal == 0 then return 0 end
 
@@ -316,8 +312,8 @@ function Transfer.moveStacksOrdered(stacks, destInventory, playerObj, slots, src
     end
 
     local queued, extra = 0, 0
-    for s = 1, #plan do
-        local entry = plan[s]
+    for stackIndex = 1, #plan do
+        local entry = plan[stackIndex]
         local slot = entry.slot
         local admitted, sources = entry.admitted, entry.sources
 
@@ -404,10 +400,10 @@ function Transfer.openMoveableCursor(playerObj, moveable)
     local okCell, cell = pcall(getCell)
     if not okCell or cell == nil then return false end
     local ok, err = pcall(function()
-        local mo = ISMoveableCursor:new(playerObj)
-        cell:setDrag(mo, mo.player)
-        mo:setMoveableMode("place")
-        mo:tryInitialItem(moveable)
+        local moveableCursor = ISMoveableCursor:new(playerObj)
+        cell:setDrag(moveableCursor, moveableCursor.player)
+        moveableCursor:setMoveableMode("place")
+        moveableCursor:tryInitialItem(moveable)
     end)
     if not ok then
         Log.warn("Transfer.openMoveableCursor failed: " .. tostring(err))

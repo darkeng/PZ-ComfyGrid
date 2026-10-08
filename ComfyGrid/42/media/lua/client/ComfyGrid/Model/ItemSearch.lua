@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Core/Util"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Model = ComfyGrid.Model or {}
 local ItemSearch = {}
@@ -20,9 +21,7 @@ local MAX_BAG_DEPTH = 8
 local FOLDED_NAME_LIMIT = 4096
 local STACK_MEMO_LIMIT = 4096
 
-local tableWipe = table.wipe or function(tableToWipe)
-    for key in pairs(tableToWipe) do tableToWipe[key] = nil end
-end
+local wipe = ComfyGrid.Core.Util.wipe
 
 local ACCENT_FOLD = {
     [192] = 97, [193] = 97, [194] = 97, [195] = 97, [196] = 97, [197] = 97,
@@ -163,11 +162,11 @@ function ItemSearch.matchContainers(containers, rawText)
     local words = ItemSearch.wordsOf(rawText)
     if words == nil then return nil end
     local marks = { itemIds = {}, containers = {}, generation = 0 }
-    tableWipe(walkedContainers)
+    wipe(walkedContainers)
     for containerIndex = 1, #containers do
         collectMatches(containers[containerIndex], words, marks, 0)
     end
-    tableWipe(walkedContainers)
+    wipe(walkedContainers)
     return marks
 end
 
@@ -202,7 +201,7 @@ end
 local function walkPage(page, words, marks)
     local buttons = page.backpacks
     if type(buttons) ~= "table" then return end
-    tableWipe(walkedContainers)
+    wipe(walkedContainers)
     for buttonIndex = 1, #buttons do
         local button = buttons[buttonIndex]
         local container = button ~= nil and button.inventory or nil
@@ -210,12 +209,12 @@ local function walkPage(page, words, marks)
     end
 end
 
-local function rebuild(marks, playerPage, playerWords, lootPage, lootWords)
-    tableWipe(marks.itemIds)
-    tableWipe(marks.containers)
+local function rebuildSeatMarks(marks, playerPage, playerWords, lootPage, lootWords)
+    wipe(marks.itemIds)
+    wipe(marks.containers)
     if playerWords ~= nil then walkPage(playerPage, playerWords, marks) end
     if lootWords ~= nil then walkPage(lootPage, lootWords, marks) end
-    tableWipe(walkedContainers)
+    wipe(walkedContainers)
     searchGeneration = searchGeneration + 1
     marks.generation = searchGeneration
 end
@@ -231,7 +230,7 @@ function ItemSearch.marksFor(playerNum)
     local nowMs = getTimestampMs()
     if marks.stale or nowMs >= marks.expiresMs then
 
-        local walked, failure = pcall(rebuild, marks, playerPage, playerWords,
+        local walked, failure = pcall(rebuildSeatMarks, marks, playerPage, playerWords,
             lootPage, lootWords)
         if not walked and failure ~= lastWalkError then
             lastWalkError = failure

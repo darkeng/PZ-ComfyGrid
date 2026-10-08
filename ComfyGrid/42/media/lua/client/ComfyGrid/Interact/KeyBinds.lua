@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -28,8 +28,7 @@ function KeyBinds.install()
         return
     end
     ComfyGrid._keyBindsInstalled = true
-    local key = QUICK_EQUIP_DEFAULT
-    if Keyboard ~= nil and Keyboard.KEY_E ~= nil then key = Keyboard.KEY_E end
+    local key = KeyBinds.defaultKeyFor(KeyBinds.QUICK_EQUIP)
     table.insert(keyBinding, { value = KeyBinds.CATEGORY })
     table.insert(keyBinding, { value = KeyBinds.QUICK_EQUIP, key = key })
     Log.info("KeyBinds: registered " .. KeyBinds.QUICK_EQUIP)
@@ -44,8 +43,8 @@ end
 function KeyBinds.isRegistered(name)
     if type(keyBinding) ~= "table" then return false end
     for i = 1, #keyBinding do
-        local b = keyBinding[i]
-        if b ~= nil and b.value == name then return true end
+        local bindingRow = keyBinding[i]
+        if bindingRow ~= nil and bindingRow.value == name then return true end
     end
     return false
 end
@@ -59,8 +58,8 @@ end
 function KeyBinds.keyFor(name)
     local core = getCore and getCore() or nil
     if core == nil or core.getKey == nil then return nil end
-    local ok, k = pcall(core.getKey, core, name)
-    if ok and type(k) == "number" and k > 0 then return k end
+    local ok, keyCode = pcall(core.getKey, core, name)
+    if ok and type(keyCode) == "number" and keyCode > 0 then return keyCode end
     return nil
 end
 
@@ -69,10 +68,10 @@ function KeyBinds.rowFor(name)
         return nil
     end
     for i = 1, #MainOptions.keyText do
-        local v = MainOptions.keyText[i]
-        if v ~= nil and not v.value and v.txt ~= nil then
-            local ok, n = pcall(v.txt.getName, v.txt)
-            if ok and n == name then return v end
+        local keyRow = MainOptions.keyText[i]
+        if keyRow ~= nil and not keyRow.value and keyRow.txt ~= nil then
+            local ok, actionId = pcall(keyRow.txt.getName, keyRow.txt)
+            if ok and actionId == name then return keyRow end
         end
     end
     return nil
@@ -83,8 +82,8 @@ function KeyBinds.labelFor(name)
     if row == nil then return nil end
     local prefix = ""
     if MainOptions ~= nil and MainOptions.getKeyPrefix ~= nil then
-        local ok, p = pcall(MainOptions.getKeyPrefix, row)
-        if ok and type(p) == "string" then prefix = p end
+        local ok, rowPrefix = pcall(MainOptions.getKeyPrefix, row)
+        if ok and type(rowPrefix) == "string" then prefix = rowPrefix end
     end
     local okN, keyName = pcall(getKeyName, row.keyCode or 0)
     return prefix .. (okN and tostring(keyName) or "?")
@@ -95,14 +94,14 @@ function KeyBinds.duplicateOf(key, shift, ctrl, alt, exceptName)
         return nil
     end
     for i = 1, #MainOptions.keyText do
-        local v = MainOptions.keyText[i]
-        if v ~= nil and not v.value and v.txt ~= nil then
-            local ok, n = pcall(v.txt.getName, v.txt)
-            if ok and n ~= exceptName and v.keyCode == key
-                    and (v.shift == true) == (shift == true)
-                    and (v.ctrl == true) == (ctrl == true)
-                    and (v.alt == true) == (alt == true) then
-                return n, KeyBinds.actionName(n)
+        local keyRow = MainOptions.keyText[i]
+        if keyRow ~= nil and not keyRow.value and keyRow.txt ~= nil then
+            local ok, actionId = pcall(keyRow.txt.getName, keyRow.txt)
+            if ok and actionId ~= exceptName and keyRow.keyCode == key
+                    and (keyRow.shift == true) == (shift == true)
+                    and (keyRow.ctrl == true) == (ctrl == true)
+                    and (keyRow.alt == true) == (alt == true) then
+                return actionId, KeyBinds.actionName(actionId)
             end
         end
     end
@@ -110,9 +109,10 @@ function KeyBinds.duplicateOf(key, shift, ctrl, alt, exceptName)
 end
 
 function KeyBinds.actionName(name)
-    local ok, t = pcall(getText, "UI_optionscreen_binding_" .. tostring(name))
-    if ok and type(t) == "string" and t ~= "" then
-        local trimmed = t:trim()
+    local ok, translated = pcall(getText,
+        "UI_optionscreen_binding_" .. tostring(name))
+    if ok and type(translated) == "string" and translated ~= "" then
+        local trimmed = translated:trim()
         if trimmed ~= "" then return trimmed end
     end
     return tostring(name)

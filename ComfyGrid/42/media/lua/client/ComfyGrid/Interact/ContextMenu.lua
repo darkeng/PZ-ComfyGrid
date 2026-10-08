@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Core/Input"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Interact/Tooltip"
 ComfyGrid = ComfyGrid or {}
@@ -33,9 +34,8 @@ end
 function ContextMenu.handOff(playerNum, menu, origin)
     if menu == nil or origin == nil then return false end
     if menu.numOptions == nil or menu.numOptions <= 1 then return false end
-    if JoypadState == nil or not JoypadState.players[playerNum + 1] then
-        return false
-    end
+
+    if not ComfyGrid.Core.Input.padOwns(playerNum) then return false end
     menu.origin = origin
     menu.mouseOver = 1
     setJoypadFocus(playerNum, menu)
@@ -52,14 +52,16 @@ function ContextMenu.open(playerNum, stacks, gridView, absX, absY)
     if inventory == nil then return false end
 
     local pane = paneOf(gridView)
-    local stackList = VanillaStacks.listFrom(stacks, inventory, pane)
+
+    local isInPlayerInventory = inventory:isInCharacterInventory(playerObj)
+
+    local stackPane = pane or VanillaStacks.sidePaneFor(playerNum, isInPlayerInventory)
+    local stackList = VanillaStacks.listFrom(stacks, inventory, stackPane)
 
     if #stackList == 0 then return false end
 
     local Tooltip = ComfyGrid.Interact.Tooltip
     if Tooltip ~= nil then Tooltip.hideForPane(pane) end
-
-    local isInPlayerInventory = inventory:isInCharacterInventory(playerObj)
 
     local menu = ISInventoryPaneContextMenu.createMenu(
         playerNum, isInPlayerInventory, stackList,

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -55,14 +55,18 @@ function TransferJobs.unregister(container, item)
     end
 end
 
+function TransferJobs.queuedActions(character)
+    local queues = ISTimedActionQueue.queues
+    local characterQueue = queues ~= nil and queues[character] or nil
+    return characterQueue ~= nil and characterQueue.queue or nil
+end
+
 local function queueStillMoving(character, container)
     if character == nil then return false end
-    local queues = ISTimedActionQueue.queues
-    local q = queues ~= nil and queues[character] or nil
-    local list = q ~= nil and q.queue or nil
-    if list == nil then return false end
-    for i = 1, #list do
-        local action = list[i]
+    local actions = TransferJobs.queuedActions(character)
+    if actions == nil then return false end
+    for i = 1, #actions do
+        local action = actions[i]
         if action ~= nil and action.Type == "ISInventoryTransferAction"
                 and action.srcContainer == container then
             return true
@@ -79,8 +83,8 @@ function TransferJobs.itemsFor(container)
     if now - entry.lastAliveMs >= ALIVE_CHECK_MS then
         entry.lastAliveMs = now
         for id, item in pairs(entry.items) do
-            local ok, cont = pcall(item.getContainer, item)
-            if not ok or cont ~= container then
+            local ok, currentContainer = pcall(item.getContainer, item)
+            if not ok or currentContainer ~= container then
                 entry.items[id] = nil
                 entry.count = entry.count - 1
             end

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -26,8 +26,8 @@ local SKIP_TYPES = {
 local turnOffLabel = nil
 local function offLabel()
     if turnOffLabel == nil then
-        local ok, s = pcall(getText, "ContextMenu_Turn_Off")
-        turnOffLabel = (ok and s) or false
+        local ok, turnOffText = pcall(getText, "ContextMenu_Turn_Off")
+        turnOffLabel = (ok and turnOffText) or false
     end
     return turnOffLabel
 end
@@ -38,8 +38,10 @@ function anchor:getY() return self._y end
 function anchor:getHeight() return self._h end
 
 local function objectFor(inventory)
-    local okT, ctype = pcall(inventory.getType, inventory)
-    if okT and ctype ~= nil and SKIP_TYPES[ctype] then return nil end
+    local okT, containerType = pcall(inventory.getType, inventory)
+    if okT and containerType ~= nil and SKIP_TYPES[containerType] then
+        return nil
+    end
 
     local okO, outermost = pcall(inventory.getOutermostContainer, inventory)
     if okO and outermost ~= nil then
@@ -62,92 +64,104 @@ local function objectFor(inventory)
     return nil
 end
 
-local cache = setmetatable({}, { __mode = "k" })
+local MAX_ENTRIES = 128
+local cache = {}
+local entryCount = 0
 
 local function entryFor(inventory)
-    local e = cache[inventory]
-    if e == nil then
-        e = { stamp = -1, list = {}, handlers = {}, slots = {} }
-        cache[inventory] = e
+    local entry = cache[inventory]
+    if entry == nil then
+        if entryCount >= MAX_ENTRIES then
+            cache = {}
+            entryCount = 0
+        end
+        entry = { stamp = -1, list = {}, handlers = {}, slots = {} }
+        cache[inventory] = entry
+        entryCount = entryCount + 1
     end
-    return e
+    return entry
 end
 
-local function handlerFor(e, class, object, inventory, playerObj, playerNum)
-    local h = e.handlers[class]
-    if h == false then return nil end
-    if h == nil then
+function ObjectVerbs.cachedCount()
+    return entryCount, MAX_ENTRIES
+end
+
+local function handlerFor(entry, class, object, inventory, playerObj, playerNum)
+    local handler = entry.handlers[class]
+    if handler == false then return nil end
+    if handler == nil then
         local ok, made = pcall(class.new, class)
         if not ok or made == nil then
             Log.warn("ObjectVerbs: cannot instantiate "
                 .. tostring(class.Type))
 
-            e.handlers[class] = false
+            entry.handlers[class] = false
             return nil
         end
-        h = made
-        e.handlers[class] = h
+        handler = made
+        entry.handlers[class] = handler
     end
 
-    h.object = object
-    h.container = inventory
-    h.playerObj = playerObj
-    h.playerNum = playerNum
-    h.lootWindow = anchor
-    return h
+    handler.object = object
+    handler.container = inventory
+    handler.playerObj = playerObj
+    handler.playerNum = playerNum
+    handler.lootWindow = anchor
+    return handler
 end
 
-local function slotFor(e, class)
-    local s = e.slots[class]
-    if s == nil then
-        s = {}
-        e.slots[class] = s
+local function slotFor(entry, class)
+    local verbSlot = entry.slots[class]
+    if verbSlot == nil then
+        verbSlot = {}
+        entry.slots[class] = verbSlot
     end
-    return s
+    return verbSlot
 end
 
-local function rebuild(e, inventory, playerNum)
-    local list = e.list
-    for i = #list, 1, -1 do list[i] = nil end
+local function rebuild(entry, inventory, playerNum)
+    local verbs = entry.list
+    for i = #verbs, 1, -1 do verbs[i] = nil end
 
     local classes = ISLootWindowContainerControls_HandlerList
-    if type(classes) ~= "table" then return list end
+    if type(classes) ~= "table" then return verbs end
     local playerObj = getSpecificPlayer(playerNum)
-    if playerObj == nil then return list end
+    if playerObj == nil then return verbs end
     local object = objectFor(inventory)
 
-    if object == nil then return list end
+    if object == nil then return verbs end
 
-    local off = offLabel()
+    local turnOffLabelText = offLabel()
     for i = 1, #classes do
         local class = classes[i]
 
         if class ~= nil and class.displayToRight then
-            local h = handlerFor(e, class, object, inventory, playerObj,
-                playerNum)
-            if h ~= nil then
-                local okV, visible = pcall(h.shouldBeVisible, h)
+            local handler = handlerFor(entry, class, object, inventory,
+                playerObj, playerNum)
+            if handler ~= nil then
+                local okV, visible = pcall(handler.shouldBeVisible, handler)
                 if okV and visible then
 
                     local label = nil
-                    local okC, control = pcall(h.getControl, h)
+                    local okC, control = pcall(handler.getControl, handler)
                     if okC and control ~= nil then
                         local okL, title = pcall(control.getTitle, control)
                         label = okL and title or nil
                     end
                     if label ~= nil then
-                        local s = slotFor(e, class)
-                        s.key = class.Type
-                        s.label = label
-                        s.active = off ~= false and label == off
-                        s.handler = h
-                        list[#list + 1] = s
+                        local verbSlot = slotFor(entry, class)
+                        verbSlot.key = class.Type
+                        verbSlot.label = label
+                        verbSlot.active = turnOffLabelText ~= false
+                            and label == turnOffLabelText
+                        verbSlot.handler = handler
+                        verbs[#verbs + 1] = verbSlot
                     end
                 end
             end
         end
     end
-    return list
+    return verbs
 end
 
 local TYPE_PREFIX = "ISLootWindowObjectControlHandler_"
@@ -183,18 +197,18 @@ end
 
 function ObjectVerbs.of(inventory, playerNum)
     if inventory == nil or playerNum == nil then return nil end
-    local e = entryFor(inventory)
+    local entry = entryFor(inventory)
     local now = getTimestampMs ~= nil and getTimestampMs() or 0
-    if now - e.stamp >= REFRESH_MS then
-        e.stamp = now
-        local ok, err = pcall(rebuild, e, inventory, playerNum)
+    if now - entry.stamp >= REFRESH_MS then
+        entry.stamp = now
+        local ok, err = pcall(rebuild, entry, inventory, playerNum)
         if not ok then
             Log.warn("ObjectVerbs: rebuild failed: " .. tostring(err))
-            for i = #e.list, 1, -1 do e.list[i] = nil end
+            for i = #entry.list, 1, -1 do entry.list[i] = nil end
         end
     end
-    if #e.list == 0 then return nil end
-    return e.list
+    if #entry.list == 0 then return nil end
+    return entry.list
 end
 
 function ObjectVerbs.perform(entry, absX, absY, absH)
@@ -211,20 +225,21 @@ function ObjectVerbs.perform(entry, absX, absY, absH)
     return true
 end
 
-function ObjectVerbs.fillMenu(list, context)
-    if list == nil or context == nil then return 0 end
-    local n = 0
-    for i = 1, #list do
-        local h = list[i].handler
-        if h ~= nil and h.handleJoypadContextMenu ~= nil then
-            local ok, err = pcall(h.handleJoypadContextMenu, h, context)
+function ObjectVerbs.fillMenu(verbs, context)
+    if verbs == nil or context == nil then return 0 end
+    local askedCount = 0
+    for i = 1, #verbs do
+        local handler = verbs[i].handler
+        if handler ~= nil and handler.handleJoypadContextMenu ~= nil then
+            local ok, err = pcall(handler.handleJoypadContextMenu, handler,
+                context)
             if ok then
-                n = n + 1
+                askedCount = askedCount + 1
             else
-                Log.warn("ObjectVerbs: menu entry " .. tostring(list[i].key)
+                Log.warn("ObjectVerbs: menu entry " .. tostring(verbs[i].key)
                     .. " failed: " .. tostring(err))
             end
         end
     end
-    return n
+    return askedCount
 end

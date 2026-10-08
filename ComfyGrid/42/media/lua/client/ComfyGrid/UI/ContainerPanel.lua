@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -88,16 +88,16 @@ local PREVIEW_CHIPS = { stow = true, spread = true, empty = true, floor = true }
 local function syncPreview(self)
     local Highlight = ComfyGrid.Interact and ComfyGrid.Interact.Highlight
     if Highlight == nil then return end
-    local hot = self.chips.hotId
-    if hot ~= nil and PREVIEW_CHIPS[hot] and self.model ~= nil then
+    local hotChipId = self.chips.hotId
+    if hotChipId ~= nil and PREVIEW_CHIPS[hotChipId] and self.model ~= nil then
         local Bulk = ComfyGrid.Interact and ComfyGrid.Interact.BulkTransfer
         local pane = self.parent ~= nil and self.parent.pane or nil
         if Bulk ~= nil and pane ~= nil then
-            local list, map = Bulk.plan(hot, self.model.inventory,
+            local planItems, planMap = Bulk.plan(hotChipId, self.model.inventory,
                 self.playerNum)
 
-            if map ~= nil and list ~= nil and #list > 0 then
-                Highlight.publish(pane, self, map)
+            if planMap ~= nil and planItems ~= nil and #planItems > 0 then
+                Highlight.publish(pane, self, planMap)
                 self._previewing = true
                 return
             end
@@ -117,9 +117,7 @@ local function drawChips(self, rightX, y, h)
     row:reset(rightX, y, h)
     for i = 1, #CHIPS do
         local def = CHIPS[i]
-        if def.when == nil or def.when(self) then
-            row:add(def.id, def.tex(), chipTip(def))
-        end
+        row:add(def.id, def.tex(), chipTip(def))
     end
     return row.consumed
 end
@@ -128,21 +126,6 @@ local metricsGen = 0
 Style.onScaleChanged(function()
     metricsGen = metricsGen + 1
 end)
-
-local nameGen = 0
-
-function ContainerPanel.invalidateNames()
-    nameGen = nameGen + 1
-end
-
-if not ComfyGrid._containerNamesHooked then
-    ComfyGrid._containerNamesHooked = true
-    Events.OnRefreshInventoryWindowContainers.Add(function(_page, stage)
-        if stage ~= "end" then return end
-        local CP = ComfyGrid.UI and ComfyGrid.UI.ContainerPanel
-        if CP ~= nil and CP.invalidateNames ~= nil then CP.invalidateNames() end
-    end)
-end
 
 local WEIGHT_TEMPLATE = "999.9/999"
 local WEIGHT_MARGIN = 12
@@ -154,21 +137,16 @@ local weightCol, weightColGen = 0, -1
 
 local function weightGutter()
     if weightColGen ~= metricsGen then
-        local tm = getTextManager and getTextManager() or nil
-        local ok, w = pcall(tm.MeasureStringX, tm, Style.FONT, WEIGHT_TEMPLATE)
-        weightCol = (ok and type(w) == "number") and w or 57
+        local textManager = getTextManager and getTextManager() or nil
+        local okWidth, templateW = pcall(textManager.MeasureStringX,
+            textManager, Style.FONT, WEIGHT_TEMPLATE)
+        weightCol = (okWidth and type(templateW) == "number") and templateW or 57
         weightColGen = metricsGen
     end
     return weightCol
 end
 
 local HEADER_PAD = 4
-
-local function fmtWeight(cur, max)
-    local c = string.format("%.1f", cur)
-    c = c:gsub("%.0$", "")
-    return c .. "/" .. tostring(math.floor(max + 0.5))
-end
 
 local function isActiveSection(self)
     local model = self.model
@@ -192,29 +170,25 @@ local function selectableSection(self)
     local buttons = page ~= nil and page.backpacks or nil
     if type(buttons) ~= "table" then return nil end
     for i = 1, #buttons do
-        local b = buttons[i]
-        if b ~= nil and b.inventory == inv then return page, b end
+        local button = buttons[i]
+        if button ~= nil and button.inventory == inv then return page, button end
     end
     return nil
 end
 
 local function selectZoneAt(self, x, y)
-    local w = self._selectZoneW
-    local h = self._selectZoneH
-    if w == nil or h == nil or w <= 0 then return false end
-    return x >= 0 and x < w and y >= 0 and y < h
+    local zoneW = self._selectZoneW
+    local zoneH = self._selectZoneH
+    if zoneW == nil or zoneH == nil or zoneW <= 0 then return false end
+    return x >= 0 and x < zoneW and y >= 0 and y < zoneH
 end
 
-local function selectZoneHot(self)
+local function selectZoneHot(self, active)
     if self.isMouseOver == nil or not self:isMouseOver() then return false end
-    if not isActiveSection(self) and selectableSection(self) then
+    if not active and selectableSection(self) then
         return selectZoneAt(self, self:getMouseX(), self:getMouseY())
     end
     return false
-end
-
-local function headerHeight()
-    return math.max(18, Style.FONT_H + 4, math.floor(Style.CELL / 2))
 end
 
 local GROUP_GAP = 16
@@ -261,49 +235,49 @@ end
 local function drawActions(self, transferLeft, y, h)
 
     if self.noChips then return nil end
-    local OV = ComfyGrid.Interact and ComfyGrid.Interact.ObjectVerbs
-    if OV == nil or self.model == nil then return nil end
-    local verbs = OV.of(self.model.inventory, self.playerNum)
+    local ObjectVerbs = ComfyGrid.Interact and ComfyGrid.Interact.ObjectVerbs
+    if ObjectVerbs == nil or self.model == nil then return nil end
+    local verbs = ObjectVerbs.of(self.model.inventory, self.playerNum)
 
     local trash = isTrashable(self)
     if verbs == nil and not trash then return nil end
 
     seenGen = seenGen + 1
-    local n, overflow = 0, 0
+    local chipCount, overflow = 0, 0
     for i = 1, (verbs ~= nil and #verbs or 0) do
-        local g = OV.glyphFor(verbs[i].key)
+        local glyph = ObjectVerbs.glyphFor(verbs[i].key)
 
-        local tex = g ~= nil and seenGlyph[g] ~= seenGen
-            and Draw.glyphTexture(g) or nil
+        local tex = glyph ~= nil and seenGlyph[glyph] ~= seenGen
+            and Draw.glyphTexture(glyph) or nil
         if tex ~= nil then
-            seenGlyph[g] = seenGen
-            n = n + 1
-            pick[n], pickTex[n] = i, tex
+            seenGlyph[glyph] = seenGen
+            chipCount = chipCount + 1
+            pick[chipCount], pickTex[chipCount] = i, tex
         else
             overflow = overflow + 1
         end
     end
 
-    local gg = groupGap()
-    local lpad = SectionRule.pad()
+    local gap = groupGap()
+    local leftPad = SectionRule.pad()
 
-    local avail = transferLeft - gg - lpad
+    local avail = transferLeft - gap - leftPad
     local extra = (trash and 1 or 0)
-    local total = n + ((overflow > 0) and 1 or 0) + extra
-    while n > 0 and Chip.groupWidth(total, h) > avail do
-        n = n - 1
+    local total = chipCount + ((overflow > 0) and 1 or 0) + extra
+    while chipCount > 0 and Chip.groupWidth(total, h) > avail do
+        chipCount = chipCount - 1
         overflow = overflow + 1
-        total = n + 1 + extra
+        total = chipCount + 1 + extra
     end
     if total == 0 then return nil end
-    local w = Chip.groupWidth(total, h)
+    local groupW = Chip.groupWidth(total, h)
 
-    local maxLeft = transferLeft - gg - w
-    if maxLeft < lpad then return nil end
+    local maxLeft = transferLeft - gap - groupW
+    if maxLeft < leftPad then return nil end
 
-    local centre = math.floor((lpad + nameMin() + transferLeft) / 2)
-    local left = math.max(lpad,
-        math.min(centre - math.floor(w / 2), maxLeft))
+    local centre = math.floor((leftPad + nameMin() + transferLeft) / 2)
+    local left = math.max(leftPad,
+        math.min(centre - math.floor(groupW / 2), maxLeft))
 
     local row = self.actions
     row:resetLeft(left, y, h)
@@ -315,22 +289,22 @@ local function drawActions(self, transferLeft, y, h)
         self._chipped = chipped
     end
     self._chippedGen = seenGen
-    for i = 1, n do
-        local e = verbs[pick[i]]
+    for i = 1, chipCount do
+        local verb = verbs[pick[i]]
 
-        row:add(chipIdFor(e.key), pickTex[i], e.label, e.active)
-        chipped[e.key] = seenGen
+        row:add(chipIdFor(verb.key), pickTex[i], verb.label, verb.active)
+        chipped[verb.key] = seenGen
     end
     if overflow > 0 then
         row:add("verbs", Draw.moreTexture(), actionsTip())
     end
     if row.count == 0 then return nil end
 
-    local ruleX = math.floor((left + w + transferLeft) / 2)
+    local ruleX = math.floor((left + groupW + transferLeft) / 2)
     local inset = math.max(2, math.floor(h / 5))
     self:drawRect(ruleX, y + inset, 1, h - inset * 2, SECTION_LINE.a,
         SECTION_LINE.r, SECTION_LINE.g, SECTION_LINE.b)
-    return left, left + w
+    return left, left + groupW
 end
 
 local function resolveDisplayName(inventory, playerNum)
@@ -373,13 +347,13 @@ local function applyModel(self, model)
 
         local ok, name = pcall(resolveDisplayName, model.inventory, self.playerNum)
         self.headerName = (ok and name) or "?"
-        self._nameGen = nameGen
+        self._nameGen = ContainerName.renameGeneration()
     end
 end
 
 function ContainerPanel:new(x, y, model, playerNum, noChips)
 
-    local o = ISPanel:new(x, y, 1, headerHeight() + 1)
+    local o = ISPanel:new(x, y, 1, Style.headerHeight() + 1)
     setmetatable(o, self)
     self.__index = self
     o.playerNum = playerNum
@@ -405,8 +379,8 @@ end
 
 function ContainerPanel:_buildGridView()
     if not self.model then return end
-    local gv = GridView:new(0, headerHeight(), self.model, self.playerNum)
-    gv.compactEligible = true
+    local gv = GridView:new(0, Style.headerHeight(), self.model, self.playerNum)
+    gv.spareSlotsEligible = true
     gv:initialise()
     self:addChild(gv)
     self.gridView = gv
@@ -422,130 +396,170 @@ function ContainerPanel:setModel(model)
     self:_buildGridView()
 end
 
-function ContainerPanel:prerender()
-
-    local Pad = ComfyGrid.Interact and ComfyGrid.Interact.PadFocus
-    local padSlot = Pad ~= nil and Pad.cursorFor ~= nil and Pad.cursorFor(self)
-        or nil
+local function resetChipRows(self)
+    local PadFocus = ComfyGrid.Interact and ComfyGrid.Interact.PadFocus
+    local padSlot = PadFocus ~= nil and PadFocus.cursorFor ~= nil
+        and PadFocus.cursorFor(self) or nil
     local padId = padSlot ~= nil and self:padChipAt(padSlot) or nil
     self.chips:clear()
     self.actions:clear()
     self.chips.padHot = padId
     self.actions.padHot = padId
+end
 
-    local headerH = headerHeight()
-    local gridTop = headerH
+local function syncGridBox(self, gridTop)
     local gv = self.gridView
-    if gv then
+    if not gv then return end
+    gv:setAvailableWidth(self.width)
+    if gv.x ~= 0 then gv:setX(0) end
+    if gv.y ~= gridTop then gv:setY(gridTop) end
+    local panelH = gridTop + gv.height
+    if self.height ~= panelH then self:setHeight(panelH) end
+end
 
-        gv:setAvailableWidth(self.width)
-        if gv.x ~= 0 then gv:setX(0) end
-        if gv.y ~= gridTop then gv:setY(gridTop) end
-        local h = gridTop + gv.height
-        if self.height ~= h then self:setHeight(h) end
-    end
-
-    local tm = getTextManager()
-    local wtText = nil
+local function loadFigureText(self)
     local inv = self.model ~= nil and self.model.inventory or nil
-    if inv ~= nil then
-        local cmax = nil
+    if inv == nil then return nil end
+    local cmax = nil
 
-        local grid = self.model.grid
-        local cur = Capacity.weightOf(inv, grid ~= nil and grid.changeCount or nil)
-        local playerObj = self.playerNum ~= nil
-            and getSpecificPlayer(self.playerNum) or nil
-        if playerObj ~= nil and inv == playerObj:getInventory() then
-            local okM, m = pcall(playerObj.getMaxWeight, playerObj)
-            if okM and type(m) == "number" then cmax = m end
-        else
+    local grid = self.model.grid
+    local cur = Capacity.weightOf(inv, grid ~= nil and grid.changeCount or nil)
+    local playerObj = self.playerNum ~= nil
+        and getSpecificPlayer(self.playerNum) or nil
+    if playerObj ~= nil and inv == playerObj:getInventory() then
+        local okMax, maxWeight = pcall(playerObj.getMaxWeight, playerObj)
+        if okMax and type(maxWeight) == "number" then cmax = maxWeight end
+    else
 
-            cmax = Capacity.effectiveFor(inv, self.playerNum)
-        end
-        if cur ~= nil and cmax ~= nil then
-            local key = math.floor(cur * 10 + 0.5) * 1000 + cmax
-            if self._wtKey ~= key or self._wtGen ~= metricsGen then
-                self._wtKey = key
-                self._wtGen = metricsGen
-                self._wtText = fmtWeight(cur, cmax)
-
-            end
-            wtText = self._wtText
-        end
+        cmax = Capacity.effectiveFor(inv, self.playerNum)
     end
-    do
+    if cur == nil or cmax == nil then return nil end
+    local key = math.floor(cur * 10 + 0.5) * 1000 + cmax
+    if self._wtKey ~= key or self._wtGen ~= metricsGen then
+        self._wtKey = key
+        self._wtGen = metricsGen
+        self._wtText = Text.formatLoad(cur, cmax)
 
-        local fontHgt = tm:getFontHeight(Style.FONT)
-        local textY = math.floor((headerH - fontHgt) / 2)
-
-        local active = isActiveSection(self)
-        local tCol = active and SECTION_TEXT_HI or SECTION_TEXT
-        local lCol = active and SECTION_LINE_HI or SECTION_LINE
-        if active then
-            SectionRule.plate(self, 0, headerH, true)
-            SectionRule.activeBar(self, 0, headerH)
-        elseif selectZoneHot(self) then
-            SectionRule.plate(self, 0, headerH, false)
-        end
-        local lpad = SectionRule.pad()
-
-        local gutter = wtText ~= nil and weightGutter() or 0
-        if wtText ~= nil then
-            self:drawTextRight(wtText, self.width - HEADER_PAD,
-                textY, tCol.r, tCol.g, tCol.b, tCol.a, Style.FONT)
-        end
-        local rightPad = gutter + (wtText ~= nil and weightMargin() or 0)
-        rightPad = rightPad + drawChips(self,
-            self.width - HEADER_PAD - rightPad, 0, headerH)
-
-        local transferLeft = self.width - HEADER_PAD - rightPad
-        local budgetRight = transferLeft
-        local actionsLeft = drawActions(self, transferLeft, 0, headerH)
-        if actionsLeft ~= nil then budgetRight = actionsLeft - 6 end
-
-        if self._nameGen ~= nameGen then
-            self._nameGen = nameGen
-            if self.model ~= nil then
-                local okN, freshName = pcall(resolveDisplayName,
-                    self.model.inventory, self.playerNum)
-                if okN and freshName ~= nil then self.headerName = freshName end
-            end
-        end
-        local shown = self.headerName
-        local status = ContainerStatus ~= nil and self.model ~= nil
-            and ContainerStatus.of(self.model.inventory) or nil
-        if shown ~= nil and status ~= nil then
-            shown = shown .. ": " .. status
-        end
-        local nameW = 0
-        if shown then
-
-            local fitKey = self.width * 10000 + math.floor(budgetRight)
-            if self._nameFitKey ~= fitKey or self._nameFitGen ~= metricsGen
-                    or self._nameFitText ~= shown then
-                self._nameFitKey = fitKey
-                self._nameFitGen = metricsGen
-                self._nameFitText = shown
-                self._nameFit = Text.fitEllipsis(shown, Style.FONT,
-                    budgetRight - lpad, 60)
-                local okW, npx = pcall(tm.MeasureStringX, tm, Style.FONT,
-                    self._nameFit)
-                self._nameFitW = okW and npx or 0
-            end
-            self:drawText(self._nameFit, lpad, textY,
-                tCol.r, tCol.g, tCol.b, tCol.a, Style.FONT)
-            nameW = self._nameFitW or 0
-        end
-        local lineX = lpad + nameW + 6
-        local lineW = budgetRight - lineX
-        if lineW > 0 then
-            self:drawRect(lineX, textY + math.floor(fontHgt / 2), lineW, 1,
-                lCol.a, lCol.r, lCol.g, lCol.b)
-        end
-
-        self._selectZoneW = budgetRight
-        self._selectZoneH = headerH
     end
+    return self._wtText
+end
+
+local function drawHeaderPlate(self, active, headerH)
+    if active then
+        SectionRule.plate(self, 0, headerH, true)
+        SectionRule.activeBar(self, 0, headerH)
+    elseif selectZoneHot(self, active) then
+        SectionRule.plate(self, 0, headerH, false)
+    end
+end
+
+local function drawFigureAndChips(self, wtText, textY, textColor, headerH)
+    local gutter = wtText ~= nil and weightGutter() or 0
+    if wtText ~= nil then
+        self:drawTextRight(wtText, self.width - HEADER_PAD,
+            textY, textColor.r, textColor.g, textColor.b, textColor.a,
+            Style.FONT)
+    end
+    local rightPad = gutter + (wtText ~= nil and weightMargin() or 0)
+    return rightPad + drawChips(self,
+        self.width - HEADER_PAD - rightPad, 0, headerH)
+end
+
+local function refreshRenamedTitle(self)
+    local nameGen = ContainerName.renameGeneration()
+    if self._nameGen == nameGen then return end
+    self._nameGen = nameGen
+    if self.model ~= nil then
+        local okN, freshName = pcall(resolveDisplayName,
+            self.model.inventory, self.playerNum)
+        if okN and freshName ~= nil then self.headerName = freshName end
+    end
+end
+
+local function headerTextWithStatus(self)
+    local headerText = self.headerName
+    local status = ContainerStatus ~= nil and self.model ~= nil
+        and ContainerStatus.of(self.model.inventory) or nil
+    if headerText ~= nil and status ~= nil then
+        if self._statusTitleName ~= headerText
+                or self._statusTitleStatus ~= status then
+            self._statusTitleName = headerText
+            self._statusTitleStatus = status
+            self._statusTitle = headerText .. ": " .. status
+        end
+        headerText = self._statusTitle
+    end
+    return headerText
+end
+
+local function drawFittedName(self, headerText, budgetRight, leftPad, textY,
+        textColor, textManager)
+    if not headerText then return 0 end
+    local fitKey = self.width * 10000 + math.floor(budgetRight)
+    if self._nameFitKey ~= fitKey or self._nameFitGen ~= metricsGen
+            or self._nameFitText ~= headerText then
+        self._nameFitKey = fitKey
+        self._nameFitGen = metricsGen
+        self._nameFitText = headerText
+        self._nameFit = Text.fitEllipsis(headerText, Style.FONT,
+            budgetRight - leftPad, 60)
+        local okWidth, nameWidth = pcall(textManager.MeasureStringX,
+            textManager, Style.FONT, self._nameFit)
+        self._nameFitW = okWidth and nameWidth or 0
+    end
+    self:drawText(self._nameFit, leftPad, textY,
+        textColor.r, textColor.g, textColor.b, textColor.a, Style.FONT)
+    return self._nameFitW or 0
+end
+
+local function drawHeaderRule(self, lineX, lineRight, lineY, lineColor)
+    local lineW = lineRight - lineX
+    if lineW > 0 then
+        self:drawRect(lineX, lineY, lineW, 1,
+            lineColor.a, lineColor.r, lineColor.g, lineColor.b)
+    end
+end
+
+local function publishSelectZone(self, budgetRight, headerH)
+    self._selectZoneW = budgetRight
+    self._selectZoneH = headerH
+end
+
+local function drawHeader(self, headerH, wtText, active, textManager)
+
+    local fontHgt = textManager:getFontHeight(Style.FONT)
+    local textY = math.floor((headerH - fontHgt) / 2)
+    local textColor = active and SECTION_TEXT_HI or SECTION_TEXT
+    local lineColor = active and SECTION_LINE_HI or SECTION_LINE
+    drawHeaderPlate(self, active, headerH)
+    local leftPad = SectionRule.pad()
+    local rightPad = drawFigureAndChips(self, wtText, textY, textColor, headerH)
+
+    local transferLeft = self.width - HEADER_PAD - rightPad
+    local budgetRight = transferLeft
+    local actionsLeft = drawActions(self, transferLeft, 0, headerH)
+    if actionsLeft ~= nil then budgetRight = actionsLeft - 6 end
+    refreshRenamedTitle(self)
+    local headerText = headerTextWithStatus(self)
+    local nameW = drawFittedName(self, headerText, budgetRight, leftPad, textY,
+        textColor, textManager)
+    drawHeaderRule(self, leftPad + nameW + 6, budgetRight,
+        textY + math.floor(fontHgt / 2), lineColor)
+    publishSelectZone(self, budgetRight, headerH)
+end
+
+function ContainerPanel:prerender()
+
+    resetChipRows(self)
+
+    local headerH = Style.headerHeight()
+    syncGridBox(self, headerH)
+    local textManager = getTextManager()
+    local wtText = loadFigureText(self)
+
+    local active = isActiveSection(self)
+    self._activeSection = active
+    drawHeader(self, headerH, wtText, active, textManager)
     syncPreview(self)
 end
 
@@ -577,79 +591,49 @@ function CHIP_ACTIONS.sort(self)
     end
 end
 
+local function runBulkVerb(self, verbName, what, failText, reportId)
+    local Bulk = ComfyGrid.Interact and ComfyGrid.Interact.BulkTransfer
+    if Bulk == nil or Bulk[verbName] == nil then return end
+    local ok, outcome = pcall(Bulk[verbName], self.model, self.playerNum)
+    if not ok then
+        Log.warn("ContainerPanel: " .. what .. " failed: " .. tostring(outcome))
+        Notify.bad(self.playerNum, Text.tr(failText[1], failText[2]))
+        return
+    end
+    Bulk.report(outcome, self.playerNum, reportId)
+end
+
+local STOW_FAILED = { "IGUI_ComfyGrid_ChipStowFailed",
+    "Could not bring anything." }
 function CHIP_ACTIONS.stow(self)
-
-    local Bulk = ComfyGrid.Interact and ComfyGrid.Interact.BulkTransfer
-    if Bulk == nil or Bulk.stow == nil then return end
-    local ok, outcome = pcall(Bulk.stow, self.model, self.playerNum)
-    if not ok then
-        Log.warn("ContainerPanel: stow failed: " .. tostring(outcome))
-        Notify.bad(self.playerNum,
-            Text.tr("IGUI_ComfyGrid_ChipStowFailed",
-                "Could not bring anything."))
-        return
-    end
-
-    Bulk.report(outcome, self.playerNum, "stow")
+    runBulkVerb(self, "stow", "stow", STOW_FAILED, "stow")
 end
 
+local EMPTY_FAILED = { "IGUI_ComfyGrid_ChipEmptyFailed",
+    "Could not send anything." }
 function CHIP_ACTIONS.empty(self)
-    local Bulk = ComfyGrid.Interact and ComfyGrid.Interact.BulkTransfer
-    if Bulk == nil or Bulk.empty == nil then return end
-    local ok, outcome = pcall(Bulk.empty, self.model, self.playerNum)
-    if not ok then
-        Log.warn("ContainerPanel: empty failed: " .. tostring(outcome))
-        Notify.bad(self.playerNum,
-            Text.tr("IGUI_ComfyGrid_ChipEmptyFailed",
-                "Could not send anything."))
-        return
-    end
-    Bulk.report(outcome, self.playerNum, "empty")
+    runBulkVerb(self, "empty", "empty", EMPTY_FAILED, "empty")
 end
 
+local TRASH_FAILED = { "IGUI_ComfyGrid_ChipTrashFailed",
+    "Could not empty this bin." }
 function CHIP_ACTIONS.trash(self)
-    local Bulk = ComfyGrid.Interact and ComfyGrid.Interact.BulkTransfer
-    if Bulk == nil or Bulk.emptyTrash == nil then return end
-    local ok, outcome = pcall(Bulk.emptyTrash, self.model, self.playerNum)
-    if not ok then
-        Log.warn("ContainerPanel: empty bin failed: " .. tostring(outcome))
-        Notify.bad(self.playerNum,
-            Text.tr("IGUI_ComfyGrid_ChipTrashFailed",
-                "Could not empty this bin."))
-        return
-    end
-    Bulk.report(outcome, self.playerNum, "trash")
+    runBulkVerb(self, "emptyTrash", "empty bin", TRASH_FAILED, "trash")
 end
 
+local SPREAD_FAILED = { "IGUI_ComfyGrid_ChipSpreadFailed",
+    "Could not put anything away." }
 function CHIP_ACTIONS.spread(self)
-    local Bulk = ComfyGrid.Interact and ComfyGrid.Interact.BulkTransfer
-    if Bulk == nil or Bulk.spread == nil then return end
-    local ok, outcome = pcall(Bulk.spread, self.model, self.playerNum)
-    if not ok then
-        Log.warn("ContainerPanel: spread failed: " .. tostring(outcome))
-        Notify.bad(self.playerNum,
-            Text.tr("IGUI_ComfyGrid_ChipSpreadFailed",
-                "Could not put anything away."))
-        return
-    end
-    Bulk.report(outcome, self.playerNum, "spread")
+    runBulkVerb(self, "spread", "spread", SPREAD_FAILED, "spread")
 end
 
+local FLOOR_FAILED = { "IGUI_ComfyGrid_ChipFloorFailed",
+    "Could not drop anything." }
 function CHIP_ACTIONS.floor(self)
-    local Bulk = ComfyGrid.Interact and ComfyGrid.Interact.BulkTransfer
-    if Bulk == nil or Bulk.dropToFloor == nil then return end
-    local ok, outcome = pcall(Bulk.dropToFloor, self.model, self.playerNum)
-    if not ok then
-        Log.warn("ContainerPanel: drop to floor failed: " .. tostring(outcome))
-        Notify.bad(self.playerNum,
-            Text.tr("IGUI_ComfyGrid_ChipFloorFailed",
-                "Could not drop anything."))
-        return
-    end
-    Bulk.report(outcome, self.playerNum, "floor")
+    runBulkVerb(self, "dropToFloor", "drop to floor", FLOOR_FAILED, "floor")
 end
 
-function ContainerPanel:onMouseDown(_x, _y)
+function ContainerPanel.onMouseDown(_self, _x, _y)
     return true
 end
 
@@ -659,26 +643,29 @@ local function drawSearchRing(self)
     if ItemSearch == nil or SlotRenderer == nil then return end
     local marks = ItemSearch.marksFor(self.playerNum)
     if not ItemSearch.marksContainer(marks, self.model.inventory) then return end
-    SlotRenderer.drawSearchBox(self, 0, 0, self.width, headerHeight(),
+    SlotRenderer.drawSearchBox(self, 0, 0, self.width, Style.headerHeight(),
         SlotRenderer.applyPulse(), false)
 end
 
 function ContainerPanel:render()
     if self.model == nil then return end
     drawSearchRing(self)
-    if not isActiveSection(self) then return end
+    if not self._activeSection then return end
     SectionRule.card(self, 0, 0, self.width, self.height)
 end
 
 local function openActions(self)
-    local OV = ComfyGrid.Interact and ComfyGrid.Interact.ObjectVerbs
-    if OV == nil or ISContextMenu == nil or self.model == nil then return end
-    local verbs = OV.of(self.model.inventory, self.playerNum)
+    local ObjectVerbs = ComfyGrid.Interact and ComfyGrid.Interact.ObjectVerbs
+    if ObjectVerbs == nil or ISContextMenu == nil or self.model == nil then
+        return
+    end
+    local verbs = ObjectVerbs.of(self.model.inventory, self.playerNum)
     if verbs == nil then return end
 
-    local r = self.actions:rectOf("verbs")
-    local ax = self:getAbsoluteX() + (r ~= nil and r.x or 0)
-    local ay = self:getAbsoluteY() + (r ~= nil and (r.y + r.s + 4) or 0)
+    local chipRect = self.actions:rectOf("verbs")
+    local ax = self:getAbsoluteX() + (chipRect ~= nil and chipRect.x or 0)
+    local ay = self:getAbsoluteY()
+        + (chipRect ~= nil and (chipRect.y + chipRect.s + 4) or 0)
     local ok, context = pcall(ISContextMenu.get, self.playerNum, ax, ay)
     if not ok or context == nil then
         Log.warn("ContainerPanel: could not open the actions menu")
@@ -695,29 +682,29 @@ local function openActions(self)
         end
         if #rest == 0 then rest = verbs end
     end
-    OV.fillMenu(rest, context)
+    ObjectVerbs.fillMenu(rest, context)
 
-    local CM = ComfyGrid.Interact and ComfyGrid.Interact.ContextMenu
-    if CM ~= nil and CM.handOff ~= nil then
+    local ContextMenu = ComfyGrid.Interact and ComfyGrid.Interact.ContextMenu
+    if ContextMenu ~= nil and ContextMenu.handOff ~= nil then
         local host = self.parent
         local pane = host ~= nil and host.pane or nil
-        CM.handOff(self.playerNum, context,
+        ContextMenu.handOff(self.playerNum, context,
             pane ~= nil and pane.inventoryPage or nil)
     end
 end
 
 local function performVerb(self, key)
-    local OV = ComfyGrid.Interact and ComfyGrid.Interact.ObjectVerbs
-    if OV == nil then return end
-    local verbs = OV.of(self.model.inventory, self.playerNum)
+    local ObjectVerbs = ComfyGrid.Interact and ComfyGrid.Interact.ObjectVerbs
+    if ObjectVerbs == nil then return end
+    local verbs = ObjectVerbs.of(self.model.inventory, self.playerNum)
     if verbs == nil then return end
     for i = 1, #verbs do
         if verbs[i].key == key then
-            local r = self.actions:rectOf(chipIdFor(key))
-            OV.perform(verbs[i],
-                self:getAbsoluteX() + (r ~= nil and r.x or 0),
-                self:getAbsoluteY() + (r ~= nil and r.y or 0),
-                r ~= nil and r.s or 0)
+            local chipRect = self.actions:rectOf(chipIdFor(key))
+            ObjectVerbs.perform(verbs[i],
+                self:getAbsoluteX() + (chipRect ~= nil and chipRect.x or 0),
+                self:getAbsoluteY() + (chipRect ~= nil and chipRect.y or 0),
+                chipRect ~= nil and chipRect.s or 0)
             return
         end
     end
@@ -743,9 +730,9 @@ function ContainerPanel:padChipCount()
 end
 
 function ContainerPanel:padChipAt(slot)
-    local a = self.actions.count
-    if slot < a then return self.actions:idAt(slot + 1) end
-    return self.chips:idAt(self.chips.count - (slot - a))
+    local actionCount = self.actions.count
+    if slot < actionCount then return self.actions:idAt(slot + 1) end
+    return self.chips:idAt(self.chips.count - (slot - actionCount))
 end
 
 function ContainerPanel:padActivateChip(slot)

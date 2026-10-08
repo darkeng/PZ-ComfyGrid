@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/NetChannels"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Networking = ComfyGrid.Networking or {}
 local ComfyClient = {}
@@ -15,23 +16,23 @@ ComfyGrid.Networking.ComfyClient = ComfyClient
 
 local Log = ComfyGrid.Core.Log
 
-local COMFY_UUID = "ComfyGrid_UUID"
-local WORLD_ITEM_DATA = "ComfyGrid_WorldItemData"
-local WORLD_ITEM_PARTIAL = "ComfyGrid_WorldItemPartial"
-local VEHICLE_DATA = "ComfyGrid_VehicleData"
-local VEHICLE_PARTIAL = "ComfyGrid_VehiclePartial"
+local NetChannels = ComfyGrid.NetChannels
+local COMFY_UUID = NetChannels.COMFY_UUID
+local WORLD_ITEM_DATA = NetChannels.WORLD_ITEM_DATA
+local WORLD_ITEM_PARTIAL = NetChannels.WORLD_ITEM_PARTIAL
+local VEHICLE_DATA = NetChannels.VEHICLE_DATA
+local VEHICLE_PARTIAL = NetChannels.VEHICLE_PARTIAL
 
 ComfyClient.WORLD_ITEM_DATA = WORLD_ITEM_DATA
-ComfyClient.VEHICLE_DATA = VEHICLE_DATA
 
-local pending = {}
+local ownersToTransmit = {}
 local hasPending = false
 local transmitFailLogged = false
 
 function ComfyClient.queueModDataSync(owner, kind)
     if owner == nil then return end
     if not isClient() then return end
-    pending[owner] = kind or "object"
+    ownersToTransmit[owner] = kind or "object"
     hasPending = true
 end
 
@@ -70,40 +71,40 @@ function ComfyClient.mergeVehicle(vehicle)
         bucket, vehicle:getKeyId())
 end
 
-local function transmitPartialData(fullKey, partialKey, record)
+local function transmitPartialData(fullKey, partialKey, layoutRecord)
     local fullData = ModData.getOrCreate(fullKey)
-    fullData[record[COMFY_UUID]] = record
-    ModData.add(partialKey, record)
+    fullData[layoutRecord[COMFY_UUID]] = layoutRecord
+    ModData.add(partialKey, layoutRecord)
     ModData.transmit(partialKey)
 end
 
 local function transmitWorldItem(worldObj)
     local item = worldObj:getItem()
-    local record = item and item:getModData().ComfyGrid
-    if record == nil then return end
-    record[COMFY_UUID] = item:getID()
-    transmitPartialData(WORLD_ITEM_DATA, WORLD_ITEM_PARTIAL, record)
+    local layoutRecord = item and item:getModData().ComfyGrid
+    if layoutRecord == nil then return end
+    layoutRecord[COMFY_UUID] = item:getID()
+    transmitPartialData(WORLD_ITEM_DATA, WORLD_ITEM_PARTIAL, layoutRecord)
 end
 
 local function transmitItemLayout(item)
-    local record = item:getModData().ComfyGrid
-    if record == nil then return end
-    record[COMFY_UUID] = item:getID()
-    transmitPartialData(WORLD_ITEM_DATA, WORLD_ITEM_PARTIAL, record)
+    local layoutRecord = item:getModData().ComfyGrid
+    if layoutRecord == nil then return end
+    layoutRecord[COMFY_UUID] = item:getID()
+    transmitPartialData(WORLD_ITEM_DATA, WORLD_ITEM_PARTIAL, layoutRecord)
 end
 
 local function transmitVehicle(vehicle)
-    local record = vehicle:getModData().ComfyGrid
-    if record == nil then return end
-    record[COMFY_UUID] = vehicle:getKeyId()
-    transmitPartialData(VEHICLE_DATA, VEHICLE_PARTIAL, record)
+    local layoutRecord = vehicle:getModData().ComfyGrid
+    if layoutRecord == nil then return end
+    layoutRecord[COMFY_UUID] = vehicle:getKeyId()
+    transmitPartialData(VEHICLE_DATA, VEHICLE_PARTIAL, layoutRecord)
 end
 
 local function transmitObject(owner)
     owner:transmitModData()
 end
 
-local function drainOne(owner)
+local function transmitOwner(owner)
 
     if instanceof(owner, "IsoWorldInventoryObject") then
         transmitWorldItem(owner)
@@ -117,11 +118,11 @@ local function drainOne(owner)
     end
 end
 
-local function drain()
+local function drainTransmitQueue()
     if not hasPending then return end
-    for owner in pairs(pending) do
-        pending[owner] = nil
-        local ok, err = pcall(drainOne, owner)
+    for owner in pairs(ownersToTransmit) do
+        ownersToTransmit[owner] = nil
+        local ok, err = pcall(transmitOwner, owner)
         if not ok and not transmitFailLogged then
             transmitFailLogged = true
             Log.warn("ComfyClient: sync transmit failed (logged once): "
@@ -132,7 +133,7 @@ local function drain()
 end
 
 function ComfyClient.flush()
-    local ok, err = pcall(drain)
+    local ok, err = pcall(drainTransmitQueue)
     if not ok then
         Log.error("ComfyClient flush failed: " .. tostring(err))
     end
@@ -159,7 +160,7 @@ if not ComfyGrid.Networking._comfyClientHooked then
     ComfyGrid.Networking._comfyClientHooked = true
 
     Events.OnTick.Add(function()
-        local ok, err = pcall(drain)
+        local ok, err = pcall(drainTransmitQueue)
         if not ok then
             Log.error("ComfyClient drain failed: " .. tostring(err))
         end

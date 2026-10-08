@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -41,8 +41,8 @@ local function buttonOn(page)
 end
 
 function SpringLoad._onTick()
-    local dd = ComfyGrid.Interact and ComfyGrid.Interact.DragAndDrop
-    if dd == nil or not dd.isComfyDrag() then
+    local DragAndDrop = ComfyGrid.Interact and ComfyGrid.Interact.DragAndDrop
+    if DragAndDrop == nil or not DragAndDrop.isComfyDrag() then
         if hoverButton ~= nil then reset() end
         return
     end
@@ -89,9 +89,9 @@ end
 if not ComfyGrid._springLoadTickHooked then
     ComfyGrid._springLoadTickHooked = true
     Events.OnTick.Add(function()
-        local sl = ComfyGrid.Interact and ComfyGrid.Interact.SpringLoad
-        if sl ~= nil then
-            sl._onTick()
+        local springLoad = ComfyGrid.Interact and ComfyGrid.Interact.SpringLoad
+        if springLoad ~= nil then
+            springLoad._onTick()
         end
     end)
 end

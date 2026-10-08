@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,13 +9,13 @@
 require "ISUI/ISPanel"
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/UI/Style"
-require "ComfyGrid/UI/Draw"
+require "ComfyGrid/UI/Chrome/ModalButtons"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 ComfyGrid.UI.Chrome = ComfyGrid.UI.Chrome or {}
 
 local Style = ComfyGrid.UI.Style
-local Draw = ComfyGrid.UI.Draw
+local ModalButtons = ComfyGrid.UI.Chrome.ModalButtons
 
 local Confirm = ISPanel:derive("ComfyConfirm")
 ComfyGrid.UI.Chrome.Confirm = Confirm
@@ -23,11 +23,9 @@ ComfyGrid.UI.Chrome.Confirm = Confirm
 local PAD = 16
 local GAP = 10
 
-local function measure(s)
-    local tm = getTextManager()
-    if tm == nil then return 0 end
-    return tm:MeasureStringX(Style.FONT, s or "")
-end
+local BUTTON_RADIUS = 4
+
+local measure = ModalButtons.measure
 
 local function lineHeight()
     return math.max(Style.FONT_H or 14, 14) + 3
@@ -55,27 +53,40 @@ local function wrap(text, maxW)
     return out
 end
 
-local function buttonRects(self)
-    local h = lineHeight() + 8
-    local w = math.max(78, measure(self.yesText) + 28, measure(self.noText) + 28)
-    local y = self.height - PAD - h
-    if not self.yesno then
-        return { { x = math.floor((self.width - w) / 2), y = y, w = w, h = h,
-                   label = self.yesText, yes = true } }
+local function layoutButtons(self)
+    local buttonHeight = lineHeight() + 8
+    local buttonWidth = math.max(78, measure(self.yesText) + 28,
+        measure(self.noText) + 28)
+    local y = self.height - PAD - buttonHeight
+    local buttons = self._buttons
+    if buttons == nil then
+        buttons = { { label = self.yesText, yes = true } }
+        if self.yesno then
+            buttons[2] = { label = self.noText, yes = false }
+        end
+        self._buttons = buttons
     end
-    local total = w * 2 + GAP
-    local x0 = math.floor((self.width - total) / 2)
-    return {
-        { x = x0, y = y, w = w, h = h, label = self.yesText, yes = true },
-        { x = x0 + w + GAP, y = y, w = w, h = h, label = self.noText, yes = false },
-    }
+    local x
+    if self.yesno then
+        x = math.floor((self.width - (buttonWidth * 2 + GAP)) / 2)
+    else
+        x = math.floor((self.width - buttonWidth) / 2)
+    end
+    for i = 1, #buttons do
+        local rect = buttons[i]
+        rect.x, rect.y, rect.w, rect.h = x, y, buttonWidth, buttonHeight
+        rect.labelWidth = measure(rect.label)
+        x = x + buttonWidth + GAP
+    end
+    self._buttonsFont = Style.FONT
+    self._buttonsFontHeight = Style.FONT_H
 end
 
 function Confirm:close()
 
     if self._padReturn ~= nil and getFocusForPlayer ~= nil then
-        local ok, cur = pcall(getFocusForPlayer, self.playerNum or 0)
-        if ok and cur == self and setJoypadFocus ~= nil then
+        local ok, currentFocus = pcall(getFocusForPlayer, self.playerNum or 0)
+        if ok and currentFocus == self and setJoypadFocus ~= nil then
             pcall(setJoypadFocus, self.playerNum or 0, self._padReturn)
         end
     end
@@ -93,36 +104,27 @@ local function answer(self, yes)
 end
 
 function Confirm:prerender()
-    local sf = Style.COLORS.SURFACE
-    Draw.shadow(self, 0, 0, self.width, self.height, 16, 0.55)
-    Draw.roundFrame(self, 0, 0, self.width, self.height, 6, 0.98, sf.line,
-        sf.bg, 0.98)
+    ModalButtons.drawShell(self)
 
-    local lh = lineHeight()
+    local lineStep = lineHeight()
     local y = PAD
+    local bodyText = Style.COLORS.BODY_TEXT
     for i = 1, #self.lines do
         if self.lines[i] ~= "" then
-            self:drawText(self.lines[i], PAD, y, 0.86, 0.84, 0.80, 1, Style.FONT)
+            self:drawText(self.lines[i], PAD, y, bodyText.r, bodyText.g,
+                bodyText.b, 1, Style.FONT)
         end
-        y = y + lh
+        y = y + lineStep
     end
 
-    local mx, my = self:getMouseX(), self:getMouseY()
-    local over = self:isMouseOver()
-    self._hot = nil
-    local rects = buttonRects(self)
-    for i = 1, #rects do
-        local r = rects[i]
-        local hot = over and mx >= r.x and mx < r.x + r.w
-            and my >= r.y and my < r.y + r.h
-        if hot then self._hot = i end
-        Draw.roundFrame(self, r.x, r.y, r.w, r.h, 4, 1,
-            hot and sf.accent or sf.line, hot and sf.cardHi or sf.card, 1)
-        local tw = measure(r.label)
-        self:drawText(r.label, r.x + math.floor((r.w - tw) / 2),
-            r.y + math.floor((r.h - Style.FONT_H) / 2),
-            sf.accent.r, sf.accent.g, sf.accent.b, hot and 1 or 0.85, Style.FONT)
+    if self._buttons == nil or self._buttonsFont ~= Style.FONT
+            or self._buttonsFontHeight ~= Style.FONT_H then
+        layoutButtons(self)
     end
+
+    local rects = self._buttons
+    ModalButtons.drawButtons(self, rects, BUTTON_RADIUS)
+
     self._rects = rects
 end
 
@@ -134,16 +136,8 @@ function Confirm:onMouseDown(_x, _y)
 end
 
 function Confirm:onMouseUp(x, y)
-    local rects = self._rects
-    if rects ~= nil then
-        for i = 1, #rects do
-            local r = rects[i]
-            if x >= r.x and x < r.x + r.w and y >= r.y and y < r.y + r.h then
-                answer(self, r.yes)
-                return true
-            end
-        end
-    end
+    local rect = ModalButtons.buttonAt(self._rects, x, y)
+    if rect ~= nil then answer(self, rect.yes) end
     return true
 end
 
@@ -172,29 +166,29 @@ function Confirm.open(opts)
     o.yesText = o.yesno and getText("UI_Yes") or getText("UI_Ok")
     o.noText = getText("UI_No")
 
-    local w = math.max(340, math.floor((Style.FONT_H or 14) * 26))
-    o.lines = wrap(opts.text, w - PAD * 2)
+    local dialogWidth = math.max(340, math.floor((Style.FONT_H or 14) * 26))
+    o.lines = wrap(opts.text, dialogWidth - PAD * 2)
     local btnH = lineHeight() + 8
-    o.width = w
+    o.width = dialogWidth
     o.height = PAD * 2 + #o.lines * lineHeight() + GAP + btnH
     o:setWidth(o.width)
     o:setHeight(o.height)
 
-    local px, py, pw, ph
+    local screenLeft, screenTop, screenWidth, screenHeight
     if getPlayerScreenLeft ~= nil then
-        px = getPlayerScreenLeft(o.playerNum)
-        py = getPlayerScreenTop(o.playerNum)
-        pw = getPlayerScreenWidth(o.playerNum)
-        ph = getPlayerScreenHeight(o.playerNum)
+        screenLeft = getPlayerScreenLeft(o.playerNum)
+        screenTop = getPlayerScreenTop(o.playerNum)
+        screenWidth = getPlayerScreenWidth(o.playerNum)
+        screenHeight = getPlayerScreenHeight(o.playerNum)
     end
-    if px == nil then
+    if screenLeft == nil then
         local core = getCore()
-        px, py = 0, 0
-        pw = core ~= nil and core:getScreenWidth() or 1920
-        ph = core ~= nil and core:getScreenHeight() or 1080
+        screenLeft, screenTop = 0, 0
+        screenWidth = core ~= nil and core:getScreenWidth() or 1920
+        screenHeight = core ~= nil and core:getScreenHeight() or 1080
     end
-    o:setX(math.floor(px + (pw - o.width) / 2))
-    o:setY(math.floor(py + (ph - o.height) / 2))
+    o:setX(math.floor(screenLeft + (screenWidth - o.width) / 2))
+    o:setY(math.floor(screenTop + (screenHeight - o.height) / 2))
 
     o:initialise()
     o:addToUIManager()
@@ -206,8 +200,8 @@ function Confirm.open(opts)
         and Input.padOwns(o.playerNum) or false
     if padOwns and setJoypadFocus ~= nil then
         if getFocusForPlayer ~= nil then
-            local okF, cur = pcall(getFocusForPlayer, o.playerNum)
-            if okF then o._padReturn = cur end
+            local focusRead, currentFocus = pcall(getFocusForPlayer, o.playerNum)
+            if focusRead then o._padReturn = currentFocus end
         end
         pcall(setJoypadFocus, o.playerNum, o)
     end

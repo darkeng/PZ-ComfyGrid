@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -28,29 +28,42 @@ end
 local function containerWindowGrid(pane)
     local page = pane ~= nil and pane.parent or nil
     if page == nil or page.onCharacter ~= true then return nil end
-    local CW = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
-    if CW == nil or CW.gridFor == nil then return nil end
-    return CW.gridFor(page.player)
+    local ContainerWindow = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
+    if ContainerWindow == nil or ContainerWindow.gridFor == nil then return nil end
+    return ContainerWindow.gridFor(page.player)
 end
 
 local function overContainerWindow(pane)
     local page = pane ~= nil and pane.parent or nil
     if page == nil or page.onCharacter ~= true then return false end
-    local CW = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
-    if CW == nil or CW.isMouseOverIt == nil then return false end
-    local ok, over = pcall(CW.isMouseOverIt, page.player)
+    local ContainerWindow = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
+    if ContainerWindow == nil or ContainerWindow.isMouseOverIt == nil then
+        return false
+    end
+    local ok, over = pcall(ContainerWindow.isMouseOverIt, page.player)
     return ok and over == true
+end
+
+local function probeGrid(gridView)
+    if gridView == nil then return nil, nil end
+    local slot = gridView.hoverSlot
+    if slot == nil or not gridView:isMouseOver() then return nil, nil end
+    local model = gridView.model
+    if model == nil or model.grid == nil then return nil, nil end
+    return model.grid:stackAt(slot), model.inventory
 end
 
 local function hoveredStack(pane)
 
     if overContainerWindow(pane) then
-        local gv = containerWindowGrid(pane)
-        if gv ~= nil then
-            local slot = gv.hoverSlot
-            if slot ~= nil and gv:isMouseOver() and gv.model ~= nil
-                    and gv.model.grid ~= nil then
-                return gv.model.grid:stackAt(slot), gv.model.inventory
+        local windowGrid = containerWindowGrid(pane)
+        if windowGrid ~= nil then
+            local slot = windowGrid.hoverSlot
+            if slot ~= nil and windowGrid:isMouseOver()
+                    and windowGrid.model ~= nil
+                    and windowGrid.model.grid ~= nil then
+                return windowGrid.model.grid:stackAt(slot),
+                    windowGrid.model.inventory
             end
         end
         return nil, nil
@@ -59,30 +72,20 @@ local function hoveredStack(pane)
     if host == nil or not host.panelShown then return nil, nil end
 
     local panels = host.panels
-    local single = panels == nil and host.containerPanel or nil
-    local count = panels ~= nil and #panels or (single ~= nil and 1 or 0)
-
-    local function probe(gridView)
-        if gridView == nil then return nil, nil end
-        local slot = gridView.hoverSlot
-        if slot == nil or not gridView:isMouseOver() then return nil, nil end
-        local model = gridView.model
-        if model == nil or model.grid == nil then return nil, nil end
-        return model.grid:stackAt(slot), model.inventory
-    end
 
     local strips = host.strips
     local pocketsPanel = strips ~= nil and strips.pocketsPanel or nil
     local islandGrids = pocketsPanel ~= nil and pocketsPanel.gridViews or nil
     if islandGrids ~= nil then
         for j = 1, #islandGrids do
-            local stack, inventory = probe(islandGrids[j])
+            local stack, inventory = probeGrid(islandGrids[j])
             if inventory ~= nil then return stack, inventory end
         end
     end
-    for i = 1, count do
-        local panel = panels ~= nil and panels[i] or single
-        local stack, inventory = probe(panel ~= nil and panel.gridView or nil)
+    for i = 1, #panels do
+        local panel = panels[i]
+        local stack, inventory = probeGrid(panel ~= nil and panel.gridView
+            or nil)
         if inventory ~= nil then return stack, inventory end
     end
     return nil, nil
@@ -106,20 +109,50 @@ function Tooltip.hoveredEquipment(pane)
     local strips = host ~= nil and host.strips or nil
     local strip = strips ~= nil and strips.equipStrip or nil
     if strip ~= nil and strip.hoveredItem ~= nil then
-        local it = strip:hoveredItem()
-        if it ~= nil then return it, "unequip" end
+        local hoveredItem = strip:hoveredItem()
+        if hoveredItem ~= nil then return hoveredItem, "unequip" end
     end
     local hotbar = strips ~= nil and strips.hotbarStrip or nil
     if hotbar ~= nil and hotbar.hoveredItem ~= nil then
-        local it = hotbar:hoveredItem()
-        if it ~= nil then return it, "detach" end
+        local hoveredItem = hotbar:hoveredItem()
+        if hoveredItem ~= nil then return hoveredItem, "detach" end
     end
     local zones = equipWindowStrip(pane)
     if zones ~= nil and zones.hoveredItem ~= nil then
-        local it = zones:hoveredItem()
-        if it ~= nil then return it, "unequip" end
+        local hoveredItem = zones:hoveredItem()
+        if hoveredItem ~= nil then return hoveredItem, "unequip" end
     end
     return nil
+end
+
+local function popupOf(pane)
+    local ui = ComfyGrid.UI
+    local stackPopup = ui ~= nil and ui.StackPopup or nil
+    local popup = stackPopup ~= nil and stackPopup.current ~= nil
+        and stackPopup.current() or nil
+    if popup == nil then
+        local layersPopup = ui ~= nil and ui.LayersPopup or nil
+        popup = layersPopup ~= nil and layersPopup.current ~= nil
+            and layersPopup.current() or nil
+    end
+    if popup ~= nil and popup.hostPane == pane then return popup end
+    return nil
+end
+
+local function popupMouseItem(popup)
+    if popup.isMouseOver == nil or not popup:isMouseOver() then
+        return false, nil
+    end
+    return true, popup.hoveredItem ~= nil and popup:hoveredItem() or nil
+end
+
+function Tooltip.hoveredPopupItem(pane)
+    if pane == nil then return nil, nil end
+    local popup = popupOf(pane)
+    if popup == nil then return nil, nil end
+    local over, item = popupMouseItem(popup)
+    if not over then return nil, nil end
+    return item, popup
 end
 
 local function stackWeight(pane, stack, inventory)
@@ -158,10 +191,10 @@ end
 local function updateImpl(pane)
 
     if not pane:isReallyVisible() then
-        local tr = pane.toolRender
-        if tr ~= nil and tr:isVisible() then
-            tr:removeFromUIManager()
-            tr:setVisible(false)
+        local toolRender = pane.toolRender
+        if toolRender ~= nil and toolRender:isVisible() then
+            toolRender:removeFromUIManager()
+            toolRender:setVisible(false)
         end
         return
     end
@@ -183,11 +216,12 @@ local function updateImpl(pane)
     if padFocused and not isDragActive() then
         local PadFocus = ComfyGrid.Interact.PadFocus
         if PadFocus ~= nil and PadFocus.peek ~= nil then
-            local kind, el, slot, occupant = PadFocus.peek(pane.inventoryPage)
+            local kind, padElement, slot, occupant =
+                PadFocus.peek(pane.inventoryPage)
             if occupant ~= nil then
                 if kind == "grid" or kind == "pocket" then
-                    local inventory = el.model ~= nil and el.model.inventory
-                        or nil
+                    local inventory = padElement.model ~= nil
+                        and padElement.model.inventory or nil
                     if inventory ~= nil then
                         item = ItemStack.frontItem(occupant, inventory)
                         if item ~= nil then
@@ -203,13 +237,13 @@ local function updateImpl(pane)
                     local cell = Style ~= nil and Style.CELL or 45
 
                     local px, py
-                    if el.padTileXY ~= nil then
-                        px, py = el:padTileXY(slot)
+                    if padElement.padTileXY ~= nil then
+                        px, py = padElement:padTileXY(slot)
                     else
-                        px, py = Style.pixelForSlot(slot, el.cols or 1)
+                        px, py = Style.pixelForSlot(slot, padElement.cols or 1)
                     end
-                    padAnchorX = el:getAbsoluteX() + px + cell + 6
-                    padAnchorY = el:getAbsoluteY() + py - 2
+                    padAnchorX = padElement:getAbsoluteX() + px + cell + 6
+                    padAnchorY = padElement:getAbsoluteY() + py - 2
                 end
             end
         end
@@ -237,34 +271,28 @@ local function updateImpl(pane)
     end
 
     if not isDragActive() then
-        local ui = ComfyGrid.UI
-        local stackPopup = ui ~= nil and ui.StackPopup or nil
-        local p = stackPopup ~= nil and stackPopup.current ~= nil
-            and stackPopup.current() or nil
-        if p == nil then
-            local layersPopup = ui ~= nil and ui.LayersPopup or nil
-            p = layersPopup ~= nil and layersPopup.current ~= nil
-                and layersPopup.current() or nil
-        end
-        if p ~= nil and p.hostPane == pane then
+        local popup = popupOf(pane)
+        if popup ~= nil then
 
             local PadPopup = ComfyGrid.Interact.PadPopup
             local padIdx = PadPopup ~= nil and PadPopup.cursorFor ~= nil
-                and PadPopup.cursorFor(p) or nil
-            if padIdx ~= nil and p.padTileItem ~= nil then
-                item = p:padTileItem(padIdx)
+                and PadPopup.cursorFor(popup) or nil
+            if padIdx ~= nil and popup.padTileItem ~= nil then
+                item = popup:padTileItem(padIdx)
                 weightOfStack = 0.0
                 if item ~= nil then
-                    local Style = ComfyGrid.UI.Style
-                    local cell = Style ~= nil and Style.CELL or 45
-                    local px, py = Style.pixelForSlot(padIdx, p.cols or 1)
-                    padAnchorX = p:getAbsoluteX() + 4 + px + cell + 6
-                    padAnchorY = p:getAbsoluteY() + (p.titleH or 18) + py
-                        - (p.yOffset or 0) - 2
+
+                    local cell = ComfyGrid.UI.Style.CELL
+                    local tileX, tileY = popup:padTileXY(padIdx)
+                    padAnchorX = popup:getAbsoluteX() + tileX + cell + 6
+                    padAnchorY = popup:getAbsoluteY() + tileY - 2
                 end
-            elseif p.isMouseOver ~= nil and p:isMouseOver() then
-                item = p.hoveredItem ~= nil and p:hoveredItem() or nil
-                weightOfStack = 0.0
+            else
+                local over, hovered = popupMouseItem(popup)
+                if over then
+                    item = hovered
+                    weightOfStack = 0.0
+                end
             end
         end
     end

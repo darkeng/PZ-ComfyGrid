@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -32,21 +32,22 @@ local function sampleSeat(playerNum)
         seats[playerNum] = nil
         return
     end
-    local s = seats[playerNum]
-    if s == nil then
-        s = {}
-        seats[playerNum] = s
+    local seatSample = seats[playerNum]
+    if seatSample == nil then
+        seatSample = {}
+        seats[playerNum] = seatSample
     end
-    s.inv = inv
-    s.loot = loot
-    s.invVisible = inv:getIsVisible()
-    s.lootVisible = loot:getIsVisible()
-    s.invCollapsed = inv.isCollapsed
-    s.lootCollapsed = loot.isCollapsed
-    s.invPin = inv.pin
-    s.lootPin = loot.pin
+    seatSample.inv = inv
+    seatSample.loot = loot
+    seatSample.invVisible = inv:getIsVisible()
+    seatSample.lootVisible = loot:getIsVisible()
+    seatSample.invCollapsed = inv.isCollapsed
+    seatSample.lootCollapsed = loot.isCollapsed
+    seatSample.invPin = inv.pin
+    seatSample.lootPin = loot.pin
     local focused = getFocusForPlayer(playerNum)
-    s.focusPage = (focused == inv or focused == loot) and focused or nil
+    seatSample.focusPage = (focused == inv or focused == loot) and focused
+        or nil
 end
 
 local function restoreCollapsed(page, collapsed)
@@ -67,27 +68,28 @@ local function restorePin(page, pinned)
     end
 end
 
-local function restoreSeat(playerNum, s)
+local function restoreSeat(playerNum, seatSample)
 
-    if s.inv ~= getPlayerInventory(playerNum)
-            or s.loot ~= getPlayerLoot(playerNum) then
+    if seatSample.inv ~= getPlayerInventory(playerNum)
+            or seatSample.loot ~= getPlayerLoot(playerNum) then
         return
     end
-    s.inv:setVisible(s.invVisible)
-    s.loot:setVisible(s.lootVisible)
-    restoreCollapsed(s.inv, s.invCollapsed)
-    restoreCollapsed(s.loot, s.lootCollapsed)
-    restorePin(s.inv, s.invPin)
-    restorePin(s.loot, s.lootPin)
+    seatSample.inv:setVisible(seatSample.invVisible)
+    seatSample.loot:setVisible(seatSample.lootVisible)
+    restoreCollapsed(seatSample.inv, seatSample.invCollapsed)
+    restoreCollapsed(seatSample.loot, seatSample.lootCollapsed)
+    restorePin(seatSample.inv, seatSample.invPin)
+    restorePin(seatSample.loot, seatSample.lootPin)
 
-    if s.focusPage ~= nil and getFocusForPlayer(playerNum) == nil then
-        setJoypadFocus(playerNum, s.focusPage)
+    if seatSample.focusPage ~= nil and getFocusForPlayer(playerNum) == nil then
+        setJoypadFocus(playerNum, seatSample.focusPage)
     end
 end
 
 function EscapeMenuPatch._onRenderTick()
-    local ms = MainScreen ~= nil and MainScreen.instance or nil
-    local visible = ms ~= nil and ms.inGame == true and ms:isVisible() or false
+    local mainScreen = MainScreen ~= nil and MainScreen.instance or nil
+    local visible = mainScreen ~= nil and mainScreen.inGame == true
+        and mainScreen:isVisible() or false
     if visible == menuWasVisible then
         if not visible then
 
@@ -107,10 +109,6 @@ function EscapeMenuPatch._onRenderTick()
         end
     end
 
-end
-
-function EscapeMenuPatch._toggle(og, key)
-    return og(key)
 end
 
 if not ComfyGrid._escapeMenuTickHooked then

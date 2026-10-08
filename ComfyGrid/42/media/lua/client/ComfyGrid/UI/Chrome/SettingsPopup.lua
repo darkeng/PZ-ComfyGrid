@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -32,10 +32,9 @@ local KeyCapture = ComfyGrid.UI.Chrome.KeyCapture
 local KeyBinds = ComfyGrid.Interact ~= nil
     and ComfyGrid.Interact.KeyBinds or nil
 
-local instance = nil
+local openPanel = nil
 
 local lastClosedMs = 0
-
 local REOPEN_GUARD_MS = 250
 
 local lastTab = 1
@@ -47,26 +46,41 @@ local COL_GAP = 14
 
 local TAB_PAD = 10
 
-local function measure(s)
-    if s == nil or s == "" then return 0 end
+local function textWidth(text)
+    if text == nil or text == "" then return 0 end
     local tm = getTextManager ~= nil and getTextManager() or nil
     if tm == nil then return 0 end
-    local ok, w = pcall(tm.MeasureStringX, tm, Style.FONT, s)
+    local ok, w = pcall(tm.MeasureStringX, tm, Style.FONT, text)
     return ok and w or 0
 end
 
-local function controlWidth(row)
+local function wrapStep(index, delta, low, high)
+    local nextIndex = index + delta
+    if nextIndex < low then
+        nextIndex = high
+    elseif nextIndex > high then
+        nextIndex = low
+    end
+    return nextIndex
+end
+
+local function stepChoice(def, dir)
+    local idx = Settings.choiceIndexOf(def, Settings.get(def.key)) or 1
+    return def.values[wrapStep(idx, dir, 1, #def.values)]
+end
+
+local function controlWidthFor(row)
     local def = row.def
     if def == nil then return 0 end
     if row.kind == "choice" then
-        local w = 0
-        local values = def.values or {}
-        for i = 1, #values do
-            local m = measure(Settings.choiceLabel(def, i))
-            if m > w then w = m end
+        local widest = 0
+        local choiceValues = def.values or {}
+        for i = 1, #choiceValues do
+            local optionWidth = textWidth(Settings.choiceLabel(def, i))
+            if optionWidth > widest then widest = optionWidth end
         end
 
-        return w + 26
+        return widest + 26
     end
     if row.kind == "slider" then
 
@@ -77,7 +91,7 @@ local function controlWidth(row)
     end
     if row.kind == "keybind" then
 
-        return measure("SHIFT + BACKSPACE") + PAD * 2
+        return textWidth("SHIFT + BACKSPACE") + PAD * 2
     end
     return 0
 end
@@ -95,22 +109,22 @@ local function panelWidth(tabs, resetRow)
     local barMin = 0
     for t = 1, #tabs do
         local tab = tabs[t]
-        barMin = barMin + measure(tab.label) + TAB_PAD * 2
+        barMin = barMin + textWidth(tab.label) + TAB_PAD * 2
         local rows = tab.rows
         for i = 1, #rows do
             local row = rows[i]
-            local lw = measure(row.label)
-            if lw > labelMax then labelMax = lw end
-            local cw = controlWidth(row)
-            if cw > ctrlMax then ctrlMax = cw end
+            local labelWidth = textWidth(row.label)
+            if labelWidth > labelMax then labelMax = labelWidth end
+            local controlWidth = controlWidthFor(row)
+            if controlWidth > ctrlMax then ctrlMax = controlWidth end
         end
     end
     if barMin > fullMax then fullMax = barMin end
     if resetRow ~= nil then
 
-        local rw = measure(resetRow.label) + COL_GAP + measure(versionLabel())
-            + PAD * 2
-        if rw > fullMax then fullMax = rw end
+        local footerWidth = textWidth(resetRow.label) + COL_GAP
+            + textWidth(versionLabel()) + PAD * 2
+        if footerWidth > fullMax then fullMax = footerWidth end
     end
     local w = PAD + labelMax + COL_GAP + ctrlMax + PAD
     if fullMax > w then w = fullMax end
@@ -142,7 +156,7 @@ local function keyLabelFor(def)
 end
 
 local function buildTabRows(groupKey, defs)
-    for i = #defs, 1, -1 do defs[i] = nil end
+    table.wipe(defs)
     Settings.defsInGroup(groupKey, defs)
     local rows = {}
     for i = 1, #defs do
@@ -160,7 +174,7 @@ local function buildTabRows(groupKey, defs)
 end
 
 local function buildTabs(out)
-    for i = #out, 1, -1 do out[i] = nil end
+    table.wipe(out)
     local groups = Settings.GROUPS or {}
     local defs = {}
     for g = 1, #groups do
@@ -177,6 +191,8 @@ local function buildTabs(out)
     return out
 end
 
+local refreshTextFits
+
 local function relayout(self)
     self.titleH = titleHeight()
     self.rowH = rowHeight()
@@ -185,7 +201,7 @@ local function relayout(self)
     local w, ctrlW = panelWidth(self.tabs, self.resetRow)
     self.ctrlW = ctrlW
 
-    self.versionW = measure(versionLabel())
+    self.versionW = textWidth(versionLabel())
     local h = self.titleH + self.tabH + PAD
     h = h + #self.rows * (self.rowH + ROW_GAP)
 
@@ -195,6 +211,7 @@ local function relayout(self)
     if self.height ~= h then self:setHeight(h) end
     self.metricsGen = Style.SCALE
     self.metricsFont = Style.FONT_H
+    refreshTextFits(self)
     self:clampToScreen()
 end
 
@@ -213,46 +230,55 @@ function SettingsPopup:clampToScreen()
 end
 
 function SettingsPopup:new(x, y, host)
-    local o = ISPanel:new(x, y, 10, 10)
-    setmetatable(o, self)
+    local popup = ISPanel:new(x, y, 10, 10)
+    setmetatable(popup, self)
     self.__index = self
-    o.host = host
-    o.playerNum = host ~= nil and host.pane ~= nil and host.pane.player or nil
+    popup.host = host
 
-    o.background = false
+    popup.playerNum = nil
+    if host ~= nil then
+        popup.playerNum = host.player
+        if popup.playerNum == nil and host.pane ~= nil then
+            popup.playerNum = host.pane.player
+        end
+    end
 
-    o.disableJoypadNavigation = true
-    o.resetRow = { kind = "reset",
+    popup.background = false
+
+    popup.resetRow = { kind = "reset",
         label = Text.tr("IGUI_ComfyGrid_ResetDefaults", "Reset this tab") }
-    o.tabs = buildTabs({})
+    popup.tabs = buildTabs({})
 
-    o.tab = (lastTab <= #o.tabs) and lastTab or 1
-    o.rows = o.tabs[o.tab] ~= nil and o.tabs[o.tab].rows or {}
-    o.hotRow = nil
-    o.hotTab = nil
-    o.hotReset = false
-    o.dragRow = nil
+    popup.tab = (lastTab <= #popup.tabs) and lastTab or 1
+    popup.rows = popup.tabs[popup.tab] ~= nil and popup.tabs[popup.tab].rows
+        or {}
+    popup.hotRow = nil
+    popup.hotTab = nil
+    popup.hotReset = false
+    popup.dragRow = nil
 
-    o.moving = false
-    o.moved = false
-    o.pendingKey = nil
-    o.pendingValue = nil
-    relayout(o)
-    return o
+    popup.moving = false
+    popup.moved = false
+    popup.pendingKey = nil
+    popup.pendingValue = nil
+    relayout(popup)
+    return popup
 end
 
-local function rowBounds(self, i)
-    if i < 1 or i > #self.rows then return nil, nil end
+local function rowBounds(self, rowIndex)
+    if rowIndex < 1 or rowIndex > #self.rows then return nil, nil end
     local top = self.titleH + self.tabH + PAD
-    return top + (i - 1) * (self.rowH + ROW_GAP), self.rowH
+    return top + (rowIndex - 1) * (self.rowH + ROW_GAP), self.rowH
 end
 
-local function tabBounds(self, i)
-    local n = #self.tabs
-    if n == 0 or i < 1 or i > n then return nil, nil end
+local function tabBounds(self, tabIndex)
+    local tabCount = #self.tabs
+    if tabCount == 0 or tabIndex < 1 or tabIndex > tabCount then
+        return nil, nil
+    end
     local total = self.width - 2
-    local x = 1 + math.floor(total * (i - 1) / n)
-    return x, 1 + math.floor(total * i / n) - x
+    local x = 1 + math.floor(total * (tabIndex - 1) / tabCount)
+    return x, 1 + math.floor(total * tabIndex / tabCount) - x
 end
 
 local function resetBounds(self)
@@ -266,114 +292,169 @@ local function controlBox(self, y, h)
     return self.width - PAD - cw, y + 2, cw, h - 4
 end
 
+function refreshTextFits(self)
+    local font = Style.FONT
+    self.textFitFont = font
+    self.titleText = Text.tr("IGUI_ComfyGrid_SettingsTitle",
+        "Comfy Grid settings")
+
+    local cbx, _, cbw = controlBox(self, 0, self.rowH)
+    for t = 1, #self.tabs do
+        local tab = self.tabs[t]
+        local x, w = tabBounds(self, t)
+        if x ~= nil then
+            tab.captionText = Text.fitEllipsis(tab.label, font, w - TAB_PAD, 24)
+            tab.captionW = textWidth(tab.captionText)
+        end
+        local rows = tab.rows
+        for i = 1, #rows do
+            local row = rows[i]
+            row.labelText = Text.fitEllipsis(row.label, font,
+                cbx - PAD - 8, 60)
+            row.padNoteText = nil
+            local note = Settings.padNoteFor(row.def)
+            if note ~= nil then
+                row.padNoteText = Text.fitEllipsis(note, font, cbw, 40)
+            end
+            row.choiceTexts = nil
+            if row.kind == "choice" then row.choiceTexts = {} end
+            row.keyTextFor = nil
+        end
+    end
+end
+
 local function rowValue(self, def)
     if self.pendingKey == def.key then return self.pendingValue end
     return Settings.get(def.key)
 end
 
-local function fmtNumber(v)
-    local s = string.format("%.1f", v)
-    return (s:gsub("%.0$", ""))
+local function formatSliderValue(value)
+    local text = string.format("%.1f", value)
+    return (text:gsub("%.0$", ""))
 end
 
 local function drawSlider(self, row, x, y, w, h, hot)
-    local sf = Style.COLORS.SURFACE
+    local surface = Style.COLORS.SURFACE
     local def = row.def
-    local v = rowValue(self, def)
-    local t = (v - def.min) / (def.max - def.min)
-    if t < 0 then t = 0 elseif t > 1 then t = 1 end
+    local value = rowValue(self, def)
+    local fraction = (value - def.min) / (def.max - def.min)
+    if fraction < 0 then fraction = 0 elseif fraction > 1 then fraction = 1 end
     local trackY = y + math.floor(h / 2) - 1
     local labelW = 34
     local trackW = w - labelW
-    self:drawRect(x, trackY, trackW, 2, 0.9, sf.card.r, sf.card.g, sf.card.b)
-    self:drawRect(x, trackY, math.floor(trackW * t), 2, 1,
-        sf.accent.r, sf.accent.g, sf.accent.b)
+    self:drawRect(x, trackY, trackW, 2, 0.9,
+        surface.card.r, surface.card.g, surface.card.b)
+    self:drawRect(x, trackY, math.floor(trackW * fraction), 2, 1,
+        surface.accent.r, surface.accent.g, surface.accent.b)
     local knob = math.max(8, math.floor(Style.FONT_H * 0.55))
-    local kx = x + math.floor(trackW * t) - math.floor(knob / 2)
+    local kx = x + math.floor(trackW * fraction) - math.floor(knob / 2)
     Draw.disc(self, kx, trackY + 1 - math.floor(knob / 2), knob, 1,
-        hot and sf.accent or sf.line)
+        hot and surface.accent or surface.line)
     Draw.disc(self, kx + 1, trackY + 2 - math.floor(knob / 2), knob - 2, 1,
-        hot and sf.cardHi or sf.card)
-    self:drawTextRight(fmtNumber(v), x + w, y + math.floor((h - Style.FONT_H) / 2),
-        sf.accent.r, sf.accent.g, sf.accent.b, 1, Style.FONT)
+        hot and surface.cardHi or surface.card)
+
+    if row.valueTextFor ~= value then
+        row.valueText = formatSliderValue(value)
+        row.valueTextFor = value
+    end
+    self:drawTextRight(row.valueText, x + w,
+        y + math.floor((h - Style.FONT_H) / 2),
+        surface.accent.r, surface.accent.g, surface.accent.b, 1, Style.FONT)
 end
 
 local function drawTickbox(self, row, x, y, w, h, hot)
-    local sf = Style.COLORS.SURFACE
+    local surface = Style.COLORS.SURFACE
     local on = rowValue(self, row.def) == true
     local box = math.max(12, math.floor(Style.FONT_H * 0.8))
     local bx = x + w - box
     local by = y + math.floor((h - box) / 2)
 
     Draw.roundFrame(self, bx, by, box, box, 3, 1,
-        hot and sf.accent or sf.line, on and sf.accent or sf.card, 1)
+        hot and surface.accent or surface.line,
+        on and surface.accent or surface.card, 1)
 end
 
 local function drawChoice(self, row, x, y, w, h, hot)
-    local sf = Style.COLORS.SURFACE
+    local surface = Style.COLORS.SURFACE
     local def = row.def
     local idx = Settings.choiceIndexOf(def, rowValue(self, def)) or 1
-    local label = Settings.choiceLabel(def, idx)
     Draw.roundFrame(self, x, y, w, h, 3, 1,
-        hot and sf.accent or sf.line, hot and sf.cardHi or sf.card, 1)
-    local fit = Text.fitEllipsis(label, Style.FONT, w - 20, 40)
-    self:drawText(fit, x + 6, y + math.floor((h - Style.FONT_H) / 2),
-        sf.accent.r, sf.accent.g, sf.accent.b, 1, Style.FONT)
+        hot and surface.accent or surface.line,
+        hot and surface.cardHi or surface.card, 1)
+
+    local choiceTexts = row.choiceTexts
+    local choiceText = choiceTexts ~= nil and choiceTexts[idx] or nil
+    if choiceText == nil then
+        choiceText = Text.fitEllipsis(Settings.choiceLabel(def, idx),
+            Style.FONT, w - 20, 40)
+        if choiceTexts ~= nil then choiceTexts[idx] = choiceText end
+    end
+    self:drawText(choiceText, x + 6, y + math.floor((h - Style.FONT_H) / 2),
+        surface.accent.r, surface.accent.g, surface.accent.b, 1, Style.FONT)
 
     local cx = x + w - 10
     local cy = y + math.floor(h / 2)
-    self:drawRect(cx, cy - 3, 2, 2, 0.9, sf.accent.r, sf.accent.g, sf.accent.b)
-    self:drawRect(cx + 2, cy - 1, 2, 2, 0.9, sf.accent.r, sf.accent.g, sf.accent.b)
-    self:drawRect(cx, cy + 1, 2, 2, 0.9, sf.accent.r, sf.accent.g, sf.accent.b)
+    local accent = surface.accent
+    self:drawRect(cx, cy - 3, 2, 2, 0.9, accent.r, accent.g, accent.b)
+    self:drawRect(cx + 2, cy - 1, 2, 2, 0.9, accent.r, accent.g, accent.b)
+    self:drawRect(cx, cy + 1, 2, 2, 0.9, accent.r, accent.g, accent.b)
 end
 
-local function drawTabs(self, sf)
+local function drawTabs(self, surface)
     self:drawRect(1, self.titleH, self.width - 2, self.tabH, 0.55,
-        sf.panel.r, sf.panel.g, sf.panel.b)
-    for i = 1, #self.tabs do
-        local x, w = tabBounds(self, i)
+        surface.panel.r, surface.panel.g, surface.panel.b)
+    for tabIndex = 1, #self.tabs do
+        local x, w = tabBounds(self, tabIndex)
         if x ~= nil then
-            local active = self.tab == i
-            local hot = self.hotTab == i
+            local active = self.tab == tabIndex
+            local hot = self.hotTab == tabIndex
             if active then
                 self:drawRect(x, self.titleH, w, self.tabH, 0.95,
-                    sf.bg.r, sf.bg.g, sf.bg.b)
+                    surface.bg.r, surface.bg.g, surface.bg.b)
                 self:drawRect(x, self.titleH + self.tabH - 2, w, 2, 1,
-                    sf.accent.r, sf.accent.g, sf.accent.b)
+                    surface.accent.r, surface.accent.g, surface.accent.b)
             elseif hot then
                 self:drawRect(x, self.titleH, w, self.tabH, 0.5,
-                    sf.card.r, sf.card.g, sf.card.b)
+                    surface.card.r, surface.card.g, surface.card.b)
             end
 
-            local label = Text.fitEllipsis(self.tabs[i].label, Style.FONT,
-                w - TAB_PAD, 24)
-            local tx = x + math.floor((w - measure(label)) / 2)
+            local tab = self.tabs[tabIndex]
+            local tabCaption = tab.captionText
+            local tx = x + math.floor((w - tab.captionW) / 2)
             local ty = self.titleH + math.floor((self.tabH - Style.FONT_H) / 2)
             if active then
-                self:drawText(label, tx, ty, sf.accent.r, sf.accent.g,
-                    sf.accent.b, 1, Style.FONT)
+                self:drawText(tabCaption, tx, ty, surface.accent.r,
+                    surface.accent.g, surface.accent.b, 1, Style.FONT)
             else
-                self:drawText(label, tx, ty, 0.86, 0.84, 0.80,
-                    hot and 0.95 or 0.62, Style.FONT)
+                local bodyText = Style.COLORS.BODY_TEXT
+                self:drawText(tabCaption, tx, ty, bodyText.r, bodyText.g,
+                    bodyText.b, hot and 0.95 or 0.62, Style.FONT)
             end
         end
     end
 end
 
 local function drawKeybind(self, row, x, y, w, h, hot)
-    local sf = Style.COLORS.SURFACE
-    local label = row.keyLabel or "?"
+    local surface = Style.COLORS.SURFACE
+    local keyText = row.keyLabel or "?"
 
-    local bw = measure(label) + PAD * 2
-    local floor = math.max(48, math.floor(Style.FONT_H * 2.6))
-    if bw < floor then bw = floor end
-    if bw > w then bw = w end
+    if row.keyTextFor ~= keyText then
+        local boxWidth = textWidth(keyText) + PAD * 2
+        local minBoxWidth = math.max(48, math.floor(Style.FONT_H * 2.6))
+        if boxWidth < minBoxWidth then boxWidth = minBoxWidth end
+        if boxWidth > w then boxWidth = w end
+        row.keyBoxW = boxWidth
+        row.keyBoxText = Text.fitEllipsis(keyText, Style.FONT, boxWidth - 10, 40)
+        row.keyTextFor = keyText
+    end
+    local bw = row.keyBoxW
     local bx = x + w - bw
     Draw.roundFrame(self, bx, y, bw, h, 3, 1,
-        hot and sf.accent or sf.line, hot and sf.cardHi or sf.card, 1)
-    local fit = Text.fitEllipsis(label, Style.FONT, bw - 10, 40)
-    self:drawTextCentre(fit, bx + bw / 2, y + math.floor((h - Style.FONT_H) / 2),
-        sf.accent.r, sf.accent.g, sf.accent.b, 1, Style.FONT)
+        hot and surface.accent or surface.line,
+        hot and surface.cardHi or surface.card, 1)
+    self:drawTextCentre(row.keyBoxText, bx + bw / 2,
+        y + math.floor((h - Style.FONT_H) / 2),
+        surface.accent.r, surface.accent.g, surface.accent.b, 1, Style.FONT)
 end
 
 function SettingsPopup:prerender()
@@ -387,6 +468,8 @@ function SettingsPopup:prerender()
     if self.metricsGen ~= Style.SCALE or self.metricsFont ~= Style.FONT_H then
         relayout(self)
     end
+
+    if self.textFitFont ~= Style.FONT then refreshTextFits(self) end
 
     self.hotRow = nil
     self.hotTab = nil
@@ -421,27 +504,30 @@ function SettingsPopup:prerender()
         local okF, cur = pcall(getFocusForPlayer, self.playerNum or 0)
         if okF and cur == self then
             local last = #self.rows + 1
-            local r = self.padRow
+            local padRowIndex = self.padRow
             self.hotRow = nil
-            if r ~= nil and r >= 1 and r <= #self.rows then self.hotRow = r end
+            if padRowIndex ~= nil and padRowIndex >= 1
+                    and padRowIndex <= #self.rows then
+                self.hotRow = padRowIndex
+            end
             self.hotTab = nil
-            if r == 0 then self.hotTab = self.tab end
-            self.hotReset = r == last
+            if padRowIndex == 0 then self.hotTab = self.tab end
+            self.hotReset = padRowIndex == last
         end
     end
 
-    local sf = Style.COLORS.SURFACE
+    local surface = Style.COLORS.SURFACE
     Draw.shadow(self, 0, 0, self.width, self.height, 14, 0.5)
-    Draw.roundFrame(self, 0, 0, self.width, self.height, 6, 0.98, sf.line,
-        sf.bg, 0.98)
+    Draw.roundFrame(self, 0, 0, self.width, self.height, 6, 0.98, surface.line,
+        surface.bg, 0.98)
 
     self:drawRect(1, 1, self.width - 2, self.titleH - 1, 0.9,
-        sf.panel.r, sf.panel.g, sf.panel.b)
-    local title = Text.tr("IGUI_ComfyGrid_SettingsTitle", "Comfy Grid settings")
-    self:drawText(title, PAD, math.floor((self.titleH - Style.FONT_H) / 2),
-        sf.accent.r, sf.accent.g, sf.accent.b, 1, Style.FONT)
+        surface.panel.r, surface.panel.g, surface.panel.b)
+    self:drawText(self.titleText, PAD,
+        math.floor((self.titleH - Style.FONT_H) / 2),
+        surface.accent.r, surface.accent.g, surface.accent.b, 1, Style.FONT)
 
-    drawTabs(self, sf)
+    drawTabs(self, surface)
     Draw.headerLine(self, 1, self.titleH + self.tabH - 1, self.width - 2, 4,
         Style.COLORS)
 
@@ -454,18 +540,20 @@ function SettingsPopup:prerender()
         local mx, my = self:getMouseX(), self:getMouseY()
         overClose = mx >= cx and mx < cx + chip and my >= cy and my < cy + chip
     end
-    Draw.disc(self, cx, cy, chip, 1, overClose and sf.accent or sf.line)
+    Draw.disc(self, cx, cy, chip, 1,
+        overClose and surface.accent or surface.line)
     Draw.disc(self, cx + 1, cy + 1, chip - 2, 1,
-        overClose and sf.cardHi or sf.card)
+        overClose and surface.cardHi or surface.card)
     local closeTex = Draw.closeTexture()
-    local g = math.floor(chip * 0.5 + 0.5)
-    local off = math.floor((chip - g) * 0.5)
+    local glyphSize = math.floor(chip * 0.5 + 0.5)
+    local glyphInset = math.floor((chip - glyphSize) * 0.5)
     if closeTex ~= nil then
-        self:drawTextureScaled(closeTex, cx + off, cy + off, g, g,
-            overClose and 1 or 0.85, sf.accent.r, sf.accent.g, sf.accent.b)
+        self:drawTextureScaled(closeTex, cx + glyphInset, cy + glyphInset,
+            glyphSize, glyphSize, overClose and 1 or 0.85,
+            surface.accent.r, surface.accent.g, surface.accent.b)
     else
-        self:drawText("X", cx + off, cy, sf.accent.r, sf.accent.g, sf.accent.b,
-            1, Style.FONT)
+        self:drawText("X", cx + glyphInset, cy, surface.accent.r,
+            surface.accent.g, surface.accent.b, 1, Style.FONT)
     end
     self._closeX, self._closeY, self._closeS = cx, cy, chip
 
@@ -477,6 +565,8 @@ function SettingsPopup:prerender()
         end
     end
 
+    if self.textFitFont ~= Style.FONT then refreshTextFits(self) end
+
     for i = 1, #self.rows do
         local row = self.rows[i]
         local y, h = rowBounds(self, i)
@@ -487,20 +577,22 @@ function SettingsPopup:prerender()
             local hot = self.hotRow == i and applies
             if hot then
                 self:drawRect(PAD - 4, y, self.width - (PAD - 4) * 2, h,
-                    0.35, sf.card.r, sf.card.g, sf.card.b)
+                    0.35, surface.card.r, surface.card.g, surface.card.b)
             end
             local cbx, cby, cbw, cbh = controlBox(self, y, h)
-            local fit = Text.fitEllipsis(row.label, Style.FONT,
-                cbx - PAD - 8, 60)
-            self:drawText(fit, PAD, y + math.floor((h - Style.FONT_H) / 2),
-                0.86, 0.84, 0.80, applies and 1 or 0.4, Style.FONT)
+
+            local bodyText = Style.COLORS.BODY_TEXT
+            self:drawText(row.labelText, PAD,
+                y + math.floor((h - Style.FONT_H) / 2),
+                bodyText.r, bodyText.g, bodyText.b, applies and 1 or 0.4,
+                Style.FONT)
             if not applies then
 
-                local note = Settings.padNoteFor(row.def)
+                local note = row.padNoteText
                 if note ~= nil then
-                    self:drawText(Text.fitEllipsis(note, Style.FONT, cbw, 40),
-                        cbx, cby + math.floor((cbh - Style.FONT_H) / 2),
-                        0.86, 0.84, 0.80, 0.45, Style.FONT)
+                    self:drawText(note, cbx,
+                        cby + math.floor((cbh - Style.FONT_H) / 2),
+                        bodyText.r, bodyText.g, bodyText.b, 0.45, Style.FONT)
                 end
             elseif row.kind == "slider" then
                 drawSlider(self, row, cbx, cby, cbw, cbh, hot)
@@ -516,18 +608,19 @@ function SettingsPopup:prerender()
 
     local ry, rh, sepY = resetBounds(self)
     self:drawRect(PAD, sepY, self.width - PAD * 2, 1, 0.4,
-        sf.line.r, sf.line.g, sf.line.b)
+        surface.line.r, surface.line.g, surface.line.b)
     if self.hotReset then
         self:drawRect(PAD - 4, ry, self.width - (PAD - 4) * 2, rh, 0.35,
-            sf.card.r, sf.card.g, sf.card.b)
+            surface.card.r, surface.card.g, surface.card.b)
     end
     local footerTextY = ry + math.floor((rh - Style.FONT_H) / 2)
     self:drawText(self.resetRow.label, PAD, footerTextY,
-        sf.accent.r, sf.accent.g, sf.accent.b, self.hotReset and 1 or 0.8,
-        Style.FONT)
+        surface.accent.r, surface.accent.g, surface.accent.b,
+        self.hotReset and 1 or 0.8, Style.FONT)
 
     self:drawText(versionLabel(), self.width - PAD - (self.versionW or 0),
-        footerTextY, sf.line.r, sf.line.g, sf.line.b, 1, Style.FONT)
+        footerTextY, surface.line.r, surface.line.g, surface.line.b, 1,
+        Style.FONT)
 
     local hotTip = nil
     if self.hotRow ~= nil and self.dragRow == nil then
@@ -547,22 +640,22 @@ function SettingsPopup:prerender()
     end
 end
 
-function SettingsPopup:render()
+function SettingsPopup.render(_self)
 end
 
 function SettingsPopup:updateDrag()
-    local i = self.dragRow
-    local row = self.rows[i]
+    local rowIndex = self.dragRow
+    local row = self.rows[rowIndex]
     if row == nil or row.def == nil then return end
-    local y, h = rowBounds(self, i)
+    local y, h = rowBounds(self, rowIndex)
     if y == nil then return end
     local x, _, w = controlBox(self, y, h)
     local trackW = w - 34
     if trackW < 1 then return end
-    local t = (self:getMouseX() - x) / trackW
-    if t < 0 then t = 0 elseif t > 1 then t = 1 end
+    local fraction = (self:getMouseX() - x) / trackW
+    if fraction < 0 then fraction = 0 elseif fraction > 1 then fraction = 1 end
     local def = row.def
-    local raw = def.min + t * (def.max - def.min)
+    local raw = def.min + fraction * (def.max - def.min)
 
     local step = def.step or 1
     local snapped = def.min + math.floor((raw - def.min) / step + 0.5) * step
@@ -594,8 +687,10 @@ local function resetTab(self)
                     pcall(KeyBinds.assign, def.bind, key, false, false, false)
                 end
             else
-                local d = Settings.defaults[def.key]
-                if d ~= nil then pcall(Settings.set, def.key, d) end
+                local defaultValue = Settings.defaults[def.key]
+                if defaultValue ~= nil then
+                    pcall(Settings.set, def.key, defaultValue)
+                end
             end
         end
     end
@@ -603,8 +698,8 @@ local function resetTab(self)
     SettingsPopup.refreshKeybinds()
 end
 
-local function activateRow(self, i)
-    local row = self.rows[i]
+local function activateRow(self, rowIndex)
+    local row = self.rows[rowIndex]
     if row == nil then return end
     local def = row.def
     if def == nil then return end
@@ -620,21 +715,19 @@ local function activateRow(self, i)
         return
     end
     if row.kind == "tickbox" then
-        pcall(Settings.set, def.key, not (Settings.get(def.key) == true))
+        pcall(Settings.set, def.key, Settings.get(def.key) ~= true)
     elseif row.kind == "choice" then
 
-        local idx = Settings.choiceIndexOf(def, Settings.get(def.key)) or 1
-        local nxt = idx % #def.values + 1
-        pcall(Settings.set, def.key, def.values[nxt])
+        pcall(Settings.set, def.key, stepChoice(def, 1))
     end
 end
 
-function SettingsPopup:selectTab(i)
-    if i == nil or i == self.tab then return end
-    local tab = self.tabs[i]
+function SettingsPopup:selectTab(tabIndex)
+    if tabIndex == nil or tabIndex == self.tab then return end
+    local tab = self.tabs[tabIndex]
     if tab == nil then return end
-    self.tab = i
-    lastTab = i
+    self.tab = tabIndex
+    lastTab = tabIndex
     self.rows = tab.rows
     self.hotRow = nil
     self.dragRow = nil
@@ -694,9 +787,10 @@ function SettingsPopup:onMouseUp(x, y)
         self:commitDrag()
         return true
     end
-    local s = self._closeS
-    if s ~= nil and x >= self._closeX and x < self._closeX + s
-            and y >= self._closeY and y < self._closeY + s then
+    local closeSize = self._closeS
+    if closeSize ~= nil and x >= self._closeX
+            and x < self._closeX + closeSize
+            and y >= self._closeY and y < self._closeY + closeSize then
         self:close()
         return true
     end
@@ -739,24 +833,24 @@ end
 function SettingsPopup.onRightMouseDownOutside(_self, _x, _y)
 end
 
-function SettingsPopup:onRightMouseDown(_x, _y)
+function SettingsPopup.onRightMouseDown(_self, _x, _y)
     return true
 end
 
-function SettingsPopup:onRightMouseUp(_x, _y)
+function SettingsPopup.onRightMouseUp(_self, _x, _y)
     return true
 end
 
-function SettingsPopup:onMouseWheel(_del)
+function SettingsPopup.onMouseWheel(_self, _del)
     return true
 end
 
 function SettingsPopup.current()
-    return instance
+    return openPanel
 end
 
 function SettingsPopup.refreshKeybinds()
-    local self = instance
+    local self = openPanel
     if self == nil or self.tabs == nil then return end
     for t = 1, #self.tabs do
         local rows = self.tabs[t].rows
@@ -777,22 +871,21 @@ end
 
 local PAD_TABS = 0
 
-local function padRowUsable(self, i)
-    if i == PAD_TABS then return true end
-    if i == #self.rows + 1 then return true end
-    local row = self.rows[i]
+local function padRowUsable(self, rowIndex)
+    if rowIndex == PAD_TABS then return true end
+    if rowIndex == #self.rows + 1 then return true end
+    local row = self.rows[rowIndex]
     if row == nil then return false end
     return Settings.appliesNow(row.def, self.playerNum)
 end
 
 local function padMove(self, delta)
     local last = #self.rows + 1
-    local i = self.padRow or PAD_TABS
+    local rowIndex = self.padRow or PAD_TABS
     for _ = 1, last + 1 do
-        i = i + delta
-        if i < PAD_TABS then i = last elseif i > last then i = PAD_TABS end
-        if padRowUsable(self, i) then
-            self.padRow = i
+        rowIndex = wrapStep(rowIndex, delta, PAD_TABS, last)
+        if padRowUsable(self, rowIndex) then
+            self.padRow = rowIndex
             return
         end
     end
@@ -804,16 +897,16 @@ local function padAdjust(self, dir)
     if not Settings.appliesNow(row.def, self.playerNum) then return end
     local def = row.def
     if def.kind == "choice" then
-        local idx = Settings.choiceIndexOf(def, Settings.get(def.key)) or 1
-        local n = #def.values
 
-        local nxt = idx + dir
-        if nxt < 1 then nxt = n elseif nxt > n then nxt = 1 end
-        pcall(Settings.set, def.key, def.values[nxt])
+        pcall(Settings.set, def.key, stepChoice(def, dir))
     elseif def.kind == "slider" then
-        local v = (Settings.get(def.key) or def.min) + dir * (def.step or 1)
-        if v < def.min then v = def.min elseif v > def.max then v = def.max end
-        pcall(Settings.set, def.key, v)
+        local value = (Settings.get(def.key) or def.min) + dir * (def.step or 1)
+        if value < def.min then
+            value = def.min
+        elseif value > def.max then
+            value = def.max
+        end
+        pcall(Settings.set, def.key, value)
     elseif def.kind == "tickbox" then
         pcall(Settings.set, def.key, dir > 0)
     end
@@ -868,10 +961,7 @@ end
 
 function SettingsPopup:onJoypadDirLeft(_joypadData)
     if self.padRow == PAD_TABS then
-
-        local prev = (self.tab or 1) - 1
-        if prev < 1 then prev = #self.tabs end
-        self:selectTab(prev)
+        self:selectTab(wrapStep(self.tab or 1, -1, 1, #self.tabs))
     else
         padAdjust(self, -1)
     end
@@ -879,7 +969,7 @@ end
 
 function SettingsPopup:onJoypadDirRight(_joypadData)
     if self.padRow == PAD_TABS then
-        self:selectTab((self.tab or 1) % #self.tabs + 1)
+        self:selectTab(wrapStep(self.tab or 1, 1, 1, #self.tabs))
     else
         padAdjust(self, 1)
     end
@@ -897,25 +987,25 @@ function SettingsPopup:close()
     self:setVisible(false)
     self:removeFromUIManager()
     padRelease(self)
-    if instance == self then instance = nil end
+    if openPanel == self then openPanel = nil end
     lastClosedMs = getTimestampMs()
 end
 
-function SettingsPopup.openFor(toolbar)
-    if toolbar == nil then return nil end
-    local host = toolbar.parent
+function SettingsPopup.openFor(windowStrip)
+    if windowStrip == nil then return nil end
+    local host = windowStrip.parent
     if host == nil then return nil end
 
     PopupRegistry.closeOthers(nil)
-    if instance ~= nil then instance:close() end
+    if openPanel ~= nil then openPanel:close() end
 
-    local ax = (toolbar:getAbsoluteX() or 0) + toolbar.width
-    local rect = toolbar.chips ~= nil and toolbar.chips.rectOf ~= nil
-        and toolbar.chips:rectOf("settings") or nil
+    local ax = (windowStrip:getAbsoluteX() or 0) + windowStrip.width
+    local rect = windowStrip.chips ~= nil and windowStrip.chips.rectOf ~= nil
+        and windowStrip.chips:rectOf("settings") or nil
     if rect ~= nil then
-        ax = (toolbar:getAbsoluteX() or 0) + rect.x + rect.s
+        ax = (windowStrip:getAbsoluteX() or 0) + rect.x + rect.s
     end
-    local ay = (toolbar:getAbsoluteY() or 0) + toolbar.height + 2
+    local ay = (windowStrip:getAbsoluteY() or 0) + windowStrip.height + 2
     local popup = SettingsPopup:new(0, ay, host)
 
     popup:setX(ax - popup.width)
@@ -923,19 +1013,19 @@ function SettingsPopup.openFor(toolbar)
     popup:addToUIManager()
     popup:bringToTop()
     popup:clampToScreen()
-    instance = popup
+    openPanel = popup
 
     SettingsPopup.padFocus(popup, host.parent or host)
     return popup
 end
 
-function SettingsPopup.toggleFor(toolbar)
-    if instance ~= nil then
-        instance:close()
+function SettingsPopup.toggleFor(windowStrip)
+    if openPanel ~= nil then
+        openPanel:close()
         return nil
     end
     if sinceClose() < REOPEN_GUARD_MS then return nil end
-    local ok, popup = pcall(SettingsPopup.openFor, toolbar)
+    local ok, popup = pcall(SettingsPopup.openFor, windowStrip)
     if not ok then
         Log.error("SettingsPopup: open failed: " .. tostring(popup))
         return nil

@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Core/Input"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/HotbarGhosts"
@@ -15,23 +16,24 @@ require "ComfyGrid/UI/Icons"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
 
+local Input = ComfyGrid.Core.Input
+
 local lastError = nil
 
 local ammoWidths = {}
 
-local function hidden(self)
+local function vanillaHidesBar(self)
     return (self.playerNum ~= nil and self.playerNum > 0)
-        or (JoypadState.players ~= nil
-            and JoypadState.players[(self.playerNum or 0) + 1] ~= nil)
+        or Input.padOwns(self.playerNum)
 end
 
 local function barEnabled()
-    local S = ComfyGrid.Settings
-    if S == nil or S.get == nil then return true end
-    return S.get("HOTBAR_BAR") ~= false
+    local Settings = ComfyGrid.Settings
+    if Settings == nil or Settings.get == nil then return true end
+    return Settings.get("HOTBAR_BAR") ~= false
 end
 
-local function snapshot(self)
+local function snapshotVanillaMetrics(self)
     if self._comfyHotbarOg ~= nil then return end
     self._comfyHotbarOg = {
         slotWidth = self.slotWidth,
@@ -43,23 +45,27 @@ local function snapshot(self)
 end
 
 local function restoreMetrics(self)
-    local og = self._comfyHotbarOg
-    if og == nil then return false end
-    if self.slotWidth == og.slotWidth and self.slotHeight == og.slotHeight
-            and self.slotPad == og.slotPad and self.margins == og.margins then
+    local vanillaMetrics = self._comfyHotbarOg
+    if vanillaMetrics == nil then return false end
+    if self.slotWidth == vanillaMetrics.slotWidth
+            and self.slotHeight == vanillaMetrics.slotHeight
+            and self.slotPad == vanillaMetrics.slotPad
+            and self.margins == vanillaMetrics.margins then
         return false
     end
-    self.slotWidth = og.slotWidth
-    self.slotHeight = og.slotHeight
-    self.slotPad = og.slotPad
-    self.margins = og.margins
-    if og.height ~= nil then self:setHeight(og.height) end
+    self.slotWidth = vanillaMetrics.slotWidth
+    self.slotHeight = vanillaMetrics.slotHeight
+    self.slotPad = vanillaMetrics.slotPad
+    self.margins = vanillaMetrics.margins
+    if vanillaMetrics.height ~= nil then
+        self:setHeight(vanillaMetrics.height)
+    end
     return true
 end
 
 local function applyMetrics(self)
 
-    snapshot(self)
+    snapshotVanillaMetrics(self)
     if not barEnabled() then return restoreMetrics(self) end
     local Style = ComfyGrid.UI.Style
     local cell = Style ~= nil and Style.CELL or nil
@@ -78,8 +84,11 @@ local function applyMetrics(self)
 end
 
 local socketCtx = { view = false, x = 0, y = 0 }
-local REFUSED_WASH = { r = 1, g = 0.25, b = 0.2, a = 0.28 }
-local SLOT_LABEL = {}
+local SLOT_NUMBER_TEXT = {}
+
+local ATTACHMENT_NAMES = {}
+
+local attachmentNameWidths = {}
 
 local function drawSlotBody(self, x, y, size, item, hot, refused, slot)
     local Style = ComfyGrid.UI.Style
@@ -93,12 +102,13 @@ local function drawSlotBody(self, x, y, size, item, hot, refused, slot)
         SlotRenderer.drawSocket(socketCtx, size)
         local Ghosts = ComfyGrid.UI.HotbarGhosts
         if slot ~= nil and Ghosts ~= nil and Ghosts.texFor ~= nil then
-            local g = Ghosts.texFor(slot)
-            if g ~= nil then SlotRenderer.drawGhost(self, g, x, y, size) end
+            local ghostTex = Ghosts.texFor(slot)
+            if ghostTex ~= nil then
+                SlotRenderer.drawGhost(self, ghostTex, x, y, size)
+            end
         end
     else
-        local fill = (colors and colors.EMPTY_CELL)
-            or { r = 0.148, g = 0.135, b = 0.116, a = 1 }
+        local fill = colors.EMPTY_CELL
         if tex ~= nil then
             self:drawTextureScaled(tex, x, y, size, size,
                 fill.a or 1, fill.r, fill.g, fill.b)
@@ -108,8 +118,7 @@ local function drawSlotBody(self, x, y, size, item, hot, refused, slot)
     end
 
     if hot then
-        local wash = refused and REFUSED_WASH
-            or (colors and colors.HOVER) or { r = 1, g = 1, b = 1, a = 0.12 }
+        local wash = refused and colors.REFUSED_WASH or colors.HOVER
         if tex ~= nil then
             self:drawTextureScaled(tex, x, y, size, size,
                 wash.a, wash.r, wash.g, wash.b)
@@ -126,28 +135,16 @@ local function drawSlotBody(self, x, y, size, item, hot, refused, slot)
 end
 
 local function drawReadouts(self, x, y, size, item)
-    local sr = ComfyGrid.UI and ComfyGrid.UI.StackRenderer
-    if sr == nil or sr.overlayInfo == nil then return end
+    local StackRenderer = ComfyGrid.UI and ComfyGrid.UI.StackRenderer
+    if StackRenderer == nil or StackRenderer.overlayInfo == nil then return end
 
-    if item.isBroken and item:isBroken() and sr.drawBrokenMark ~= nil then
-        sr.drawBrokenMark(self, x, y, size)
+    if item.isBroken and item:isBroken()
+            and StackRenderer.drawBrokenMark ~= nil then
+        StackRenderer.drawBrokenMark(self, x, y, size)
     end
-    local frac, col, ammoText = sr.overlayInfo(item)
+    local frac, col, ammoText = StackRenderer.overlayInfo(item)
     if frac ~= nil and col ~= nil then
-
-        local area = size - 10
-        local barH = math.floor(area * frac + 0.5)
-        if barH < 2 and frac > 0 then barH = 2 end
-
-        if barH > 0 then
-            local bx = x + size - 7
-            local by = y + 5 + (area - barH)
-            self:drawRect(bx + 1, by, 1, 1, 1, col.r, col.g, col.b)
-            if barH > 2 then
-                self:drawRect(bx, by + 1, 3, barH - 2, 1, col.r, col.g, col.b)
-            end
-            self:drawRect(bx + 1, by + barH - 1, 1, 1, 1, col.r, col.g, col.b)
-        end
+        StackRenderer.drawStatusCapsule(self, x, y, size, frac, col)
     end
     if ammoText == nil then return end
     local Style = ComfyGrid.UI.Style
@@ -157,20 +154,20 @@ local function drawReadouts(self, x, y, size, item)
         byFont = {}
         ammoWidths[fontHgt] = byFont
     end
-    local tw = byFont[ammoText]
-    if tw == nil then
-        tw = getTextManager():MeasureStringX(UIFont.Small, ammoText)
-        byFont[ammoText] = tw
+    local ammoWidth = byFont[ammoText]
+    if ammoWidth == nil then
+        ammoWidth = getTextManager():MeasureStringX(UIFont.Small, ammoText)
+        byFont[ammoText] = ammoWidth
     end
-    local ax = x + size - 9 - tw
+    local ax = x + size - 9 - ammoWidth
     if ax < x + 2 then return end
     local ty = y + size - fontHgt - 1
     self:drawText(ammoText, ax + 1, ty + 1, 0, 0, 0, 1, UIFont.Small)
     self:drawText(ammoText, ax, ty, 1, 1, 1, 1, UIFont.Small)
 end
 
-local function render(self)
-    if hidden(self) then
+local function renderComfyBar(self)
+    if vanillaHidesBar(self) then
         self:setVisible(false)
         return
     end
@@ -196,9 +193,9 @@ local function render(self)
     if ISMouseDrag.dragging and mouseOver ~= -1 then
         local carrying = ISInventoryPane.getActualItems(ISMouseDrag.dragging)
         local slot = slots[mouseOver]
-        for _, it in ipairs(carrying) do
-            if self:canBeAttached(slot, it) then
-                dragged = it
+        for _, carriedItem in ipairs(carrying) do
+            if self:canBeAttached(slot, carriedItem) then
+                dragged = carriedItem
                 break
             end
         end
@@ -224,20 +221,21 @@ local function render(self)
         end
 
         drawSlotBody(self, x, y, size, item, hot, refused, slot)
-        local slotLabel = SLOT_LABEL[i]
-        if slotLabel == nil then
-            slotLabel = tostring(i)
-            SLOT_LABEL[i] = slotLabel
+        local slotNumberText = SLOT_NUMBER_TEXT[i]
+        if slotNumberText == nil then
+            slotNumberText = tostring(i)
+            SLOT_NUMBER_TEXT[i] = slotNumberText
         end
-        self:drawText(slotLabel, x + 3, y + 1,
+        self:drawText(slotNumberText, x + 3, y + 1,
             accent.r, accent.g, accent.b, 0.75, self.font)
         if item ~= nil then
             drawReadouts(self, x, y, size, item)
             if item:isEquipped() and self.equippedItemIcon ~= nil then
-                local t = self.equippedItemIcon
-                local s = math.max(8, math.floor(size * 0.28 + 0.5))
-                self:drawTextureScaled(t, x + size - s - 3, y + size - s - 3,
-                    s, s, 1, 1, 1, 1)
+                local equippedIcon = self.equippedItemIcon
+                local iconSize = math.max(8, math.floor(size * 0.28 + 0.5))
+                self:drawTextureScaled(equippedIcon,
+                    x + size - iconSize - 3, y + size - iconSize - 3,
+                    iconSize, iconSize, 1, 1, 1, 1)
             end
         else
 
@@ -245,23 +243,39 @@ local function render(self)
             local tex = ghosts ~= nil and ghosts.texFor(slot) or nil
             if tex == nil then tex = slot.texture end
             if tex ~= nil then
-                local s = math.floor(size * 0.55 + 0.5)
-                local off = math.floor((size - s) * 0.5)
-                self:drawTextureScaled(tex, x + off, y + off, s, s,
-                    0.25, 1, 1, 1)
+                local ghostSize = math.floor(size * 0.55 + 0.5)
+                local ghostInset = math.floor((size - ghostSize) * 0.5)
+                self:drawTextureScaled(tex, x + ghostInset, y + ghostInset,
+                    ghostSize, ghostSize, 0.25, 1, 1, 1)
             end
         end
 
         if hot then
-            local label = getTextOrNull("IGUI_HotbarAttachment_"
-                .. slot.slotType) or slot.name
-            if label ~= nil then
-                local fh = Style.FONT_H
-                local tw = getTextManager():MeasureStringX(Style.FONT, label)
-                local lx = x + (size - tw) * 0.5
-                Draw.roundRect(self, lx - 5, -fh - 3, tw + 10, fh + 2, 3,
-                    0.85, board)
-                self:drawText(label, lx, -fh - 2,
+
+            local translated = ATTACHMENT_NAMES[slot.slotType]
+            if translated == nil then
+                translated = getTextOrNull("IGUI_HotbarAttachment_"
+                    .. slot.slotType) or false
+                ATTACHMENT_NAMES[slot.slotType] = translated
+            end
+            local attachmentName = translated or slot.name
+            if attachmentName ~= nil then
+                local fontH = Style.FONT_H
+                local widths = attachmentNameWidths[fontH]
+                if widths == nil then
+                    widths = {}
+                    attachmentNameWidths[fontH] = widths
+                end
+                local textWidth = widths[attachmentName]
+                if textWidth == nil then
+                    textWidth = getTextManager():MeasureStringX(Style.FONT,
+                        attachmentName)
+                    widths[attachmentName] = textWidth
+                end
+                local labelX = x + (size - textWidth) * 0.5
+                Draw.roundRect(self, labelX - 5, -fontH - 3, textWidth + 10,
+                    fontH + 2, 3, 0.85, board)
+                self:drawText(attachmentName, labelX, -fontH - 2,
                     accent.r, accent.g, accent.b, 1, Style.FONT)
             end
         end
@@ -269,18 +283,20 @@ local function render(self)
     end
 end
 
-ComfyGrid._hotbarRender = render
+ComfyGrid._hotbarRender = renderComfyBar
 
-if not ComfyGrid._hotbarPatched then
-    ComfyGrid._hotbarPatched = true
+Events.OnGameBoot.Add(function()
+
+    if ISHotbar._comfyPatched then return end
+    ISHotbar._comfyPatched = true
 
     local og_render = ISHotbar.render
     function ISHotbar:render()
 
         if not barEnabled() then return og_render(self) end
-        local fn = ComfyGrid._hotbarRender
-        if fn == nil then return og_render(self) end
-        local ok, err = pcall(fn, self)
+        local renderImpl = ComfyGrid._hotbarRender
+        if renderImpl == nil then return og_render(self) end
+        local ok, err = pcall(renderImpl, self)
         if not ok then
 
             if err ~= lastError then
@@ -299,4 +315,4 @@ if not ComfyGrid._hotbarPatched then
         pcall(applyMetrics, self)
         return og_size(self)
     end
-end
+end)

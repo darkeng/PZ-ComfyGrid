@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -22,7 +22,36 @@ local Persistence = ComfyGrid.Model.Persistence
 
 local COOLDOWN_MS = 1000
 
-local lastSortMs = setmetatable({}, { __mode = "k" })
+local MAX_STAMPS = 128
+local lastSortMs = {}
+local stampCount = 0
+
+local function rememberSort(inventory, now)
+    if lastSortMs[inventory] == nil then
+        if stampCount >= MAX_STAMPS then
+            local kept = 0
+            for container, stampMs in pairs(lastSortMs) do
+                if now - stampMs >= COOLDOWN_MS then
+                    lastSortMs[container] = nil
+                else
+                    kept = kept + 1
+                end
+            end
+            stampCount = kept
+
+            if stampCount >= MAX_STAMPS then
+                lastSortMs = {}
+                stampCount = 0
+            end
+        end
+        stampCount = stampCount + 1
+    end
+    lastSortMs[inventory] = now
+end
+
+function SortContainer.cachedCount()
+    return stampCount, MAX_STAMPS
+end
 
 SortContainer.OK        = "ok"
 SortContainer.NO_CHANGE = "nochange"
@@ -42,8 +71,8 @@ function SortContainer.run(model)
 
     local now = 0
     if type(getTimestampMs) == "function" then
-        local okT, t = pcall(getTimestampMs)
-        if okT and type(t) == "number" then now = t end
+        local okT, timestamp = pcall(getTimestampMs)
+        if okT and type(timestamp) == "number" then now = timestamp end
     end
     local last = lastSortMs[inventory]
     if now > 0 and last ~= nil and (now - last) < COOLDOWN_MS then
@@ -61,7 +90,7 @@ function SortContainer.run(model)
 
     local function publishMerge()
         if merged ~= true then return end
-        if now > 0 then lastSortMs[inventory] = now end
+        if now > 0 then rememberSort(inventory, now) end
         model.needsImmediateRefresh = true
         pcall(Persistence.queueSync, inventory)
     end
@@ -94,7 +123,7 @@ function SortContainer.run(model)
         return SortContainer.FAILED
     end
 
-    if now > 0 then lastSortMs[inventory] = now end
+    if now > 0 then rememberSort(inventory, now) end
 
     model.needsImmediateRefresh = true
     pcall(Persistence.queueSync, inventory)

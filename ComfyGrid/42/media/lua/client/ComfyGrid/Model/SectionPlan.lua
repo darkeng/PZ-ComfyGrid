@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -20,6 +20,10 @@ local Settings = ComfyGrid.Settings
 
 SectionPlan.POCKET_MAX_SLOTS = 6
 
+local function isPocketSized(inventory, playerNum)
+    return Capacity.slotsFor(inventory, playerNum) <= SectionPlan.POCKET_MAX_SLOTS
+end
+
 function SectionPlan.newPlan()
     return {
         sections = {}, count = 0,
@@ -30,16 +34,16 @@ function SectionPlan.newPlan()
     }
 end
 
-local function wipe(t, n)
-    for i = n, 1, -1 do t[i] = nil end
+local function clearArrayTail(array, count)
+    for i = count, 1, -1 do array[i] = nil end
 end
 
 local function lootSectionAllowed(page, inv, playerObj)
-    local okP, parent = pcall(inv.getParent, inv)
-    if okP and parent ~= nil and instanceof(parent, "IsoThumpable")
+    local okParent, parent = pcall(inv.getParent, inv)
+    if okParent and parent ~= nil and instanceof(parent, "IsoThumpable")
             and parent.isLockedToCharacter ~= nil then
-        local okL, locked = pcall(parent.isLockedToCharacter, parent, playerObj)
-        if okL and locked then return false end
+        local okLocked, locked = pcall(parent.isLockedToCharacter, parent, playerObj)
+        if okLocked and locked then return false end
     end
     if page.checkExplored ~= nil then
         pcall(page.checkExplored, page, inv, playerObj)
@@ -48,9 +52,9 @@ local function lootSectionAllowed(page, inv, playerObj)
 end
 
 local function gather(plan, page, pane, gate, playerObj)
-    local out = plan._gathered
-    wipe(out, plan._gatherCount)
-    local n = 0
+    local gathered = plan._gathered
+    clearArrayTail(gathered, plan._gatherCount)
+    local gatheredCount = 0
 
     local Order = ComfyGrid.Model and ComfyGrid.Model.ContainerOrder
     local buttons = Order ~= nil and Order.sequenceFor(page) or nil
@@ -59,61 +63,60 @@ local function gather(plan, page, pane, gate, playerObj)
         for i = 1, #buttons do
             local inv = buttons[i] ~= nil and buttons[i].inventory or nil
             if inv ~= nil and (gate == nil or gate(page, inv, playerObj)) then
-                local dup = false
-                for j = 1, n do
-                    if out[j] == inv then
-                        dup = true
+                local alreadyGathered = false
+                for j = 1, gatheredCount do
+                    if gathered[j] == inv then
+                        alreadyGathered = true
                         break
                     end
                 end
-                if not dup then
-                    n = n + 1
-                    out[n] = inv
+                if not alreadyGathered then
+                    gatheredCount = gatheredCount + 1
+                    gathered[gatheredCount] = inv
                 end
             end
         end
     end
-    if n == 0 and pane.inventory ~= nil then
-        n = 1
-        out[1] = pane.inventory
+    if gatheredCount == 0 and pane.inventory ~= nil then
+        gatheredCount = 1
+        gathered[1] = pane.inventory
     end
-    plan._gatherCount = n
-    return out, n
+    plan._gatherCount = gatheredCount
+    return gathered, gatheredCount
 end
 
 SectionPlan.STRATEGIES = {}
 
 local function playerSections(plan, page, pane, foldPockets)
     local playerObj = getSpecificPlayer(pane.player)
-    local invs, n = gather(plan, page, pane, nil, playerObj)
+    local containers, containerCount = gather(plan, page, pane, nil, playerObj)
 
     local sections, pockets = plan.sections, plan.pockets
-    wipe(sections, plan.count)
-    wipe(pockets, plan.pocketCount)
-    local sc, pc = 0, 0
+    clearArrayTail(sections, plan.count)
+    clearArrayTail(pockets, plan.pocketCount)
+    local sectionCount, pocketCount = 0, 0
 
     local Order = ComfyGrid.Model and ComfyGrid.Model.ContainerOrder
 
-    for i = 1, n do
-        local inv = invs[i]
+    for i = 1, containerCount do
+        local inv = containers[i]
 
         local isMain = (Order ~= nil and Order.isMain(inv, playerObj))
             or (Order == nil and i == 1)
         if isMain then
 
-            sc = sc + 1
-            sections[sc] = inv
-        elseif foldPockets
-                and Capacity.slotsFor(inv, pane.player) <= SectionPlan.POCKET_MAX_SLOTS then
-            pc = pc + 1
-            pockets[pc] = inv
+            sectionCount = sectionCount + 1
+            sections[sectionCount] = inv
+        elseif foldPockets and isPocketSized(inv, pane.player) then
+            pocketCount = pocketCount + 1
+            pockets[pocketCount] = inv
         else
-            sc = sc + 1
-            sections[sc] = inv
+            sectionCount = sectionCount + 1
+            sections[sectionCount] = inv
         end
     end
 
-    plan.count, plan.pocketCount = sc, pc
+    plan.count, plan.pocketCount = sectionCount, pocketCount
     plan.playerStrips = true
     plan.stacked = true
 end
@@ -128,30 +131,31 @@ end
 
 function SectionPlan.STRATEGIES.lootSections(plan, page, pane)
     local playerObj = getSpecificPlayer(pane.player)
-    local invs, n = gather(plan, page, pane, lootSectionAllowed, playerObj)
+    local containers, containerCount = gather(plan, page, pane,
+        lootSectionAllowed, playerObj)
 
     local sections = plan.sections
-    wipe(sections, plan.count)
-    wipe(plan.pockets, plan.pocketCount)
-    for i = 1, n do sections[i] = invs[i] end
+    clearArrayTail(sections, plan.count)
+    clearArrayTail(plan.pockets, plan.pocketCount)
+    for i = 1, containerCount do sections[i] = containers[i] end
 
-    plan.count, plan.pocketCount = n, 0
+    plan.count, plan.pocketCount = containerCount, 0
     plan.playerStrips = false
     plan.stacked = true
 end
 
 function SectionPlan.STRATEGIES.single(plan, page, pane)
     local sections = plan.sections
-    wipe(sections, plan.count)
-    wipe(plan.pockets, plan.pocketCount)
-    local n = 0
+    clearArrayTail(sections, plan.count)
+    clearArrayTail(plan.pockets, plan.pocketCount)
+    local sectionCount = 0
     if pane.inventory ~= nil then
-        n = 1
+        sectionCount = 1
         sections[1] = pane.inventory
     end
 
-    plan.count, plan.pocketCount = n, 0
-    plan.playerStrips = (n > 0 and page ~= nil and page.onCharacter == true)
+    plan.count, plan.pocketCount = sectionCount, 0
+    plan.playerStrips = (sectionCount > 0 and page ~= nil and page.onCharacter == true)
     plan.stacked = false
 end
 
@@ -165,9 +169,26 @@ local LOOT_MODE = {
     single   = "single",
 }
 
+local function playerStrategy()
+    return PLAYER_MODE[Settings.get("PLAYER_LAYOUT")] or "playerCompact"
+end
+
+function SectionPlan.foldsPockets()
+    return playerStrategy() == "playerCompact"
+end
+
+function SectionPlan.isPocket(inventory, playerObj, playerNum)
+    if not SectionPlan.foldsPockets() then return false end
+
+    local Order = ComfyGrid.Model and ComfyGrid.Model.ContainerOrder
+    if Order ~= nil and Order.isMain(inventory, playerObj) then return false end
+    local ok, small = pcall(isPocketSized, inventory, playerNum)
+    return ok and small == true
+end
+
 function SectionPlan.pick(page, _pane)
     if page ~= nil and page.onCharacter == true then
-        return PLAYER_MODE[Settings.get("PLAYER_LAYOUT")] or "playerCompact"
+        return playerStrategy()
     end
     if page ~= nil and page.onCharacter == false then
         return LOOT_MODE[Settings.get("LOOT_LAYOUT")] or "single"

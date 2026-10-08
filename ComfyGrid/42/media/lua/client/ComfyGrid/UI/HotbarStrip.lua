@@ -1,22 +1,23 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/Core/VanillaStacks"
+require "ComfyGrid/Core/Input"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
-require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/UI/HotbarGhosts"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/Model/ItemSearch"
 require "ComfyGrid/UI/StackRenderer"
+require "ComfyGrid/UI/StripGestures"
 require "ComfyGrid/Interact/DragAndDrop"
-require "ComfyGrid/Interact/Transfer"
 require "ComfyGrid/Interact/Unequip"
 require "ComfyGrid/Interact/HotbarAttach"
 ComfyGrid = ComfyGrid or {}
@@ -24,13 +25,12 @@ ComfyGrid.UI = ComfyGrid.UI or {}
 
 local Log = ComfyGrid.Core.Log
 local Text = ComfyGrid.Core.Text
-local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local ItemSearch = ComfyGrid.Model.ItemSearch
 local StackRenderer = ComfyGrid.UI.StackRenderer
+local StripGestures = ComfyGrid.UI.StripGestures
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
-local Transfer = ComfyGrid.Interact.Transfer
 local Unequip = ComfyGrid.Interact.Unequip
 local HotbarAttach = ComfyGrid.Interact.HotbarAttach
 
@@ -39,10 +39,9 @@ ComfyGrid.UI.HotbarStrip = HotbarStrip
 
 local MIN_COLS = 2
 
-local DEFAULT_BG = { r = 0.09, g = 0.09, b = 0.11, a = 0.85 }
-local LABEL = { r = 0.62, g = 0.62, b = 0.68, a = 0.9 }
-
 local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0 }
+
+local NO_ATTACHED = {}
 
 local labelCache = {}
 local function labelFor(slot)
@@ -74,10 +73,11 @@ local function hoverLabelFor(slot)
         end
         if label == nil then label = tostring(slot.name or "?") end
         local width = 0
-        local tm = getTextManager and getTextManager() or nil
-        if tm ~= nil and Style.FONT ~= nil then
-            local ok, w = pcall(tm.MeasureStringX, tm, Style.FONT, label)
-            width = ok and w or 0
+        local textManager = getTextManager and getTextManager() or nil
+        if textManager ~= nil and Style.FONT ~= nil then
+            local ok, measured = pcall(textManager.MeasureStringX, textManager,
+                Style.FONT, label)
+            width = ok and measured or 0
         end
         info = { label = label, width = width }
         hoverLabelCache[key] = info
@@ -86,8 +86,8 @@ local function hoverLabelFor(slot)
 end
 
 Style.onScaleChanged(function()
-    for k in pairs(labelCache) do labelCache[k] = nil end
-    for k in pairs(hoverLabelCache) do hoverLabelCache[k] = nil end
+    for key in pairs(labelCache) do labelCache[key] = nil end
+    for key in pairs(hoverLabelCache) do hoverLabelCache[key] = nil end
 end)
 
 local synths = {}
@@ -130,7 +130,6 @@ function HotbarStrip:new(x, y, playerNum)
     o.rows = 1
     o.availWidth = nil
     o.hoverIdx = nil
-    o.sizeDirty = false
     o.pressedIdx = nil
     o.pressedId = nil
     o.dragDidStart = false
@@ -142,10 +141,9 @@ function HotbarStrip:setAvailableWidth(px)
     self.availWidth = px
 end
 
+local InputHotbarOf = ComfyGrid.Core.Input.hotbarOf
 local function hotbarOf(self)
-    local ok, hotbar = pcall(getPlayerHotbar, self.playerNum)
-    if ok then return hotbar end
-    return nil
+    return InputHotbarOf(self.playerNum)
 end
 
 local function tileAt(self, x, y)
@@ -156,6 +154,19 @@ end
 
 local function updateHover(self)
     self.hoverIdx = tileAt(self, self:getMouseX(), self:getMouseY())
+end
+
+local function tileXY(self, idx)
+    return Style.pixelForSlot(idx, self.cols)
+end
+
+local function itemAt(self, x, y)
+    local idx = tileAt(self, x, y)
+    if idx == nil then return nil end
+    local hotbar = hotbarOf(self)
+    local item = hotbar ~= nil and hotbar.attachedItems ~= nil
+        and hotbar.attachedItems[idx + 1] or nil
+    return item, idx
 end
 
 function HotbarStrip:hoveredItem()
@@ -175,7 +186,6 @@ local function prerenderImpl(self)
         if self.height ~= 0 then
             self:setWidth(1)
             self:setHeight(0)
-            self.sizeDirty = true
         end
         return
     end
@@ -190,11 +200,10 @@ local function prerenderImpl(self)
     if cols > self.entryCount then cols = self.entryCount end
     self.cols = cols
     self.rows = math.max(1, math.ceil(self.entryCount / cols))
-    local w, h = Style.gridPixelSize(self.cols, self.rows)
-    if w ~= self.width or h ~= self.height then
-        self:setWidth(w)
-        self:setHeight(h)
-        self.sizeDirty = true
+    local stripWidth, stripHeight = Style.gridPixelSize(self.cols, self.rows)
+    if stripWidth ~= self.width or stripHeight ~= self.height then
+        self:setWidth(stripWidth)
+        self:setHeight(stripHeight)
         updateHover(self)
     end
 end
@@ -207,19 +216,29 @@ function HotbarStrip:prerender()
     end
 end
 
+local function washBoard(self, cols, rows)
+    local stripWidth, stripHeight = Style.gridPixelSize(cols, rows)
+    local colors = Style.COLORS
+    local bg = colors.BOARD_BG
+    self:drawRect(0, 0, stripWidth, stripHeight, bg.a or 1, bg.r or 0,
+        bg.g or 0, bg.b or 0)
+end
+
+local function emptyChipAt(_self, idx, attached, slots)
+    if attached[idx + 1] == nil then
+        return hoverLabelFor(slots[idx + 1])
+    end
+    return nil
+end
+
 local function renderImpl(self)
     if self.entryCount == 0 then return end
     local hotbar = hotbarOf(self)
     if hotbar == nil then return end
     local slots = hotbar.availableSlot
-    local attached = hotbar.attachedItems or {}
+    local attached = hotbar.attachedItems or NO_ATTACHED
     local cols = self.cols
-    local rows = self.rows
-    local w, h = Style.gridPixelSize(cols, rows)
-    local colors = Style.COLORS
-    local bg = colors and colors.BOARD_BG or DEFAULT_BG
-
-    self:drawRect(0, 0, w, h, bg.a or 1, bg.r or 0, bg.g or 0, bg.b or 0)
+    washBoard(self, cols, self.rows)
 
     local pixelForSlot = Style.pixelForSlot
     local font = Style.FONT
@@ -227,19 +246,8 @@ local function renderImpl(self)
 
     local currentAction = StackRenderer.currentActionOf(self.playerNum)
 
-    local ItemApply = ComfyGrid.Interact.ItemApply
-    local applySrc = ItemApply ~= nil and ItemApply.dragSource() or nil
-    local applyPlayer = nil
-    local applyPulse = 1
-    if applySrc ~= nil then
-        applyPlayer = getSpecificPlayer(self.playerNum)
-        if applyPlayer == nil then applySrc = nil end
-        applyPulse = SlotRenderer.applyPulse()
-    end
-
-    local searchMarks = ItemSearch.marksFor(self.playerNum)
-    local searchPulse = 1
-    if searchMarks ~= nil then searchPulse = SlotRenderer.applyPulse() end
+    local ItemApply, applySrc, applyPlayer, applyPulse, searchMarks,
+        searchPulse = StripGestures.tileHints(self.playerNum)
     ctx.view = self
     ctx.playerNum = self.playerNum
     for i = 1, self.entryCount do
@@ -263,67 +271,19 @@ local function renderImpl(self)
                 SlotRenderer.drawApplyHint(ctx, applyPulse)
             end
 
-            local jd = StackRenderer.jobDeltaOf(item, currentAction)
-            if jd ~= nil then
-                StackRenderer.drawJobOverlay(self, tx, ty, jd)
+            local jobDelta = StackRenderer.jobDeltaOf(item, currentAction)
+            if jobDelta ~= nil then
+                StackRenderer.drawJobOverlay(self, tx, ty, jobDelta)
             end
         else
 
-            ctx.stack = nil
-            ctx.item = nil
-            ctx.slot = i - 1
-            ctx.x = tx
-            ctx.y = ty
-            SlotRenderer.drawSocket(ctx)
-            local tex = ComfyGrid.UI.HotbarGhosts.texFor(slots[i])
-            if tex ~= nil then
-                SlotRenderer.drawGhost(self, tex, tx, ty)
-            elseif font ~= nil then
-                local name = labelFor(slots[i])
-                self:drawTextCentre(name, tx + cell / 2,
-                    ty + math.floor(cell / 2) - 7, LABEL.r, LABEL.g, LABEL.b,
-                    LABEL.a, font)
-            end
+            StripGestures.drawEmptySocket(self, ctx, i - 1, tx, ty, slots[i],
+                ComfyGrid.UI.HotbarGhosts.texFor, labelFor, font, cell)
         end
     end
 
-    local hover = self.hoverIdx
-    if hover ~= nil and hover < self.entryCount and self:isMouseOver() then
-        local hx, hy = pixelForSlot(hover, cols)
-        ctx.stack = nil
-        ctx.item = nil
-        ctx.slot = hover
-        ctx.x = hx
-        ctx.y = hy
-        SlotRenderer.drawHover(ctx)
-
-        if attached[hover + 1] == nil then
-            SlotRenderer.drawNameChip(self, hoverLabelFor(slots[hover + 1]),
-                hx, hy, font)
-        end
-    end
-
-    local Pad = ComfyGrid.Interact and ComfyGrid.Interact.PadFocus
-    local padIdx = Pad ~= nil and Pad.cursorFor ~= nil and Pad.cursorFor(self)
-        or nil
-    if padIdx ~= nil and padIdx < self.entryCount then
-        local px, py = pixelForSlot(padIdx, cols)
-        SlotRenderer.drawSelection(self, px, py)
-        ctx.stack = nil
-        ctx.item = nil
-        ctx.slot = padIdx
-        ctx.x = px
-        ctx.y = py
-        SlotRenderer.drawHover(ctx)
-        if attached[padIdx + 1] == nil then
-            SlotRenderer.drawNameChip(self, hoverLabelFor(slots[padIdx + 1]),
-                px, py, font)
-        end
-        local Carry = ComfyGrid.Interact.PadCarry
-        if Carry ~= nil and Carry.renderAt ~= nil then
-            Carry.renderAt(self, px, py)
-        end
-    end
+    StripGestures.drawCursors(self, ctx, font, tileXY, emptyChipAt, attached,
+        slots)
 end
 
 function HotbarStrip:render()
@@ -332,25 +292,6 @@ function HotbarStrip:render()
         lastRenderError = err
         Log.error("HotbarStrip render failed: " .. tostring(err))
     end
-end
-
-local function sourceGridSlotOf(entry, playerNum)
-    local tag = entry.comfyStacks or entry.comfyStack
-    if type(tag) == "table" and tag.itemIDs == nil then tag = tag[1] end
-    if type(tag) ~= "table" or tag.itemIDs == nil
-            or type(tag.slot) ~= "number" then
-        return nil, nil
-    end
-    local CM = ComfyGrid.Model and ComfyGrid.Model.ContainerModel
-    local model = CM ~= nil and CM.getPlayerMain ~= nil
-        and CM.getPlayerMain(playerNum) or nil
-    local grid = model ~= nil and model.grid or nil
-    if grid == nil or grid.claimSlotForItem == nil then return nil, nil end
-    local stacks = grid.data.stacks
-    for i = 1, #stacks do
-        if stacks[i] == tag then return tag.slot, grid end
-    end
-    return nil, nil
 end
 
 local function resolveAttachDrop(self, idx)
@@ -374,7 +315,7 @@ local function resolveAttachDrop(self, idx)
     for i = 1, #dragged do
         local items = dragged[i].items
         if type(items) == "table" then
-            local first = (#items >= 2) and 2 or 1
+            local first = ComfyGrid.Core.VanillaStacks.firstRealIndex(items)
             for j = first, #items do
                 local item = items[j]
                 if item ~= nil and item:getContainer() ~= nil then
@@ -383,11 +324,12 @@ local function resolveAttachDrop(self, idx)
                     if ok and can then
 
                         local srcSlot, mainGrid =
-                            sourceGridSlotOf(dragged[i], self.playerNum)
+                            StripGestures.sourceGridSlotOf(dragged[i],
+                                self.playerNum)
                         local onDisplaced = nil
                         if srcSlot ~= nil and mainGrid ~= nil then
-                            onDisplaced = function(prev)
-                                mainGrid:claimSlotForItem(prev:getID(), srcSlot)
+                            onDisplaced = function(evicted)
+                                mainGrid:claimSlotForItem(evicted:getID(), srcSlot)
                             end
                         end
 
@@ -401,29 +343,6 @@ local function resolveAttachDrop(self, idx)
     end
 end
 
-local function mouseDownImpl(self, x, y)
-    if DragAndDrop.isDragOwner(self) and not DragAndDrop.isDragging() then
-        DragAndDrop.endDrag()
-    end
-    self.pressedIdx = nil
-    self.pressedId = nil
-    self.dragDidStart = false
-    local idx = tileAt(self, x, y)
-    if idx == nil then return end
-    local hotbar = hotbarOf(self)
-    local item = hotbar ~= nil and hotbar.attachedItems ~= nil
-        and hotbar.attachedItems[idx + 1] or nil
-    if item == nil then return end
-
-    if Unequip.pressClaims(item, self.playerNum, "detach") then return end
-
-    local payload = { VanillaStacks.fromItems({ item }) }
-    if payload[1] == nil then return end
-    DragAndDrop.prepareDrag(self, payload, x, y)
-    self.pressedIdx = idx
-    self.pressedId = item:getID()
-end
-
 local function resolveReslotDrop(self, fromIdx, toIdx)
     if fromIdx == nil or toIdx == nil or fromIdx == toIdx then return end
     local hotbar = hotbarOf(self)
@@ -433,23 +352,24 @@ local function resolveReslotDrop(self, fromIdx, toIdx)
     if fromSlot == nil or toSlot == nil then return end
     local item = hotbar.attachedItems[fromIdx + 1]
     if item == nil or item:getID() ~= self.pressedId then return end
-    local okC, can = pcall(hotbar.canBeAttached, hotbar, toSlot, item)
-    if not okC or not can then return end
-    local other = hotbar.attachedItems[toIdx + 1]
+    local fitRead, fits = pcall(hotbar.canBeAttached, hotbar, toSlot, item)
+    if not fitRead or not fits then return end
+    local occupant = hotbar.attachedItems[toIdx + 1]
     local swapBack = false
-    if other ~= nil then
-        local okO, canO = pcall(hotbar.canBeAttached, hotbar, fromSlot, other)
-        swapBack = okO and canO == true
+    if occupant ~= nil then
+        local backFitRead, backFits = pcall(hotbar.canBeAttached, hotbar,
+            fromSlot, occupant)
+        swapBack = backFitRead and backFits == true
     end
     hotbar:removeItem(item, false)
-    if other ~= nil then
-        hotbar:removeItem(other, false)
+    if occupant ~= nil then
+        hotbar:removeItem(occupant, false)
     end
     hotbar:attachItem(item, toSlot.def.attachments[item:getAttachmentType()],
         toIdx + 1, toSlot.def, false)
     if swapBack then
-        hotbar:attachItem(other,
-            fromSlot.def.attachments[other:getAttachmentType()],
+        hotbar:attachItem(occupant,
+            fromSlot.def.attachments[occupant:getAttachmentType()],
             fromIdx + 1, fromSlot.def, false)
     end
 
@@ -457,7 +377,7 @@ local function resolveReslotDrop(self, fromIdx, toIdx)
         local playerObj = getSpecificPlayer(self.playerNum)
         if playerObj ~= nil then
             pcall(syncItemFields, playerObj, item)
-            if other ~= nil then pcall(syncItemFields, playerObj, other) end
+            if occupant ~= nil then pcall(syncItemFields, playerObj, occupant) end
         end
     end
 end
@@ -467,27 +387,28 @@ function HotbarStrip:resolvePadDrop(idx)
 end
 
 function HotbarStrip:resolvePadReslot(fromIdx, toIdx, itemId)
-    local prev = self.pressedId
+    local armedIdBefore = self.pressedId
     self.pressedId = itemId
     local ok, err = pcall(resolveReslotDrop, self, fromIdx, toIdx)
-    self.pressedId = prev
+    self.pressedId = armedIdBefore
     if not ok then reportMouseError(err) end
+end
+
+local function mouseDownImpl(self, x, y)
+    StripGestures.beginPress(self)
+    local item, idx = itemAt(self, x, y)
+    if item == nil then return end
+
+    if Unequip.pressClaims(item, self.playerNum, "detach") then return end
+
+    StripGestures.armItemDrag(self, idx, item, x, y)
 end
 
 local function mouseUpImpl(self, x, y)
 
     if not DragAndDrop.isDragging() then
-        local upIdx = tileAt(self, x, y)
-        local upBar = upIdx ~= nil and hotbarOf(self) or nil
-        local upItem = upBar ~= nil and upBar.attachedItems ~= nil
-            and upBar.attachedItems[upIdx + 1] or nil
-        if upItem ~= nil
-                and Unequip.releaseClaims(self, upItem, self.playerNum, "detach") then
-            if DragAndDrop.isDragOwner(self) then DragAndDrop.endDrag() end
-            self.pressedIdx = nil
-            self.pressedId = nil
-            return
-        end
+        local upItem = itemAt(self, x, y)
+        if StripGestures.releaseClaimed(self, upItem, "detach") then return end
     end
     if DragAndDrop.isDragging() then
         local poked = x == 0 and y == 0 and DragAndDrop.isDragOwner(self)
@@ -519,53 +440,9 @@ local function mouseUpImpl(self, x, y)
     self.pressedId = nil
 end
 
-local function dragCancelImpl(self)
-    local id = self.pressedId
-    self.pressedIdx = nil
-    self.pressedId = nil
-    if id == nil then return end
-
-    if not DragAndDrop.releaseDropsToFloor(self.playerNum) then return end
-    local playerObj = getSpecificPlayer(self.playerNum)
-    if playerObj == nil then return end
-    local item = playerObj:getInventory():getItemWithID(id)
-    if item ~= nil then
-        Transfer.dropToFloor({ item }, playerObj)
-    end
-end
-
 function HotbarStrip:onComfyDragCancelled()
-    local ok, err = pcall(dragCancelImpl, self)
+    local ok, err = pcall(StripGestures.dropPressedToFloor, self)
     if not ok then reportMouseError(err) end
-end
-
-local function mouseUpOutsideImpl(self, _x, _y)
-    if not DragAndDrop.isDragOwner(self) then return end
-    if DragAndDrop.isDragging() then
-        DragAndDrop.cancelDrag(self, self.onComfyDragCancelled)
-    else
-        DragAndDrop.endDrag()
-        self.pressedIdx = nil
-        self.pressedId = nil
-    end
-end
-
-local function rightMouseUpImpl(self, x, y)
-    if DragAndDrop.isDragging() then return end
-    if DragAndDrop.isDragOwner(self) then
-        DragAndDrop.endDrag()
-        self.pressedIdx = nil
-        self.pressedId = nil
-    end
-    local idx = tileAt(self, x, y)
-    if idx == nil then return end
-    local hotbar = hotbarOf(self)
-    local item = hotbar ~= nil and hotbar.attachedItems ~= nil
-        and hotbar.attachedItems[idx + 1] or nil
-    if item == nil then return end
-
-    ISInventoryPaneContextMenu.createMenu(self.playerNum, true, { item },
-        getMouseX(), getMouseY())
 end
 
 function HotbarStrip:onMouseDown(x, y)
@@ -580,29 +457,19 @@ function HotbarStrip:onMouseUp(x, y)
     return true
 end
 
-function HotbarStrip:onMouseUpOutside(x, y)
-    local ok, err = pcall(mouseUpOutsideImpl, self, x, y)
+function HotbarStrip:onMouseUpOutside(_x, _y)
+    local ok, err = pcall(StripGestures.releaseOutside, self)
     if not ok then reportMouseError(err) end
 end
 
 function HotbarStrip:onMouseMove(_dx, _dy)
     updateHover(self)
-    if DragAndDrop == nil then return end
-    DragAndDrop.startDrag(self)
-    if not self.dragDidStart and DragAndDrop.isDragging()
-            and DragAndDrop.isDragOwner(self) then
-        self.dragDidStart = true
-    end
+    StripGestures.promoteDrag(self)
 end
 
 function HotbarStrip:onMouseMoveOutside(_dx, _dy)
     self.hoverIdx = nil
-    if DragAndDrop == nil then return end
-    DragAndDrop.startDrag(self)
-    if not self.dragDidStart and DragAndDrop.isDragging()
-            and DragAndDrop.isDragOwner(self) then
-        self.dragDidStart = true
-    end
+    StripGestures.promoteDrag(self)
 end
 
 function HotbarStrip.onRightMouseDown(_self, _x, _y)
@@ -610,7 +477,7 @@ function HotbarStrip.onRightMouseDown(_self, _x, _y)
 end
 
 function HotbarStrip:onRightMouseUp(x, y)
-    local ok, err = pcall(rightMouseUpImpl, self, x, y)
+    local ok, err = pcall(StripGestures.openMenuAt, self, x, y, itemAt)
     if not ok then reportMouseError(err) end
     return true
 end

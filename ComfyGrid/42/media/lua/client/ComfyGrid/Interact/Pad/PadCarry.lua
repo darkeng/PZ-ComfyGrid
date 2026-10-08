@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -33,9 +33,9 @@ local function noop() end
 local owners = {}
 
 local function ownerFor(playerNum)
-    local o = owners[playerNum]
-    if o == nil then
-        o = {
+    local owner = owners[playerNum]
+    if owner == nil then
+        owner = {
             playerNum = playerNum,
             onMouseUp = noop,
             stack = nil,
@@ -43,21 +43,21 @@ local function ownerFor(playerNum)
             renderItem = nil,
             itemId = nil,
         }
-        owners[playerNum] = o
+        owners[playerNum] = owner
     end
-    return o
+    return owner
 end
 
-local function clearOwner(o)
-    o.stack = nil
-    o.sourceInventory = nil
-    o.renderItem = nil
-    o.itemId = nil
+local function clearOwner(owner)
+    owner.stack = nil
+    owner.sourceInventory = nil
+    owner.renderItem = nil
+    owner.itemId = nil
 end
 
 function PadCarry.isCarrying(playerNum)
-    local o = owners[playerNum]
-    return o ~= nil and DragAndDrop.isDragOwner(o) and DragAndDrop.isDragging()
+    local owner = owners[playerNum]
+    return owner ~= nil and DragAndDrop.isDragOwner(owner) and DragAndDrop.isDragging()
 end
 
 function PadCarry.pickup(playerNum, gridView, stack)
@@ -68,25 +68,25 @@ function PadCarry.pickup(playerNum, gridView, stack)
     end
     local payload = gridView:dragPayloadFor(stack)
     if payload == nil then return false end
-    local o = ownerFor(playerNum)
-    if not DragAndDrop.beginDirectDrag(o, payload) then return false end
-    o.stack = stack
-    o.sourceInventory = gridView.model ~= nil and gridView.model.inventory
+    local owner = ownerFor(playerNum)
+    if not DragAndDrop.beginDirectDrag(owner, payload) then return false end
+    owner.stack = stack
+    owner.sourceInventory = gridView.model ~= nil and gridView.model.inventory
         or nil
-    o.renderItem = ItemStack.frontItem(stack, o.sourceInventory)
-    o.itemId = o.renderItem ~= nil and o.renderItem:getID() or nil
+    owner.renderItem = ItemStack.frontItem(stack, owner.sourceInventory)
+    owner.itemId = owner.renderItem ~= nil and owner.renderItem:getID() or nil
     return true
 end
 
 function PadCarry.pickupPayload(playerNum, payload, renderItem)
     if PadCarry.isCarrying(playerNum) then return false end
     if payload == nil or payload[1] == nil then return false end
-    local o = ownerFor(playerNum)
-    if not DragAndDrop.beginDirectDrag(o, payload) then return false end
-    o.stack = nil
-    o.sourceInventory = renderItem ~= nil and renderItem:getContainer() or nil
-    o.renderItem = renderItem
-    o.itemId = renderItem ~= nil and renderItem:getID() or nil
+    local owner = ownerFor(playerNum)
+    if not DragAndDrop.beginDirectDrag(owner, payload) then return false end
+    owner.stack = nil
+    owner.sourceInventory = renderItem ~= nil and renderItem:getContainer() or nil
+    owner.renderItem = renderItem
+    owner.itemId = renderItem ~= nil and renderItem:getID() or nil
     return true
 end
 
@@ -103,10 +103,10 @@ function PadCarry.carriedItemId(playerNum)
 end
 
 function PadCarry.finish(playerNum)
-    local o = owners[playerNum]
-    if o == nil then return end
-    if DragAndDrop.isDragOwner(o) then DragAndDrop.endDrag() end
-    clearOwner(o)
+    local owner = owners[playerNum]
+    if owner == nil then return end
+    if DragAndDrop.isDragOwner(owner) then DragAndDrop.endDrag() end
+    clearOwner(owner)
 end
 
 function PadCarry.place(playerNum, gridView, slot)
@@ -133,38 +133,38 @@ end
 
 function PadCarry.quickMoveCarried(playerNum)
     if not PadCarry.isCarrying(playerNum) then return false end
-    local o = owners[playerNum]
+    local owner = owners[playerNum]
     local payload = DragAndDrop.getDraggedStacks()
-    local src = o.sourceInventory
+    local sourceInventory = owner.sourceInventory
     DragAndDrop.endDrag()
-    clearOwner(o)
-    if payload == nil or src == nil then return false end
-    return QuickMove.run(payload, src, playerNum)
+    clearOwner(owner)
+    if payload == nil or sourceInventory == nil then return false end
+    return QuickMove.run(payload, sourceInventory, playerNum)
 end
 
 function PadCarry.carriedStackOn(gridView)
-    local o = owners[gridView.playerNum]
-    if o == nil or o.stack == nil then return nil end
-    if not (DragAndDrop.isDragOwner(o) and DragAndDrop.isDragging()) then
-        clearOwner(o)
+    local owner = owners[gridView.playerNum]
+    if owner == nil or owner.stack == nil then return nil end
+    if not (DragAndDrop.isDragOwner(owner) and DragAndDrop.isDragging()) then
+        clearOwner(owner)
         return nil
     end
     local model = gridView.model
-    if model == nil or model.inventory ~= o.sourceInventory then return nil end
-    return o.stack
+    if model == nil or model.inventory ~= owner.sourceInventory then return nil end
+    return owner.stack
 end
 
 function PadCarry.renderAt(view, px, py)
-    local o = owners[view.playerNum]
-    if o == nil or o.renderItem == nil then return end
-    if not (DragAndDrop.isDragOwner(o) and DragAndDrop.isDragging()) then
+    local owner = owners[view.playerNum]
+    if owner == nil or owner.renderItem == nil then return end
+    if not (DragAndDrop.isDragOwner(owner) and DragAndDrop.isDragging()) then
         return
     end
-    local tex = o.renderItem:getTex()
+    local tex = owner.renderItem:getTex()
     if tex == nil then return end
     local cell = Style.CELL or 45
 
-    ComfyGrid.UI.Icons.draw(view, o.renderItem, px + 3, py + 3, 0.85,
+    ComfyGrid.UI.Icons.draw(view, owner.renderItem, px + 3, py + 3, 0.85,
         cell - 6, cell - 6)
 end
 

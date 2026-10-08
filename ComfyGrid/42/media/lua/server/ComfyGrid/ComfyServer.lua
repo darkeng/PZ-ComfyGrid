@@ -1,23 +1,24 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
-local COMFY_UUID = "ComfyGrid_UUID"
-local WORLD_ITEM_DATA = "ComfyGrid_WorldItemData"
-local WORLD_ITEM_PARTIAL = "ComfyGrid_WorldItemPartial"
-local VEHICLE_DATA = "ComfyGrid_VehicleData"
-local VEHICLE_PARTIAL = "ComfyGrid_VehiclePartial"
+require "ComfyGrid/NetChannels"
 
-local validKeys = {
+local NetChannels = ComfyGrid.NetChannels
+local COMFY_UUID = NetChannels.COMFY_UUID
+local WORLD_ITEM_DATA = NetChannels.WORLD_ITEM_DATA
+local WORLD_ITEM_PARTIAL = NetChannels.WORLD_ITEM_PARTIAL
+local VEHICLE_DATA = NetChannels.VEHICLE_DATA
+local VEHICLE_PARTIAL = NetChannels.VEHICLE_PARTIAL
+
+local PARTIAL_CHANNELS = {
     [WORLD_ITEM_PARTIAL] = true,
     [VEHICLE_PARTIAL] = true,
 }
-
-local ComfyServer = {}
 
 local function getOrCreateUuid(record)
     local uuid = record[COMFY_UUID]
@@ -53,7 +54,7 @@ end
 
 local function onServerReceiveGlobalModData(key, data)
 
-    if not isServer() or not validKeys[key] or type(data) ~= "table" then
+    if not isServer() or not PARTIAL_CHANNELS[key] or type(data) ~= "table" then
         return
     end
     if key == WORLD_ITEM_PARTIAL then
@@ -64,5 +65,3 @@ local function onServerReceiveGlobalModData(key, data)
 end
 
 Events.OnReceiveGlobalModData.Add(onServerReceiveGlobalModData)
-
-return ComfyServer

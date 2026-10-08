@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -15,25 +15,127 @@ ComfyGrid.Patches.InventoryPagePatch = InventoryPagePatch
 
 local Log = ComfyGrid.Core.Log
 
+local function chromeModule(name)
+    local Chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
+    return Chrome ~= nil and Chrome[name] or nil
+end
+
+local function noop() end
+
+local function mirroredPlateRect(page, x, y, w, h, ...)
+    local buttonSize = page._comfyPlateBs
+    if w == buttonSize and x == page:getWidth() - buttonSize then x = 0 end
+    return page._comfyPlateOg(page, x, y, w, h, ...)
+end
+
+local function footerlessBorder(page, x, y, w, h, ...)
+
+    if x == 0 and y > 0 and w == page:getWidth()
+            and (y + h) == page._comfyBorderH then
+        return
+    end
+    local buttonSize = page._comfyBorderBs
+    if buttonSize ~= nil and w == buttonSize
+            and x == page:getWidth() - buttonSize then
+        x = 0
+    end
+    return page._comfyBorderOg(page, x, y, w, h, ...)
+end
+
+local function syncChromeBeforeOriginal(page, WindowChrome)
+    if WindowChrome == nil then return end
+    local pane = page.inventoryPane
+    if pane ~= nil and pane.mode == "comfy" then
+        WindowChrome.applyTo(page)
+        WindowChrome.shadow(page)
+    else
+
+        WindowChrome.restore(page)
+    end
+
+    if WindowChrome.buttonSizeFor ~= nil
+            and (page.buttonSize ~= WindowChrome.buttonSizeFor(page)
+            or page._comfyButtonsComfy ~= (pane ~= nil and pane.mode == "comfy")) then
+        pcall(WindowChrome.fitButtons, page)
+    end
+end
+
+local function runFrameHeartbeats(page)
+
+    local Drag = ComfyGrid.Interact ~= nil
+        and ComfyGrid.Interact.ContainerDrag or nil
+    if Drag ~= nil then Drag.update(page) end
+
+    local EquipWindow = ComfyGrid.UI ~= nil
+        and ComfyGrid.UI.EquipWindow or nil
+    if EquipWindow ~= nil then pcall(EquipWindow.follow, page) end
+
+    local ZOrder = chromeModule("ZOrder")
+    if ZOrder ~= nil and ZOrder.enforce ~= nil then
+        pcall(ZOrder.enforce, page.player)
+    end
+end
+
+local function runOriginalPrerender(page, original, WindowChrome)
+
+    local mute = page.inventoryPane ~= nil
+        and page.inventoryPane.mode == "comfy"
+    local savedText, savedRight
+    if mute then
+        savedText = rawget(page, "drawText")
+        savedRight = rawget(page, "drawTextRight")
+        page.drawText = noop
+        page.drawTextRight = noop
+    end
+
+    local mirrorPlate = mute and WindowChrome ~= nil
+        and WindowChrome.onLeft ~= nil and WindowChrome.onLeft(page)
+        and page.buttonSize ~= nil
+    local savedRect
+    if mirrorPlate then
+        savedRect = rawget(page, "drawRect")
+        page._comfyPlateOg = page.drawRect
+        page._comfyPlateBs = page.buttonSize
+        page.drawRect = mirroredPlateRect
+    end
+    local ok, err = pcall(original, page)
+    if mirrorPlate then page.drawRect = savedRect end
+    if mute then
+        page.drawText = savedText
+        page.drawTextRight = savedRight
+    end
+    return ok, err, mute
+end
+
+local function syncChromeAfterOriginal(page, WindowChrome, mute)
+    if mute then
+
+        if WindowChrome ~= nil and WindowChrome.resizeGrips ~= nil then
+            pcall(WindowChrome.resizeGrips, page)
+        end
+
+        if WindowChrome ~= nil and WindowChrome.resync ~= nil then
+            pcall(WindowChrome.resync, page)
+        end
+    end
+
+    if WindowChrome ~= nil and WindowChrome.side ~= nil then
+        pcall(WindowChrome.side, page)
+    end
+end
+
 Events.OnGameBoot.Add(function()
 
     if ISInventoryPage._comfyPatched then return end
     ISInventoryPage._comfyPatched = true
 
-    local og_createChildren = ISInventoryPage.createChildren
-    function ISInventoryPage:createChildren()
-        og_createChildren(self)
-
-    end
-
     local og_containerSizeChanged = ISInventoryPage.onInventoryContainerSizeChanged
     function ISInventoryPage:onInventoryContainerSizeChanged()
         og_containerSizeChanged(self)
-        local Chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
-        local WC = Chrome ~= nil and Chrome.WindowChrome or nil
+        local WindowChrome = chromeModule("WindowChrome")
 
-        if WC ~= nil and WC.fitButtons ~= nil then
-            local ok, err = pcall(WC.fitButtons, self)
+        if WindowChrome ~= nil and WindowChrome.fitButtons ~= nil then
+            local ok, err = pcall(WindowChrome.fitButtons, self)
             if not ok then
                 Log.warn("InventoryPagePatch: fitButtons failed: " .. tostring(err))
             end
@@ -43,10 +145,10 @@ Events.OnGameBoot.Add(function()
     local og_addContainerButton = ISInventoryPage.addContainerButton
     function ISInventoryPage:addContainerButton(...)
         local button = og_addContainerButton(self, ...)
-        local Chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
-        local WC = Chrome ~= nil and Chrome.WindowChrome or nil
-        if button ~= nil and WC ~= nil and WC.fitButton ~= nil then
-            pcall(WC.fitButton, self, button)
+        local WindowChrome = chromeModule("WindowChrome")
+        if button ~= nil and WindowChrome ~= nil
+                and WindowChrome.fitButton ~= nil then
+            pcall(WindowChrome.fitButton, self, button)
         end
         return button
     end
@@ -79,99 +181,14 @@ Events.OnGameBoot.Add(function()
         end
     end
 
-    local function noop() end
-
-    local function mirroredPlateRect(sel, x, y, w, h, ...)
-        local bs = sel._comfyPlateBs
-        if w == bs and x == sel:getWidth() - bs then x = 0 end
-        return sel._comfyPlateOg(sel, x, y, w, h, ...)
-    end
-
-    local function footerlessBorder(sel, x, y, w, h, ...)
-
-        if x == 0 and y > 0 and w == sel:getWidth()
-                and (y + h) == sel._comfyBorderH then
-            return
-        end
-        local bs = sel._comfyBorderBs
-        if bs ~= nil and w == bs and x == sel:getWidth() - bs then
-            x = 0
-        end
-        return sel._comfyBorderOg(sel, x, y, w, h, ...)
-    end
-
     local og_pagePrerender = ISInventoryPage.prerender
     function ISInventoryPage:prerender()
-        local pane = self.inventoryPane
-        local Chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
-        local WindowChrome = Chrome ~= nil and Chrome.WindowChrome or nil
-        if WindowChrome ~= nil then
-            if pane ~= nil and pane.mode == "comfy" then
-                WindowChrome.applyTo(self)
-                WindowChrome.shadow(self)
-            else
-
-                WindowChrome.restore(self)
-            end
-
-            if WindowChrome.buttonSizeFor ~= nil
-                    and (self.buttonSize ~= WindowChrome.buttonSizeFor(self)
-                    or self._comfyButtonsComfy ~= (pane ~= nil and pane.mode == "comfy")) then
-                pcall(WindowChrome.fitButtons, self)
-            end
-        end
-
-        local Drag = ComfyGrid.Interact ~= nil
-            and ComfyGrid.Interact.ContainerDrag or nil
-        if Drag ~= nil then Drag.update(self) end
-
-        local EquipWindow = ComfyGrid.UI ~= nil
-            and ComfyGrid.UI.EquipWindow or nil
-        if EquipWindow ~= nil then pcall(EquipWindow.follow, self) end
-
-        local ZOrder = Chrome ~= nil and Chrome.ZOrder or nil
-        if ZOrder ~= nil and ZOrder.enforce ~= nil then
-            pcall(ZOrder.enforce, self.player)
-        end
-
-        local mute = self.inventoryPane ~= nil
-            and self.inventoryPane.mode == "comfy"
-        local savedText, savedRight
-        if mute then
-            savedText = rawget(self, "drawText")
-            savedRight = rawget(self, "drawTextRight")
-            self.drawText = noop
-            self.drawTextRight = noop
-        end
-
-        local mirrorPlate = mute and WindowChrome ~= nil
-            and WindowChrome.onLeft ~= nil and WindowChrome.onLeft(self)
-            and self.buttonSize ~= nil
-        local savedRect
-        if mirrorPlate then
-            savedRect = rawget(self, "drawRect")
-            self._comfyPlateOg = self.drawRect
-            self._comfyPlateBs = self.buttonSize
-            self.drawRect = mirroredPlateRect
-        end
-        local ok, err = pcall(og_pagePrerender, self)
-        if mirrorPlate then self.drawRect = savedRect end
-        if mute then
-            self.drawText = savedText
-            self.drawTextRight = savedRight
-
-            if WindowChrome ~= nil and WindowChrome.resizeGrips ~= nil then
-                pcall(WindowChrome.resizeGrips, self)
-            end
-
-            if WindowChrome ~= nil and WindowChrome.resync ~= nil then
-                pcall(WindowChrome.resync, self)
-            end
-        end
-
-        if WindowChrome ~= nil and WindowChrome.side ~= nil then
-            pcall(WindowChrome.side, self)
-        end
+        local WindowChrome = chromeModule("WindowChrome")
+        syncChromeBeforeOriginal(self, WindowChrome)
+        runFrameHeartbeats(self)
+        local ok, err, mute = runOriginalPrerender(self, og_pagePrerender,
+            WindowChrome)
+        syncChromeAfterOriginal(self, WindowChrome, mute)
         if not ok then error(err) end
     end
 
@@ -182,20 +199,21 @@ Events.OnGameBoot.Add(function()
                 and not self.isCollapsed
 
         local savedBorder
+        local WindowChrome = nil
         if comfy then
             savedBorder = rawget(self, "drawRectBorder")
             local ogBorder = self.drawRectBorder
             local height = self:getHeight()
 
-            local chr = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
-            local wc = chr ~= nil and chr.WindowChrome or nil
-            local bs = nil
-            if wc ~= nil and wc.onLeft ~= nil and wc.onLeft(self) then
-                bs = self.buttonSize
+            WindowChrome = chromeModule("WindowChrome")
+            local buttonSize = nil
+            if WindowChrome ~= nil and WindowChrome.onLeft ~= nil
+                    and WindowChrome.onLeft(self) then
+                buttonSize = self.buttonSize
             end
             self._comfyBorderOg = ogBorder
             self._comfyBorderH = height
-            self._comfyBorderBs = bs
+            self._comfyBorderBs = buttonSize
             self.drawRectBorder = footerlessBorder
         end
 
@@ -203,8 +221,6 @@ Events.OnGameBoot.Add(function()
 
         if not comfy then return end
         self.drawRectBorder = savedBorder
-        local Chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
-        local WindowChrome = Chrome ~= nil and Chrome.WindowChrome or nil
         if WindowChrome ~= nil and WindowChrome.seam ~= nil then
             pcall(WindowChrome.seam, self)
         end
@@ -221,8 +237,7 @@ Events.OnGameBoot.Add(function()
     local og_pageSetVisible = ISInventoryPage.setVisible
     function ISInventoryPage:setVisible(visible, ...)
         if not visible and self.javaObject ~= nil and self:getIsVisible() then
-            local chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
-            local SearchField = chrome ~= nil and chrome.SearchField or nil
+            local SearchField = chromeModule("SearchField")
             if SearchField ~= nil and SearchField.onPageClosed ~= nil then
                 pcall(SearchField.onPageClosed, self)
             end
@@ -238,46 +253,60 @@ Events.OnGameBoot.Add(function()
     end
 
     local function seqOf(page)
-        local CO = ComfyGrid.Model and ComfyGrid.Model.ContainerOrder
-        if CO == nil or CO.sequenceFor == nil then return nil end
-        local ok, s = pcall(CO.sequenceFor, page)
-        if not ok or type(s) ~= "table" or #s < 2 then return nil end
-        return s
+        local ContainerOrder = ComfyGrid.Model
+            and ComfyGrid.Model.ContainerOrder
+        if ContainerOrder == nil or ContainerOrder.sequenceFor == nil then
+            return nil
+        end
+        local ok, sequence = pcall(ContainerOrder.sequenceFor, page)
+        if not ok or type(sequence) ~= "table" or #sequence < 2 then
+            return nil
+        end
+        return sequence
     end
 
     local function stepInVisualOrder(page, index, wrap, dir)
-        local s = seqOf(page)
-        if s == nil then return nil end
-        local list = page.backpacks
+        local visualSequence = seqOf(page)
+        if visualSequence == nil then return nil end
+        local backpackButtons = page.backpacks
 
         local at = nil
-        if index ~= nil and index >= 1 and list[index] ~= nil then
-            for i = 1, #s do
-                if s[i] == list[index] then at = i break end
+        if index ~= nil and index >= 1 and backpackButtons[index] ~= nil then
+            for i = 1, #visualSequence do
+                if visualSequence[i] == backpackButtons[index] then
+                    at = i
+                    break
+                end
             end
         end
 
         if at == nil then
             if not wrap then return -1 end
-            at = (dir > 0) and 0 or (#s + 1)
+            at = (dir > 0) and 0 or (#visualSequence + 1)
             wrap = false
         end
         local playerObj = getSpecificPlayer(page.player)
-        local n = #s
-        for hop = 1, n do
+        local sequenceLength = #visualSequence
+        for hop = 1, sequenceLength do
             local i = at + dir * hop
-            if i < 1 or i > n then
+            if i < 1 or i > sequenceLength then
                 if not wrap then return -1 end
 
-                if i < 1 then i = i + n else i = i - n end
+                if i < 1 then
+                    i = i + sequenceLength
+                else
+                    i = i - sequenceLength
+                end
             end
-            local button = s[i]
+            local button = visualSequence[i]
             local object = button ~= nil and button.inventory ~= nil
                 and button.inventory:getParent() or nil
             if button ~= nil and not (instanceof(object, "IsoThumpable")
                     and object:isLockedToCharacter(playerObj)) then
-                for k = 1, #list do
-                    if list[k] == button then return k end
+                for arrayIndex = 1, #backpackButtons do
+                    if backpackButtons[arrayIndex] == button then
+                        return arrayIndex
+                    end
                 end
             end
         end
@@ -286,45 +315,45 @@ Events.OnGameBoot.Add(function()
 
     local og_nextUnlocked = ISInventoryPage.nextUnlockedContainer
     function ISInventoryPage:nextUnlockedContainer(index, wrap)
-        local mine = stepInVisualOrder(self, index, wrap, 1)
-        if mine ~= nil then return mine end
+        local nextIndex = stepInVisualOrder(self, index, wrap, 1)
+        if nextIndex ~= nil then return nextIndex end
         return og_nextUnlocked(self, index, wrap)
     end
 
     local og_prevUnlocked = ISInventoryPage.prevUnlockedContainer
     function ISInventoryPage:prevUnlockedContainer(index, wrap)
-        local mine = stepInVisualOrder(self, index, wrap, -1)
-        if mine ~= nil then return mine end
+        local prevIndex = stepInVisualOrder(self, index, wrap, -1)
+        if prevIndex ~= nil then return prevIndex end
         return og_prevUnlocked(self, index, wrap)
     end
 
     local og_pageWheel = ISInventoryPage.onMouseWheel
-    function ISInventoryPage:onMouseWheel(del)
+    function ISInventoryPage:onMouseWheel(wheelDelta)
         local pane = self.inventoryPane
-        local Chrome = ComfyGrid.UI ~= nil and ComfyGrid.UI.Chrome or nil
-        local WindowChrome = Chrome ~= nil and Chrome.WindowChrome or nil
-        local bs = self.buttonSize
-        local mirror = pane ~= nil and pane.mode == "comfy" and bs ~= nil
+        local WindowChrome = chromeModule("WindowChrome")
+        local buttonSize = self.buttonSize
+        local mirror = pane ~= nil and pane.mode == "comfy"
+            and buttonSize ~= nil
             and WindowChrome ~= nil and WindowChrome.onLeft ~= nil
             and WindowChrome.onLeft(self)
-        if not mirror then return og_pageWheel(self, del) end
-        local over = self:getMouseX() < bs
+        if not mirror then return og_pageWheel(self, wheelDelta) end
+        local overColumn = self:getMouseX() < buttonSize
         local saved = rawget(self, "getMouseX")
-        self.getMouseX = function(sel)
+        self.getMouseX = function(page)
 
-            if over then return sel:getWidth() end
+            if overColumn then return page:getWidth() end
             return 0
         end
-        local ok, res = pcall(og_pageWheel, self, del)
+        local ok, result = pcall(og_pageWheel, self, wheelDelta)
         self.getMouseX = saved
-        if not ok then error(res) end
-        return res
+        if not ok then error(result) end
+        return result
     end
 
     local function raiseHintBar(page)
-        local okBp, bp = pcall(getButtonPrompts, page.player)
-        if okBp and bp ~= nil and bp.bringToTop ~= nil then
-            bp:bringToTop()
+        local okPromptBar, promptBar = pcall(getButtonPrompts, page.player)
+        if okPromptBar and promptBar ~= nil and promptBar.bringToTop ~= nil then
+            promptBar:bringToTop()
         end
     end
 
@@ -374,52 +403,35 @@ Events.OnGameBoot.Add(function()
         return og_onJoypadDown(self, button, joypadData)
     end
 
-    local og_onJoypadDirUp = ISInventoryPage.onJoypadDirUp
-    function ISInventoryPage:onJoypadDirUp(joypadData)
-        local Pad = padModule(self, "PadFocus")
-        if Pad ~= nil then raiseHintBar(self) end
-        if Pad ~= nil and Pad.onDir(self, 0, -1) then return end
-        return og_onJoypadDirUp(self, joypadData)
+    local function wrapJoypadDir(methodName, dx, dy)
+        local og_onJoypadDir = ISInventoryPage[methodName]
+        ISInventoryPage[methodName] = function(self, joypadData)
+            local Pad = padModule(self, "PadFocus")
+            if Pad ~= nil then raiseHintBar(self) end
+            if Pad ~= nil and Pad.onDir(self, dx, dy) then return end
+            return og_onJoypadDir(self, joypadData)
+        end
     end
+    wrapJoypadDir("onJoypadDirUp", 0, -1)
+    wrapJoypadDir("onJoypadDirDown", 0, 1)
+    wrapJoypadDir("onJoypadDirLeft", -1, 0)
+    wrapJoypadDir("onJoypadDirRight", 1, 0)
 
-    local og_onJoypadDirDown = ISInventoryPage.onJoypadDirDown
-    function ISInventoryPage:onJoypadDirDown(joypadData)
-        local Pad = padModule(self, "PadFocus")
-        if Pad ~= nil then raiseHintBar(self) end
-        if Pad ~= nil and Pad.onDir(self, 0, 1) then return end
-        return og_onJoypadDirDown(self, joypadData)
-    end
-
-    local og_onJoypadDirLeft = ISInventoryPage.onJoypadDirLeft
-    function ISInventoryPage:onJoypadDirLeft(joypadData)
-        local Pad = padModule(self, "PadFocus")
-        if Pad ~= nil then raiseHintBar(self) end
-        if Pad ~= nil and Pad.onDir(self, -1, 0) then return end
-        return og_onJoypadDirLeft(self, joypadData)
-    end
-
-    local og_onJoypadDirRight = ISInventoryPage.onJoypadDirRight
-    function ISInventoryPage:onJoypadDirRight(joypadData)
-        local Pad = padModule(self, "PadFocus")
-        if Pad ~= nil then raiseHintBar(self) end
-        if Pad ~= nil and Pad.onDir(self, 1, 0) then return end
-        return og_onJoypadDirRight(self, joypadData)
+    local function mouseOverWindow(moduleName, page)
+        if page == nil then return false end
+        local Window = ComfyGrid.UI ~= nil and ComfyGrid.UI[moduleName] or nil
+        if Window == nil or Window.isMouseOverIt == nil then return false end
+        local ok, over = pcall(Window.isMouseOverIt, page.player)
+        return ok and over == true
     end
 
     local function overEquipWindow(page)
         if page == nil or page.onCharacter ~= true then return false end
-        local W = ComfyGrid.UI ~= nil and ComfyGrid.UI.EquipWindow or nil
-        if W == nil or W.isMouseOverIt == nil then return false end
-        local ok, over = pcall(W.isMouseOverIt, page.player)
-        return ok and over == true
+        return mouseOverWindow("EquipWindow", page)
     end
 
     local function overContainerWindow(page)
-        if page == nil then return false end
-        local W = ComfyGrid.UI ~= nil and ComfyGrid.UI.ContainerWindow or nil
-        if W == nil or W.isMouseOverIt == nil then return false end
-        local ok, over = pcall(W.isMouseOverIt, page.player)
-        return ok and over == true
+        return mouseOverWindow("ContainerWindow", page)
     end
 
     local function overAnyComfyWindow(page)
@@ -427,9 +439,9 @@ Events.OnGameBoot.Add(function()
     end
 
     local function bandInProgress()
-        local GV = ComfyGrid.UI ~= nil and ComfyGrid.UI.GridView or nil
-        if GV == nil or GV.bandIsLive == nil then return false end
-        local ok, live = pcall(GV.bandIsLive)
+        local GridView = ComfyGrid.UI ~= nil and ComfyGrid.UI.GridView or nil
+        if GridView == nil or GridView.bandIsLive == nil then return false end
+        local ok, live = pcall(GridView.bandIsLive)
         return ok and live == true
     end
 

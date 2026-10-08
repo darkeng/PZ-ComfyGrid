@@ -1,12 +1,13 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/Core/Input"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/Interact/QuickMove"
 require "ComfyGrid/Interact/ContextMenu"
@@ -17,6 +18,7 @@ ComfyGrid.Interact = ComfyGrid.Interact or {}
 local PadInput = {}
 ComfyGrid.Interact.PadInput = PadInput
 
+local Input = ComfyGrid.Core.Input
 local Style = ComfyGrid.UI.Style
 local QuickMove = ComfyGrid.Interact.QuickMove
 local ContextMenu = ComfyGrid.Interact.ContextMenu
@@ -25,12 +27,14 @@ local PadCarry = ComfyGrid.Interact.PadCarry
 
 local function hotbarIndexOf(strip, seat, itemId)
     if itemId == nil then return nil end
-    local ok, hotbar = pcall(getPlayerHotbar, seat)
-    local att = ok and hotbar ~= nil and hotbar.attachedItems or nil
-    if att == nil then return nil end
+    local hotbar = Input.hotbarOf(seat)
+    local attachedItems = hotbar ~= nil and hotbar.attachedItems or nil
+    if attachedItems == nil then return nil end
     for i = 1, strip.entryCount or 0 do
-        local it = att[i]
-        if it ~= nil and it:getID() == itemId then return i - 1 end
+        local attachedItem = attachedItems[i]
+        if attachedItem ~= nil and attachedItem:getID() == itemId then
+            return i - 1
+        end
     end
     return nil
 end
@@ -103,8 +107,8 @@ local function verbX(page, seat)
         pcall(ISInventoryPaneContextMenu.unequipItem, occupant, seat)
     elseif kind == "hotbar" then
 
-        local ok, hotbar = pcall(getPlayerHotbar, seat)
-        if ok and hotbar ~= nil then
+        local hotbar = Input.hotbarOf(seat)
+        if hotbar ~= nil then
             pcall(hotbar.removeItem, hotbar, occupant, true)
         end
     elseif el.model ~= nil then
@@ -159,13 +163,16 @@ local function verbB(page, seat)
 
     if PadFocus.clearSelections(page) then return true end
 
-    local CW = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
-    if CW ~= nil and CW.gridFor ~= nil and CW.closeFor ~= nil then
+    local ContainerWindow = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
+    if ContainerWindow ~= nil and ContainerWindow.gridFor ~= nil
+            and ContainerWindow.closeFor ~= nil then
         local _, el = PadFocus.peek(page)
-        if el ~= nil and el == CW.gridFor(seat) then
-            CW.closeFor(seat)
-            local p = getSpecificPlayer(seat)
-            if p ~= nil then PadFocus.focusInventory(page, p:getInventory()) end
+        if el ~= nil and el == ContainerWindow.gridFor(seat) then
+            ContainerWindow.closeFor(seat)
+            local playerObj = getSpecificPlayer(seat)
+            if playerObj ~= nil then
+                PadFocus.focusInventory(page, playerObj:getInventory())
+            end
             return true
         end
     end
@@ -187,6 +194,14 @@ local function verbRB(page, seat)
     return verbShoulder(page, seat, true)
 end
 
+local function equipEntryWithLayers(el, slot)
+    local entry = el.entries ~= nil and el.entries[slot + 1] or nil
+    if entry ~= nil and entry.items ~= nil and #entry.items > 1 then
+        return entry
+    end
+    return nil
+end
+
 local function verbInspect(page, seat)
     if PadCarry.isCarrying(seat) then return true end
     local kind, el, slot, occupant = PadFocus.peek(page)
@@ -194,9 +209,8 @@ local function verbInspect(page, seat)
     local PadPopup = ComfyGrid.Interact.PadPopup
     if PadPopup == nil then return true end
     if kind == "equip" then
-
-        local entry = el.entries ~= nil and el.entries[slot + 1] or nil
-        if entry ~= nil and entry.items ~= nil and #entry.items > 1 then
+        local entry = equipEntryWithLayers(el, slot)
+        if entry ~= nil then
             local LayersPopup = ComfyGrid.UI and ComfyGrid.UI.LayersPopup
             local popup = LayersPopup ~= nil and LayersPopup.openFor ~= nil
                 and LayersPopup.openFor(el, entry.key) or nil
@@ -211,11 +225,13 @@ local function verbInspect(page, seat)
                 PadPopup.focus(popup, page)
             elseif ok then
 
-                local CW = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
-                local g = CW ~= nil and CW.gridFor ~= nil and CW.gridFor(seat)
-                    or nil
-                local inv = g ~= nil and g.model ~= nil and g.model.inventory
-                    or nil
+                local ContainerWindow = ComfyGrid.UI
+                    and ComfyGrid.UI.ContainerWindow
+                local bagGrid = ContainerWindow ~= nil
+                    and ContainerWindow.gridFor ~= nil
+                    and ContainerWindow.gridFor(seat) or nil
+                local inv = bagGrid ~= nil and bagGrid.model ~= nil
+                    and bagGrid.model.inventory or nil
                 if inv ~= nil then PadFocus.focusInventory(page, inv) end
             end
         end
@@ -250,50 +266,50 @@ local function verbs()
 end
 
 function PadInput.onButton(page, button)
-    local fn = verbs()[button]
-    if fn == nil then return false end
-    return fn(page, page.player) == true
+    local verb = verbs()[button]
+    if verb == nil then return false end
+    return verb(page, page.player) == true
 end
 
-local labels = {}
-local function label(key)
-    local s = labels[key]
-    if s == nil then
-        s = getText("IGUI_ComfyGrid_Pad" .. key)
-        labels[key] = s
+local promptTextCache = {}
+local function promptText(key)
+    local text = promptTextCache[key]
+    if text == nil then
+        text = getText("IGUI_ComfyGrid_Pad" .. key)
+        promptTextCache[key] = text
     end
-    return s
+    return text
 end
 
 function PadInput.promptFor(page, slotKey)
 
     local carrying = PadFocus.movingInv(page)
     if carrying ~= nil then
-        if slotKey == "A" or slotKey == "Back" then return label("Done") end
-        if slotKey == "B" then return label("Cancel") end
+        if slotKey == "A" or slotKey == "Back" then return promptText("Done") end
+        if slotKey == "B" then return promptText("Cancel") end
         return nil
     end
     if slotKey == "Back" then
 
         if PadCarry.isCarrying(page.player) then return nil end
-        return PadFocus.canMove(page) ~= nil and label("Move") or nil
+        return PadFocus.canMove(page) ~= nil and promptText("Move") or nil
     end
     if slotKey == "LB" then
 
-        if page.onCharacter then return label("Section") end
-        return label("Inventory")
+        if page.onCharacter then return promptText("Section") end
+        return promptText("Inventory")
     end
     if slotKey == "RB" then
 
-        if page.onCharacter then return label("Loot") end
-        return label("Container")
+        if page.onCharacter then return promptText("Loot") end
+        return promptText("Container")
     end
 
     if slotKey == "L3" then
         if PadCarry.isCarrying(page.player) then return nil end
         local kind, _, _, occupant = PadFocus.peek(page)
         if (kind == "grid" or kind == "pocket") and occupant ~= nil then
-            return label("Select")
+            return promptText("Select")
         end
         return nil
     end
@@ -303,19 +319,16 @@ function PadInput.promptFor(page, slotKey)
         if occupant == nil then return nil end
         if kind == "grid" or kind == "pocket" then
 
-            if (occupant.count or 0) > 1 then return label("Inspect") end
+            if (occupant.count or 0) > 1 then return promptText("Inspect") end
 
             if el.wouldOpenSurface ~= nil then
                 local okW, opens = pcall(el.wouldOpenSurface, el, occupant)
-                if okW and opens then return label("OpenBag") end
+                if okW and opens then return promptText("OpenBag") end
             end
             return nil
         end
-        if kind == "equip" then
-            local entry = el.entries ~= nil and el.entries[slot + 1] or nil
-            if entry ~= nil and entry.items ~= nil and #entry.items > 1 then
-                return label("Inspect")
-            end
+        if kind == "equip" and equipEntryWithLayers(el, slot) ~= nil then
+            return promptText("Inspect")
         end
         return nil
     end
@@ -323,24 +336,24 @@ function PadInput.promptFor(page, slotKey)
     local onStrip = kind == "equip" or kind == "hotbar"
     if PadCarry.isCarrying(page.player) then
         if slotKey == "A" then
-            return onStrip and label("Equip") or label("Place")
+            return onStrip and promptText("Equip") or promptText("Place")
         end
-        if slotKey == "X" then return label("QuickMove") end
-        if slotKey == "B" then return label("Cancel") end
+        if slotKey == "X" then return promptText("QuickMove") end
+        if slotKey == "B" then return promptText("Cancel") end
         return nil
     end
-    if slotKey == "B" then return label("Close") end
+    if slotKey == "B" then return promptText("Close") end
 
     if kind == "chip" then
-        if slotKey == "A" then return label("Use") end
+        if slotKey == "A" then return promptText("Use") end
         return nil
     end
     if occupant == nil then return nil end
-    if slotKey == "A" then return label("Take") end
+    if slotKey == "A" then return promptText("Take") end
     if slotKey == "X" then
-        return onStrip and label("Unequip") or label("QuickMove")
+        return onStrip and promptText("Unequip") or promptText("QuickMove")
     end
-    if slotKey == "Y" then return label("Menu") end
+    if slotKey == "Y" then return promptText("Menu") end
     return nil
 end
 

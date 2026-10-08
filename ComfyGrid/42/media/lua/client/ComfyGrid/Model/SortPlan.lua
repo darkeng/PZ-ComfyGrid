@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -16,7 +16,7 @@ ComfyGrid.Model.SortPlan = SortPlan
 
 local Categories = ComfyGrid.Model.Categories
 
-local function weightOf(stack, inventory)
+local function quantisedTileWeight(stack, inventory)
     if inventory == nil or stack == nil then return 0 end
     local ItemStack = ComfyGrid.Model and ComfyGrid.Model.ItemStack
     if ItemStack == nil or ItemStack.weightOf == nil then return 0 end
@@ -27,36 +27,48 @@ end
 
 local COMPARATORS = {}
 
-COMPARATORS.category = function(order)
-    return function(a, b)
-        local oa, ob = order[a], order[b]
-        if oa.rank ~= ob.rank then return oa.rank < ob.rank end
-        if oa.sub ~= ob.sub then return oa.sub < ob.sub end
-        if oa.cat ~= ob.cat then return oa.cat < ob.cat end
-        if oa.id ~= ob.id then return oa.id < ob.id end
-        return oa.index < ob.index
+COMPARATORS.category = function(sortKeysByStack)
+    return function(stackA, stackB)
+        local keysA, keysB = sortKeysByStack[stackA], sortKeysByStack[stackB]
+        if keysA.rank ~= keysB.rank then return keysA.rank < keysB.rank end
+        if keysA.sub ~= keysB.sub then return keysA.sub < keysB.sub end
+        if keysA.category ~= keysB.category then
+            return keysA.category < keysB.category
+        end
+        if keysA.identity ~= keysB.identity then
+            return keysA.identity < keysB.identity
+        end
+        return keysA.index < keysB.index
     end
 end
 
-COMPARATORS.categoryWeight = function(order)
-    return function(a, b)
-        local oa, ob = order[a], order[b]
-        if oa.rank ~= ob.rank then return oa.rank < ob.rank end
-        if oa.sub ~= ob.sub then return oa.sub < ob.sub end
-        if oa.w ~= ob.w then return oa.w > ob.w end
-        if oa.cat ~= ob.cat then return oa.cat < ob.cat end
-        if oa.id ~= ob.id then return oa.id < ob.id end
-        return oa.index < ob.index
+COMPARATORS.categoryWeight = function(sortKeysByStack)
+    return function(stackA, stackB)
+        local keysA, keysB = sortKeysByStack[stackA], sortKeysByStack[stackB]
+        if keysA.rank ~= keysB.rank then return keysA.rank < keysB.rank end
+        if keysA.sub ~= keysB.sub then return keysA.sub < keysB.sub end
+        if keysA.weight ~= keysB.weight then return keysA.weight > keysB.weight end
+        if keysA.category ~= keysB.category then
+            return keysA.category < keysB.category
+        end
+        if keysA.identity ~= keysB.identity then
+            return keysA.identity < keysB.identity
+        end
+        return keysA.index < keysB.index
     end
 end
 
-COMPARATORS.weight = function(order)
-    return function(a, b)
-        local oa, ob = order[a], order[b]
-        if oa.w ~= ob.w then return oa.w > ob.w end
-        if oa.cat ~= ob.cat then return oa.cat < ob.cat end
-        if oa.id ~= ob.id then return oa.id < ob.id end
-        return oa.index < ob.index
+COMPARATORS.weight = function(sortKeysByStack)
+    return function(stackA, stackB)
+        local keysA, keysB = sortKeysByStack[stackA], sortKeysByStack[stackB]
+        if keysA.weight ~= keysB.weight then return keysA.weight > keysB.weight end
+        if keysA.category ~= keysB.category then
+            return keysA.category < keysB.category
+        end
+        if keysA.identity ~= keysB.identity then
+            return keysA.identity < keysB.identity
+        end
+        return keysA.index < keysB.index
     end
 end
 
@@ -72,32 +84,32 @@ function SortPlan.build(grid, orderName)
     local inventory = grid.inventory
 
     local needWeight = orderName == "weight" or orderName == "categoryWeight"
-    local list, order = {}, {}
+    local sortedStacks, sortKeysByStack = {}, {}
     for i = 1, #stacks do
         local stack = stacks[i]
         if type(stack) == "table" then
-            list[#list + 1] = stack
-            local bucketRank, sub = Categories.rankPairOf(stack, inventory)
-            order[stack] = {
+            sortedStacks[#sortedStacks + 1] = stack
+            local bucketRank, subIndex = Categories.rankPairOf(stack, inventory)
+            sortKeysByStack[stack] = {
                 rank = bucketRank,
-                sub = sub or 0,
+                sub = subIndex or 0,
 
-                cat = tostring(stack.category),
-                id = tostring(stack.itemType),
-                w = needWeight and weightOf(stack, inventory) or 0,
+                category = tostring(stack.category),
+                identity = tostring(stack.itemType),
+                weight = needWeight and quantisedTileWeight(stack, inventory) or 0,
                 index = i,
             }
         end
     end
-    local n = #list
-    if n == 0 then return nil end
+    local stackCount = #sortedStacks
+    if stackCount == 0 then return nil end
 
-    table.sort(list, SortPlan.comparatorFor(orderName)(order))
+    table.sort(sortedStacks, SortPlan.comparatorFor(orderName)(sortKeysByStack))
 
-    local plan = { n = n }
+    local plan = { n = stackCount }
     local changed = false
-    for i = 1, n do
-        local stack = list[i]
+    for i = 1, stackCount do
+        local stack = sortedStacks[i]
         local slot = i - 1
         plan[i] = { stack = stack, slot = slot }
         if stack.slot ~= slot then changed = true end

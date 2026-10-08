@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -67,8 +67,8 @@ function HotbarAttach.attach(playerNum, item, slotIndex, slotDef, onDisplaced)
     if location == nil then return false end
 
     local needsFetch = false
-    local okH, res = pcall(luautils.haveToBeTransfered, playerObj, item)
-    if okH then needsFetch = res == true end
+    local okH, mustFetch = pcall(luautils.haveToBeTransfered, playerObj, item)
+    if okH then needsFetch = mustFetch == true end
     if not needsFetch then
         local prev = hotbar.attachedItems ~= nil and hotbar.attachedItems[slotIndex] or nil
         if prev == item then prev = nil end

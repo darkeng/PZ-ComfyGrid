@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -12,8 +12,8 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/UI/Icons"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
-local Warmup = {}
-ComfyGrid.UI.IconWarmup = Warmup
+local IconWarmup = {}
+ComfyGrid.UI.IconWarmup = IconWarmup
 
 local Log = ComfyGrid.Core.Log
 local Icons = ComfyGrid.UI.Icons
@@ -25,19 +25,19 @@ local state = nil
 local done = false
 
 local function collect()
-    local sm = getScriptManager and getScriptManager() or nil
-    if sm == nil or sm.getAllItems == nil then return nil end
-    local all = sm:getAllItems()
-    if all == nil then return nil end
+    local scriptManager = getScriptManager and getScriptManager() or nil
+    if scriptManager == nil or scriptManager.getAllItems == nil then return nil end
+    local allItems = scriptManager:getAllItems()
+    if allItems == nil then return nil end
     local list, seen = {}, {}
-    for i = 0, all:size() - 1 do
-        local si = all:get(i)
-        local tex = si ~= nil and si.getNormalTexture ~= nil
-            and si:getNormalTexture() or nil
+    for i = 0, allItems:size() - 1 do
+        local scriptItem = allItems:get(i)
+        local tex = scriptItem ~= nil and scriptItem.getNormalTexture ~= nil
+            and scriptItem:getNormalTexture() or nil
         if tex ~= nil and not seen[tex] then
             seen[tex] = true
-            local hi = Icons.hiRes(tex)
-            if hi then list[#list + 1] = hi end
+            local hiRes = Icons.hiRes(tex)
+            if hiRes then list[#list + 1] = hiRes end
         end
     end
 
@@ -50,8 +50,8 @@ local function collect()
         local tex = buttonArt[i]
         if tex ~= nil and not seen[tex] then
             seen[tex] = true
-            local hi = Icons.gameArt(tex)
-            if hi then list[#list + 1] = hi end
+            local hiRes = Icons.gameArt(tex)
+            if hiRes then list[#list + 1] = hiRes end
         end
     end
     return list
@@ -65,42 +65,41 @@ function Runner:render()
         return
     end
     local list = state.list
-    local n = #list
+    local textureCount = #list
     local from = state.at
     local to = from + PER_FRAME - 1
-    if to > n then to = n end
-    for k = from, to do
+    if to > textureCount then to = textureCount end
+    for textureIndex = from, to do
 
-        self:drawTextureScaled(list[k], 0, 0, 1, 1, 0.004, 1, 1, 1)
+        self:drawTextureScaled(list[textureIndex], 0, 0, 1, 1, 0.004, 1, 1, 1)
     end
     state.at = to + 1
-    if state.at > n then
+    if state.at > textureCount then
         state = nil
         done = true
         self:removeFromUIManager()
-        Log.info("icon pack warmed (" .. tostring(n) .. " textures)")
+        Log.info("icon pack warmed (" .. tostring(textureCount) .. " textures)")
     end
 end
 
-function Warmup.start()
+function IconWarmup.start()
     if done or state ~= nil then return false end
-    if ISUIElement == nil then return false end
     local ok, list = pcall(collect)
     if not ok or list == nil or #list == 0 then
 
         return false
     end
     state = { list = list, at = 1 }
-    local el = Runner:new(0, 0, 1, 1)
-    el:initialise()
-    el:setVisible(true)
-    el:addToUIManager()
+    local runner = Runner:new(0, 0, 1, 1)
+    runner:initialise()
+    runner:setVisible(true)
+    runner:addToUIManager()
     return true
 end
 
-function Warmup.progress()
+function IconWarmup.progress()
     if state == nil then return 0, 0, done end
     return #state.list - state.at + 1, #state.list, done
 end
 
-return Warmup
+return IconWarmup

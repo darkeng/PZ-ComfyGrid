@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,6 +9,7 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
+require "ComfyGrid/Core/Input"
 ComfyGrid = ComfyGrid or {}
 local Settings = {}
 ComfyGrid.Settings = Settings
@@ -205,6 +206,7 @@ local OPTION_DEFS = {
       padOff = "The pad uses L3",
       padOffTipKey = "IGUI_ComfyGrid_PadInsteadMultiSelectTip",
       padOffTip = "A joypad marks tiles with the left stick button. Turn the joypad off to pick a modifier again." },
+
     { key = "QUICK_EQUIP_KEY",    kind = "keybind", group = "controls",
       bind = "ComfyGrid_QuickEquip",
       nameKey = "IGUI_ComfyGrid_OptQuickEquipKey",
@@ -269,52 +271,30 @@ function Settings.labelFor(def)
 end
 
 function Settings.transferIsDoubleClick()
-    local ok, v = pcall(Settings.get, "TRANSFER_GESTURE")
-    if not ok then return false end
-    return v == "doubleclick"
+    return Settings.get("TRANSFER_GESTURE") == "doubleclick"
 end
 
 function Settings.transferModifier()
-    local ok, v = pcall(Settings.get, "TRANSFER_GESTURE")
-    if not ok or v == nil or v == "doubleclick" then return nil end
-    return v
+    local gesture = Settings.get("TRANSFER_GESTURE")
+    if gesture == nil or gesture == "doubleclick" then return nil end
+    return gesture
 end
 
 function Settings.multiSelectModifier()
-    local ok, v = pcall(Settings.get, "MULTISELECT_MOD")
-    if not ok or v == nil then return "ctrl" end
-    return v
-end
-
-local function modifierHeld(name)
-    if name == "shift" then
-        return isShiftKeyDown ~= nil and isShiftKeyDown() == true
-    end
-    if name == "ctrl" then
-        return isCtrlKeyDown ~= nil and isCtrlKeyDown() == true
-    end
-    if name == "alt" then
-        if Keyboard == nil or Keyboard.isKeyDown == nil then return false end
-        return Keyboard.isKeyDown(Keyboard.KEY_LMENU) == true
-            or Keyboard.isKeyDown(Keyboard.KEY_RMENU) == true
-    end
-    return false
+    local modifier = Settings.get("MULTISELECT_MOD")
+    if modifier == nil then return "ctrl" end
+    return modifier
 end
 
 function Settings.multiSelectHeld()
-    local mine = Settings.multiSelectModifier()
-    if not modifierHeld(mine) then return false end
-    local other = Settings.transferModifier()
-    if other ~= nil and other ~= mine and modifierHeld(other) then
-        return false
-    end
-    return true
+    local Input = ComfyGrid.Core.Input
+    return Input.multiSelectHeld(Settings.multiSelectModifier(),
+        Settings.transferModifier())
 end
 
 function Settings.transferModifierHeld()
-    local mine = Settings.transferModifier()
-    if mine == nil then return false end
-    return modifierHeld(mine)
+    local Input = ComfyGrid.Core.Input
+    return Input.transferModifierHeld(Settings.transferModifier())
 end
 
 function Settings.tipFor(def)
@@ -341,13 +321,9 @@ function Settings.padTipFor(def)
     return Text.tr(def.padOffTipKey, def.padOffTip)
 end
 
-function Settings.choiceLabel(def, i)
-    return choiceLabel(def, i)
-end
+Settings.choiceLabel = choiceLabel
 
-function Settings.choiceIndexOf(def, value)
-    return choiceIndexOf(def, value)
-end
+Settings.choiceIndexOf = choiceIndexOf
 
 function Settings.groupLabel(groupKey)
     for i = 1, #GROUPS do
@@ -358,46 +334,46 @@ function Settings.groupLabel(groupKey)
     return tostring(groupKey)
 end
 
-local values = {}
-for k, v in pairs(Settings.defaults) do
-    values[k] = v
+local liveValues = {}
+for key, value in pairs(Settings.defaults) do
+    liveValues[key] = value
 end
 
 local listeners = {}
 
-local instance = nil
+local modOptionsPage = nil
 
 function Settings.get(key)
-    local v = values[key]
-    if v == nil then
-        v = Settings.defaults[key]
+    local value = liveValues[key]
+    if value == nil then
+        value = Settings.defaults[key]
     end
-    return v
+    return value
 end
 
-function Settings.onChanged(key, fn)
-    local list = listeners[key]
-    if not list then
-        list = {}
-        listeners[key] = list
+function Settings.onChanged(key, listener)
+    local keyListeners = listeners[key]
+    if not keyListeners then
+        keyListeners = {}
+        listeners[key] = keyListeners
     end
-    list[#list + 1] = fn
+    keyListeners[#keyListeners + 1] = listener
 end
 
 local function setValue(key, newValue)
     if newValue == nil then
         return
     end
-    local oldValue = values[key]
+    local oldValue = liveValues[key]
     if oldValue == newValue then
         return
     end
-    values[key] = newValue
-    local list = listeners[key]
-    if list then
-        for i = 1, #list do
+    liveValues[key] = newValue
+    local keyListeners = listeners[key]
+    if keyListeners then
+        for i = 1, #keyListeners do
 
-            local ok, err = pcall(list[i], newValue, oldValue)
+            local ok, err = pcall(keyListeners[i], newValue, oldValue)
             if not ok then
                 Log.warn("Settings listener for " .. key .. " failed: " .. tostring(err))
             end
@@ -422,7 +398,7 @@ function Settings.applyStoredTheme()
 end
 
 function Settings.buildOptions()
-    if instance then
+    if modOptionsPage then
         return
     end
 
@@ -430,41 +406,41 @@ function Settings.buildOptions()
         return
     end
 
-    instance = PZAPI.ModOptions.getOptions
+    modOptionsPage = PZAPI.ModOptions.getOptions
         and PZAPI.ModOptions:getOptions(ComfyGrid.MOD_ID) or nil
-    if not instance then
-        instance = PZAPI.ModOptions:create(ComfyGrid.MOD_ID, "Comfy Grid settings")
+    if not modOptionsPage then
+
+        modOptionsPage = PZAPI.ModOptions:create(ComfyGrid.MOD_ID,
+            Text.tr("IGUI_ComfyGrid_SettingsTitle", "Comfy Grid settings"))
 
         local groupDefs = {}
         for g = 1, #GROUPS do
             local groupKey = GROUPS[g].key
-            for k = #groupDefs, 1, -1 do groupDefs[k] = nil end
+            table.wipe(groupDefs)
             Settings.defsInGroup(groupKey, groupDefs)
 
             if #groupDefs > 0 then
 
-                instance:addTitle(Settings.groupLabel(groupKey))
+                modOptionsPage:addTitle(Settings.groupLabel(groupKey))
                 for i = 1, #groupDefs do
                     local def = groupDefs[i]
 
                     local title = Settings.labelFor(def)
                     local tip = Settings.tipFor(def)
                     if def.kind == "tickbox" then
-                        instance:addTickBox(def.key, title, Settings.defaults[def.key], tip)
+                        modOptionsPage:addTickBox(def.key, title, Settings.defaults[def.key], tip)
                     elseif def.kind == "choice" then
-                        local combo = instance:addComboBox(def.key, title, tip)
+                        local combo = modOptionsPage:addComboBox(def.key, title, tip)
                         local selected = choiceIndexOf(def, Settings.defaults[def.key]) or 1
-                        for v = 1, #def.values do
+                        for valueIndex = 1, #def.values do
 
-                            combo:addItem(choiceLabel(def, v), v == selected)
+                            combo:addItem(choiceLabel(def, valueIndex),
+                                valueIndex == selected)
                         end
                     elseif def.kind == "slider" then
-                        instance:addSlider(def.key, title, def.min, def.max, def.step,
+                        modOptionsPage:addSlider(def.key, title, def.min, def.max, def.step,
                             Settings.defaults[def.key], tip)
-                    elseif def.kind == "keybind" then
-
-                        _ = def
-                    else
+                    elseif def.kind ~= "keybind" then
 
                         Log.warn("option '" .. tostring(def.key) .. "' has unknown kind '"
                             .. tostring(def.kind) .. "'; not shown on the options screen")
@@ -474,21 +450,18 @@ function Settings.buildOptions()
         end
     end
 
-    instance.apply = function(self)
+    modOptionsPage.apply = function(self)
         for i = 1, #OPTION_DEFS do
             local def = OPTION_DEFS[i]
-            local opt = self:getOption(def.key)
-            if opt and opt.getValue then
-                local ok, v = pcall(opt.getValue, opt)
-                if ok and v ~= nil then
+            local option = self:getOption(def.key)
+            if option and option.getValue then
+                local ok, value = pcall(option.getValue, option)
+                if ok and value ~= nil then
                     if def.kind == "choice" then
 
-                        v = def.values[v] or Settings.defaults[def.key]
-                    elseif def.integer and type(v) == "number" then
-
-                        v = math.floor(v + 0.5)
+                        value = def.values[value] or Settings.defaults[def.key]
                     end
-                    setValue(def.key, v)
+                    setValue(def.key, value)
                 end
             end
         end
@@ -501,8 +474,8 @@ local function keepModifiersDistinct(changedKey, previous)
     if changedKey ~= "MULTISELECT_MOD" and changedKey ~= "TRANSFER_GESTURE" then
         return
     end
-    local gesture = values.TRANSFER_GESTURE
-    local multi = values.MULTISELECT_MOD
+    local gesture = liveValues.TRANSFER_GESTURE
+    local multi = liveValues.MULTISELECT_MOD
     if gesture == nil or multi == nil or gesture ~= multi then return end
 
     local otherKey = "TRANSFER_GESTURE"
@@ -512,11 +485,11 @@ local function keepModifiersDistinct(changedKey, previous)
 
     local target = nil
     if previous ~= nil and choiceIndexOf(otherDef, previous) ~= nil
-            and previous ~= values[changedKey] then
+            and previous ~= liveValues[changedKey] then
         target = previous
     else
         for i = 1, #otherDef.values do
-            if otherDef.values[i] ~= values[changedKey] then
+            if otherDef.values[i] ~= liveValues[changedKey] then
                 target = otherDef.values[i]
                 break
             end
@@ -529,26 +502,21 @@ local function keepModifiersDistinct(changedKey, previous)
 end
 
 function Settings.set(key, value)
-    local def = nil
-    for i = 1, #OPTION_DEFS do
-        if OPTION_DEFS[i].key == key then
-            def = OPTION_DEFS[i]
-            break
-        end
-    end
+    local def = Settings.defOf(key)
     if def == nil or value == nil then return false end
-    local previous = values[key]
+    local previous = liveValues[key]
     local changed = previous ~= value
     setValue(key, value)
     keepModifiersDistinct(key, previous)
 
-    local opt = instance and instance.getOption and instance:getOption(key) or nil
-    if opt ~= nil and opt.setValue ~= nil then
+    local option = modOptionsPage and modOptionsPage.getOption and modOptionsPage:getOption(key)
+        or nil
+    if option ~= nil and option.setValue ~= nil then
         local stored = value
         if def.kind == "choice" then
             stored = choiceIndexOf(def, value)
         end
-        if stored ~= nil then pcall(opt.setValue, opt, stored) end
+        if stored ~= nil then pcall(option.setValue, option, stored) end
     end
     return changed
 end
@@ -560,15 +528,16 @@ function Settings.save()
 end
 
 function Settings.syncPadAvailability(playerNum)
-    if instance == nil or instance.getOption == nil then return end
+    if modOptionsPage == nil or modOptionsPage.getOption == nil then return end
     for i = 1, #OPTION_DEFS do
         local def = OPTION_DEFS[i]
         if def.padOffKey ~= nil then
-            local opt = nil
-            local okGet, got = pcall(instance.getOption, instance, def.key)
-            if okGet then opt = got end
-            if opt ~= nil and opt.setEnabled ~= nil then
-                pcall(opt.setEnabled, opt, Settings.appliesNow(def, playerNum))
+            local option = nil
+            local okGet, got = pcall(modOptionsPage.getOption, modOptionsPage, def.key)
+            if okGet then option = got end
+            if option ~= nil and option.setEnabled ~= nil then
+                pcall(option.setEnabled, option,
+                    Settings.appliesNow(def, playerNum))
             end
         end
     end
@@ -595,10 +564,11 @@ Settings.LEGACY = LEGACY
 
 local MIGRATIONS = {}
 
-local function versionKey(v)
-    local a, b, c = tostring(v or ""):match("^(%d*)%.?(%d*)%.?(%d*)")
-    return (tonumber(a) or 0) * 10000 + (tonumber(b) or 0) * 100
-        + (tonumber(c) or 0)
+local function versionKey(version)
+    local major, minor, patch =
+        tostring(version or ""):match("^(%d*)%.?(%d*)%.?(%d*)")
+    return (tonumber(major) or 0) * 10000 + (tonumber(minor) or 0) * 100
+        + (tonumber(patch) or 0)
 end
 
 local function migrateScaleForFontOption()
@@ -636,11 +606,12 @@ local function runMigrations()
     local now = ComfyGrid.VERSION
     if seen >= versionKey(now) then return end
     for i = 1, #MIGRATIONS do
-        local m = MIGRATIONS[i]
-        if seen < versionKey(m.since) then
-            local ok, err = pcall(m.run)
+        local migration = MIGRATIONS[i]
+        if seen < versionKey(migration.since) then
+            local ok, err = pcall(migration.run)
             if not ok then
-                Log.warn("migration " .. m.since .. " failed: " .. tostring(err))
+                Log.warn("migration " .. migration.since .. " failed: "
+                    .. tostring(err))
             end
         end
     end
@@ -683,8 +654,8 @@ Settings.buildOptions()
 if not ComfyGrid._settingsApplyHooked then
     ComfyGrid._settingsApplyHooked = true
     Events.OnGameStart.Add(function()
-        if instance and instance.apply then
-            pcall(instance.apply, instance)
+        if modOptionsPage and modOptionsPage.apply then
+            pcall(modOptionsPage.apply, modOptionsPage)
         end
 
         pcall(migrateLegacyOptions)
@@ -704,7 +675,7 @@ if not ComfyGrid._settingsPadHooked then
     end
     for _, name in ipairs({ "OnJoypadActivate", "OnJoypadDeactivate",
                             "OnGamepadConnect", "OnGamepadDisconnect" }) do
-        local ev = Events ~= nil and Events[name] or nil
-        if ev ~= nil and ev.Add ~= nil then pcall(ev.Add, syncPad) end
+        local event = Events ~= nil and Events[name] or nil
+        if event ~= nil and event.Add ~= nil then pcall(event.Add, syncPad) end
     end
 end

@@ -1,12 +1,13 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.1
+    Version: 1.9.2
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/Core/TextureCache"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Blit"
 ComfyGrid = ComfyGrid or {}
@@ -17,21 +18,11 @@ ComfyGrid.UI.SlotRenderer = SlotRenderer
 local Style = ComfyGrid.UI.Style
 
 local Blit = ComfyGrid.UI.Blit
-
-local FALLBACK_CELL = { r = 0.16, g = 0.16, b = 0.16, a = 0.85 }
-local FALLBACK_HOVER = { r = 1, g = 1, b = 1, a = 0.25 }
+local TextureCache = ComfyGrid.Core.TextureCache
 
 local DEFAULT_FILL_ALPHA = 0.725
 
-local tileTex = nil
-local tileTexMissing = false
-local function tileTexture()
-    if tileTex == nil and not tileTexMissing then
-        tileTex = getTexture and getTexture("media/textures/comfy_tile.png") or nil
-        if tileTex == nil then tileTexMissing = true end
-    end
-    return tileTex
-end
+local tileTexture = TextureCache.lazy("media/textures/comfy_tile.png")
 
 function SlotRenderer.getTileTexture()
     return tileTexture()
@@ -39,55 +30,52 @@ end
 
 function SlotRenderer.drawCell(ctx, tint)
     local cell = Style.CELL
-    local colors = Style.COLORS
-    local c = tint or (colors and colors.EMPTY_CELL) or FALLBACK_CELL
+    local fillColor = tint or Style.COLORS.EMPTY_CELL
     local tex = tileTexture()
     if tex ~= nil then
-        Blit.tex(ctx.view, tex, ctx.x + 1, ctx.y + 1,
-            cell - 2, cell - 2, c.a or DEFAULT_FILL_ALPHA, c.r, c.g, c.b)
+        Blit.drawTextureScaled(ctx.view, tex, ctx.x + 1, ctx.y + 1,
+            cell - 2, cell - 2, fillColor.a or DEFAULT_FILL_ALPHA,
+            fillColor.r, fillColor.g, fillColor.b)
     else
-        Blit.rect(ctx.view, ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
-            c.a or DEFAULT_FILL_ALPHA, c.r, c.g, c.b)
+        Blit.drawRect(ctx.view, ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
+            fillColor.a or DEFAULT_FILL_ALPHA, fillColor.r, fillColor.g, fillColor.b)
     end
 end
 
 function SlotRenderer.drawHover(ctx, alphaMul)
     local cell = Style.CELL
-    local colors = Style.COLORS
-    local c = (colors and colors.HOVER) or FALLBACK_HOVER
-    local a = (c.a or FALLBACK_HOVER.a) * (alphaMul or 1)
+    local hoverColor = Style.COLORS.HOVER
+    local alpha = hoverColor.a * (alphaMul or 1)
     local tex = tileTexture()
     if tex ~= nil then
-        Blit.tex(ctx.view, tex, ctx.x + 1, ctx.y + 1,
-            cell - 2, cell - 2, a, c.r, c.g, c.b)
+        Blit.drawTextureScaled(ctx.view, tex, ctx.x + 1, ctx.y + 1,
+            cell - 2, cell - 2, alpha, hoverColor.r, hoverColor.g, hoverColor.b)
     else
-        Blit.rect(ctx.view, ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
-            a, c.r, c.g, c.b)
+        Blit.drawRect(ctx.view, ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
+            alpha, hoverColor.r, hoverColor.g, hoverColor.b)
     end
 end
 
-local FALLBACK_SELECTED = { r = 0.35, g = 0.75, b = 1.0, a = 0.9 }
 local SELECTION_WASH_ALPHA = 0.38
 
 function SlotRenderer.drawSelection(view, x, y)
     local cell = Style.CELL
-    local colors = Style.COLORS
-    local c = (colors and colors.SELECTED) or FALLBACK_SELECTED
+    local selectedColor = Style.COLORS.SELECTED
     local tex = tileTexture()
     if tex ~= nil then
-        Blit.tex(view, tex, x + 1, y + 1, cell - 2, cell - 2,
-            SELECTION_WASH_ALPHA, c.r, c.g, c.b)
+        Blit.drawTextureScaled(view, tex, x + 1, y + 1, cell - 2, cell - 2,
+            SELECTION_WASH_ALPHA, selectedColor.r, selectedColor.g, selectedColor.b)
     else
-        local bw = cell - 2
-        local a = c.a or 0.9
-        Blit.rect(view, x + 1, y + 1, bw, 2, a, c.r, c.g, c.b)
-        Blit.rect(view, x + 1, y + cell - 3, bw, 2, a, c.r, c.g, c.b)
-        Blit.rect(view, x + 1, y + 3, 2, cell - 6, a, c.r, c.g, c.b)
-        Blit.rect(view, x + cell - 3, y + 3, 2, cell - 6, a, c.r, c.g, c.b)
+        local red, green, blue = selectedColor.r, selectedColor.g, selectedColor.b
+        local borderWidth = cell - 2
+        local alpha = selectedColor.a
+        Blit.drawRect(view, x + 1, y + 1, borderWidth, 2, alpha, red, green, blue)
+        Blit.drawRect(view, x + 1, y + cell - 3, borderWidth, 2, alpha, red, green, blue)
+        Blit.drawRect(view, x + 1, y + 3, 2, cell - 6, alpha, red, green, blue)
+        Blit.drawRect(view, x + cell - 3, y + 3, 2, cell - 6, alpha, red, green, blue)
     end
 end
 
-local FALLBACK_APPLY = { r = 0.42, g = 0.92, b = 0.50, a = 0.90 }
 local APPLY_RING = 2
 local APPLY_CLIP = 3
 
@@ -97,10 +85,10 @@ local function drawBreathingMark(view, x, y, width, height, pulse, color, withWa
         local washAlpha = 0.14 + 0.16 * phase
         local tex = tileTexture()
         if tex ~= nil then
-            Blit.tex(view, tex, x + 1, y + 1, width - 2, height - 2,
+            Blit.drawTextureScaled(view, tex, x + 1, y + 1, width - 2, height - 2,
                 washAlpha, color.r, color.g, color.b)
         else
-            Blit.rect(view, x + 1, y + 1, width - 2, height - 2, washAlpha,
+            Blit.drawRect(view, x + 1, y + 1, width - 2, height - 2, washAlpha,
                 color.r, color.g, color.b)
         end
     end
@@ -110,39 +98,27 @@ local function drawBreathingMark(view, x, y, width, height, pulse, color, withWa
     local spanWidth = width - 2 - 2 * cornerClip
     local spanHeight = height - 2 - 2 * cornerClip
     if spanWidth <= 0 or spanHeight <= 0 then return end
-    Blit.rect(view, x + 1 + cornerClip, y + 1, spanWidth, ringThickness,
+    Blit.drawRect(view, x + 1 + cornerClip, y + 1, spanWidth, ringThickness,
         ringAlpha, color.r, color.g, color.b)
-    Blit.rect(view, x + 1 + cornerClip, y + height - 1 - ringThickness, spanWidth,
+    Blit.drawRect(view, x + 1 + cornerClip, y + height - 1 - ringThickness, spanWidth,
         ringThickness, ringAlpha, color.r, color.g, color.b)
-    Blit.rect(view, x + 1, y + 1 + cornerClip, ringThickness, spanHeight,
+    Blit.drawRect(view, x + 1, y + 1 + cornerClip, ringThickness, spanHeight,
         ringAlpha, color.r, color.g, color.b)
-    Blit.rect(view, x + width - 1 - ringThickness, y + 1 + cornerClip,
+    Blit.drawRect(view, x + width - 1 - ringThickness, y + 1 + cornerClip,
         ringThickness, spanHeight, ringAlpha, color.r, color.g, color.b)
 end
 
 function SlotRenderer.drawApplyHint(ctx, pulse)
-    local colors = Style.COLORS
-    local color = (colors and colors.APPLY) or FALLBACK_APPLY
+    local color = Style.COLORS.APPLY
     local cell = Style.CELL
     drawBreathingMark(ctx.view, ctx.x, ctx.y, cell, cell, pulse, color, true)
 end
 
-local FALLBACK_SEARCH = { r = 0.85, g = 0.74, b = 0.51 }
 local function searchColor()
-    local colors = Style.COLORS
-    local surface = colors and colors.SURFACE or nil
-    return (surface and surface.accent) or FALLBACK_SEARCH
+    return Style.COLORS.SURFACE.accent
 end
 
-local markTex = nil
-local markTexMissing = false
-local function markTexture()
-    if markTex == nil and not markTexMissing then
-        markTex = getTexture and getTexture("media/textures/comfy_mark.png") or nil
-        if markTex == nil then markTexMissing = true end
-    end
-    return markTex
-end
+local markTexture = TextureCache.lazy("media/textures/comfy_mark.png")
 
 function SlotRenderer.drawSearchHint(ctx, pulse)
     local cell = Style.CELL
@@ -153,7 +129,7 @@ function SlotRenderer.drawSearchHint(ctx, pulse)
         return
     end
 
-    Blit.tex(ctx.view, tex, ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
+    Blit.drawTextureScaled(ctx.view, tex, ctx.x + 1, ctx.y + 1, cell - 2, cell - 2,
         0.55 + 0.40 * (pulse or 1), color.r, color.g, color.b)
 end
 
@@ -161,7 +137,6 @@ function SlotRenderer.drawSearchBox(view, x, y, width, height, pulse, withWash)
     drawBreathingMark(view, x, y, width, height, pulse, searchColor(), withWash)
 end
 
-local HIGHLIGHT = { r = 1.0, g = 1.0, b = 1.0 }
 local HIGHLIGHT_WASH = 0.22
 local HIGHLIGHT_RING_A = 0.75
 local HIGHLIGHT_RING = 2
@@ -171,75 +146,79 @@ function SlotRenderer.drawHighlight(ctx)
     local cell = Style.CELL
     local view = ctx.view
     local x, y = ctx.x, ctx.y
-    local c = HIGHLIGHT
+    local highlight = Style.COLORS.HIGHLIGHT
+    local red, green, blue = highlight.r, highlight.g, highlight.b
     local tex = tileTexture()
     if tex ~= nil then
         view:drawTextureScaled(tex, x + 1, y + 1, cell - 2, cell - 2,
-            HIGHLIGHT_WASH, c.r, c.g, c.b)
+            HIGHLIGHT_WASH, red, green, blue)
     else
         view:drawRect(x + 1, y + 1, cell - 2, cell - 2,
-            HIGHLIGHT_WASH, c.r, c.g, c.b)
+            HIGHLIGHT_WASH, red, green, blue)
     end
 
-    local t = HIGHLIGHT_RING
-    local k = HIGHLIGHT_CLIP
-    local span = cell - 2 - 2 * k
+    local ringThickness = HIGHLIGHT_RING
+    local cornerClip = HIGHLIGHT_CLIP
+    local span = cell - 2 - 2 * cornerClip
     if span <= 0 then return end
-    local a = HIGHLIGHT_RING_A
-    view:drawRect(x + 1 + k, y + 1, span, t, a, c.r, c.g, c.b)
-    view:drawRect(x + 1 + k, y + cell - 1 - t, span, t, a, c.r, c.g, c.b)
-    view:drawRect(x + 1, y + 1 + k, t, span, a, c.r, c.g, c.b)
-    view:drawRect(x + cell - 1 - t, y + 1 + k, t, span, a, c.r, c.g, c.b)
+    local ringAlpha = HIGHLIGHT_RING_A
+    view:drawRect(x + 1 + cornerClip, y + 1, span, ringThickness,
+        ringAlpha, red, green, blue)
+    view:drawRect(x + 1 + cornerClip, y + cell - 1 - ringThickness, span,
+        ringThickness, ringAlpha, red, green, blue)
+    view:drawRect(x + 1, y + 1 + cornerClip, ringThickness, span,
+        ringAlpha, red, green, blue)
+    view:drawRect(x + cell - 1 - ringThickness, y + 1 + cornerClip,
+        ringThickness, span, ringAlpha, red, green, blue)
 end
 
 local pulseUnsupported = false
 function SlotRenderer.applyPulse()
     if pulseUnsupported then return 1 end
-    local ok, ms = pcall(getTimestampMs)
-    if not ok or type(ms) ~= "number" then
+    local ok, nowMs = pcall(getTimestampMs)
+    if not ok or type(nowMs) ~= "number" then
         pulseUnsupported = true
         return 1
     end
-    return 0.5 + 0.5 * math.sin(ms * 0.0052)
+    return 0.5 + 0.5 * math.sin(nowMs * 0.0052)
 end
-
-local SOCKET_FILL = { r = 0.115, g = 0.11, b = 0.135, a = 1.0 }
-local SOCKET_EDGE = { r = 0.44, g = 0.39, b = 0.29, a = 0.8 }
 
 function SlotRenderer.drawSocket(ctx, size)
     local cell = size or Style.CELL
     local view = ctx.view
     local x = ctx.x
     local y = ctx.y
-    local f = SOCKET_FILL
+    local colors = Style.COLORS
+    local fill = colors.SOCKET_FILL
     local tex = tileTexture()
     if tex ~= nil then
         view:drawTextureScaled(tex, x + 1, y + 1, cell - 2, cell - 2,
-            f.a, f.r, f.g, f.b)
+            fill.a, fill.r, fill.g, fill.b)
     else
-        view:drawRect(x + 1, y + 1, cell - 2, cell - 2, f.a, f.r, f.g, f.b)
+        view:drawRect(x + 1, y + 1, cell - 2, cell - 2,
+            fill.a, fill.r, fill.g, fill.b)
     end
-    local e = SOCKET_EDGE
-    local L = math.floor(cell * 0.16)
-    if L < 4 then L = 4 end
-    local t = math.floor(Style.SCALE + 0.5)
-    if t < 1 then t = 1 end
+    local edge = colors.SOCKET_EDGE
+    local alpha, red, green, blue = edge.a, edge.r, edge.g, edge.b
+    local armLength = math.floor(cell * 0.16)
+    if armLength < 4 then armLength = 4 end
+    local thickness = math.floor(Style.SCALE + 0.5)
+    if thickness < 1 then thickness = 1 end
     local x0 = x + 3
     local y0 = y + 3
     local x1 = x + cell - 3
     local y1 = y + cell - 3
-    view:drawRect(x0, y0, L, t, e.a, e.r, e.g, e.b)
-    view:drawRect(x0, y0, t, L, e.a, e.r, e.g, e.b)
-    view:drawRect(x1 - L, y0, L, t, e.a, e.r, e.g, e.b)
-    view:drawRect(x1 - t, y0, t, L, e.a, e.r, e.g, e.b)
-    view:drawRect(x0, y1 - t, L, t, e.a, e.r, e.g, e.b)
-    view:drawRect(x0, y1 - L, t, L, e.a, e.r, e.g, e.b)
-    view:drawRect(x1 - L, y1 - t, L, t, e.a, e.r, e.g, e.b)
-    view:drawRect(x1 - t, y1 - L, t, L, e.a, e.r, e.g, e.b)
+    view:drawRect(x0, y0, armLength, thickness, alpha, red, green, blue)
+    view:drawRect(x0, y0, thickness, armLength, alpha, red, green, blue)
+    view:drawRect(x1 - armLength, y0, armLength, thickness, alpha, red, green, blue)
+    view:drawRect(x1 - thickness, y0, thickness, armLength, alpha, red, green, blue)
+    view:drawRect(x0, y1 - thickness, armLength, thickness, alpha, red, green, blue)
+    view:drawRect(x0, y1 - armLength, thickness, armLength, alpha, red, green, blue)
+    view:drawRect(x1 - armLength, y1 - thickness, armLength, thickness,
+        alpha, red, green, blue)
+    view:drawRect(x1 - thickness, y1 - armLength, thickness, armLength,
+        alpha, red, green, blue)
 end
-
-local GHOST_ALPHA = 0.30
-local GHOST_R, GHOST_G, GHOST_B = 0.72, 0.72, 0.78
 
 function SlotRenderer.drawGhost(view, tex, x, y, size)
     local cell = size or Style.CELL
@@ -247,22 +226,31 @@ function SlotRenderer.drawGhost(view, tex, x, y, size)
     local texH = tex:getHeight()
     if not texW or not texH or texW <= 0 or texH <= 0 then return end
     local largest = texW > texH and texW or texH
-    local sc = (cell * 0.62) / largest
-    local dw = texW * sc
-    local dh = texH * sc
-    view:drawTextureScaled(tex, x + (cell - dw) * 0.5, y + (cell - dh) * 0.5,
-        dw, dh, GHOST_ALPHA, GHOST_R, GHOST_G, GHOST_B)
+    local scale = (cell * 0.62) / largest
+    local drawWidth = texW * scale
+    local drawHeight = texH * scale
+    local ghost = Style.COLORS.SOCKET_GHOST
+    view:drawTextureScaled(tex, x + (cell - drawWidth) * 0.5,
+        y + (cell - drawHeight) * 0.5,
+        drawWidth, drawHeight, ghost.a, ghost.r, ghost.g, ghost.b)
 end
+
+local NAME_CHIP_EDGE_ALPHA = 0.6
 
 function SlotRenderer.drawNameChip(view, info, x, y, font)
     if info == nil or font == nil then return end
     local cell = Style.CELL
     local chipW = (info.width or 0) + 10
     local chipH = Style.FONT_H + 2
-    local cx = x + math.floor((cell - chipW) * 0.5)
-    local cy = y + math.floor((cell - chipH) * 0.5)
-    view:drawRect(cx, cy, chipW, chipH, 0.88, 0.05, 0.05, 0.06)
-    view:drawRectBorder(cx, cy, chipW, chipH, 0.6, 0.44, 0.39, 0.29)
-    view:drawTextCentre(info.label, x + cell * 0.5, cy + 1,
-        0.92, 0.92, 0.95, 1, font)
+    local chipX = x + math.floor((cell - chipW) * 0.5)
+    local chipY = y + math.floor((cell - chipH) * 0.5)
+    local colors = Style.COLORS
+    local backing, edge, text = colors.NAME_CHIP_BG, colors.SOCKET_EDGE,
+        colors.NAME_CHIP_TEXT
+    view:drawRect(chipX, chipY, chipW, chipH,
+        backing.a, backing.r, backing.g, backing.b)
+    view:drawRectBorder(chipX, chipY, chipW, chipH,
+        NAME_CHIP_EDGE_ALPHA, edge.r, edge.g, edge.b)
+    view:drawTextCentre(info.label, x + cell * 0.5, chipY + 1,
+        text.r, text.g, text.b, text.a, font)
 end
