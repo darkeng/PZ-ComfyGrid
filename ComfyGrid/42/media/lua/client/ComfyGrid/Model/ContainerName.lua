@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.3
+    Version: 1.9.4
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -48,6 +48,7 @@ end
 
 local function displayTypeOf(inv, invType)
     if inv.getDisplayType == nil then return nil end
+    if inv:getContainingItem() == nil and inv:getParent() == nil then return nil end
     local ok, display = pcall(inv.getDisplayType, inv)
     if not ok or display == nil then return nil end
     display = tostring(display)

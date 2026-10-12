@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.3
+    Version: 1.9.4
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -302,20 +302,23 @@ function StackRules.identityOf(item)
         if masked ~= nil then return masked end
     end
     if fullType == nil then return nil end
+    local LookalikeTypes = ComfyGrid.Model.LookalikeTypes
+    local typeIdentity = LookalikeTypes ~= nil and LookalikeTypes.canonicalOf(fullType)
+        or fullType
     if item.getRecordedMediaIndex ~= nil then
         local ok, mediaIndex = pcall(item.getRecordedMediaIndex, item)
         if ok and type(mediaIndex) == "number" and mediaIndex >= 0 then
-            return fullType .. "@" .. tostring(mediaIndex)
+            return typeIdentity .. "@" .. tostring(mediaIndex)
         end
     end
 
     if classFactsOf(item, fullType).literature and item:hasModData() then
         local literatureTitle = item:getModData().literatureTitle
         if literatureTitle ~= nil then
-            return fullType .. "@" .. tostring(literatureTitle)
+            return typeIdentity .. "@" .. tostring(literatureTitle)
         end
     end
-    return wornCanonicalOf(fullType)
+    return wornCanonicalOf(typeIdentity)
 end
 
 function StackRules.isSameStack(stack, item)

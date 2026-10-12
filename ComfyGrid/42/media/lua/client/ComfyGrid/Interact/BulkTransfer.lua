@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.3
+    Version: 1.9.4
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -47,22 +47,30 @@ local function transferQueued(playerObj)
     return false
 end
 
+local function fileUnder(typeMap, typeKey, item)
+    local bucket = typeMap[typeKey]
+    if bucket == nil then
+        bucket = {}
+        typeMap[typeKey] = bucket
+    end
+    bucket[#bucket + 1] = item
+end
+
 function BulkTransfer.typeMap(container)
     if container == nil then return nil end
     local ok, items = pcall(container.getItems, container)
     if not ok or items == nil then return nil end
+    local LookalikeTypes = ComfyGrid.Model and ComfyGrid.Model.LookalikeTypes
     local result = {}
     for i = 1, items:size() do
         local item = items:get(i - 1)
         if item ~= nil then
             local okT, itemType = pcall(item.getFullType, item)
             if okT and itemType ~= nil then
-                local bucket = result[itemType]
-                if bucket == nil then
-                    bucket = {}
-                    result[itemType] = bucket
-                end
-                bucket[#bucket + 1] = item
+                fileUnder(result, itemType, item)
+                local familyType = LookalikeTypes ~= nil
+                    and LookalikeTypes.canonicalOf(itemType) or itemType
+                if familyType ~= itemType then fileUnder(result, familyType, item) end
             end
 
             local okX, extra = pcall(item.getClothingItemExtra, item)
@@ -70,14 +78,7 @@ function BulkTransfer.typeMap(container)
                 for j = 1, extra:size() do
                     local okA, alias = pcall(moduleDotType,
                         item:getModule(), extra:get(j - 1))
-                    if okA and alias ~= nil then
-                        local bucket = result[alias]
-                        if bucket == nil then
-                            bucket = {}
-                            result[alias] = bucket
-                        end
-                        bucket[#bucket + 1] = item
-                    end
+                    if okA and alias ~= nil then fileUnder(result, alias, item) end
                 end
             end
         end
