@@ -1,15 +1,19 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Core/Notify"
+require "ComfyGrid/Core/Text"
 require "ComfyGrid/Model/ContainerModel"
 require "ComfyGrid/Model/Capacity"
+require "ComfyGrid/Model/ServerAddress"
+require "ComfyGrid/Model/RelayedBags"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/ContainerPanel"
@@ -18,8 +22,12 @@ ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
 local Log = ComfyGrid.Core.Log
+local Notify = ComfyGrid.Core.Notify
+local Text = ComfyGrid.Core.Text
 local ContainerModel = ComfyGrid.Model.ContainerModel
 local Capacity = ComfyGrid.Model.Capacity
+local ServerAddress = ComfyGrid.Model.ServerAddress
+local RelayedBags = ComfyGrid.Model.RelayedBags
 local Style = ComfyGrid.UI.Style
 local Draw = ComfyGrid.UI.Draw
 local ContainerPanel = ComfyGrid.UI.ContainerPanel
@@ -108,16 +116,34 @@ function ContainerWindow.boardShowing(playerNum, inv)
     return false
 end
 
+local function floorOf(playerNum)
+    local ok, floor = pcall(ISInventoryPage.GetFloorContainer, playerNum or 0)
+    if ok then return floor end
+    return nil
+end
+
+local function homeOf(item, playerNum)
+    if item == nil then return nil end
+    local floor = floorOf(playerNum)
+    local okC, container = pcall(item.getContainer, item)
+    if okC and container ~= nil and container ~= floor then return container end
+    if floor ~= nil and floor:getItemWithID(item:getID()) ~= nil then return floor end
+    return nil
+end
+
 local function sourceStillOnScreen(self)
     local inv = self.openedIn
     if inv == nil then return true end
+
+    if inv == floorOf(self.playerNum)
+            and RelayedBags.isOutInventory(inventoryOf(self.item)) then
+        return true
+    end
     return ContainerWindow.boardShowing(self.playerNum, inv)
 end
 
 local function itemIsGone(item, playerNum)
-    if item == nil then return true end
-    local okC, container = pcall(item.getContainer, item)
-    if not okC or container == nil then return true end
+    if homeOf(item, playerNum) == nil then return true end
     local playerObj = playerNum ~= nil and getSpecificPlayer(playerNum) or nil
     if playerObj ~= nil then
         local okEquipped, equipped = pcall(playerObj.isEquipped, playerObj, item)
@@ -215,6 +241,20 @@ function ContainerWindow.openFor(playerNum, item, anchorX, anchorY)
     local inv = inventoryOf(item)
     if inv == nil then return false end
 
+    local verdict, home = ServerAddress.verdictNow(item)
+    if verdict == ServerAddress.REFUSE then
+        Notify.bad(playerNum, Text.tr("IGUI_ComfyGrid_BagOuterFirst",
+            "Take the outer bag out first."))
+        return false
+    end
+    if verdict == ServerAddress.RELAY then
+
+        local BagRelay = ComfyGrid.Interact and ComfyGrid.Interact.BagRelay
+        if BagRelay == nil then return false end
+        return BagRelay.open(playerNum, item, home, anchorX, anchorY) == true
+    end
+    if RelayedBags.isInTransit(item) then return false end
+
     local win = windows[playerNum]
     if win == nil then
         win = ContainerWindow:new(playerNum)
@@ -225,15 +265,21 @@ function ContainerWindow.openFor(playerNum, item, anchorX, anchorY)
     end
     win.item = item
 
-    local okC, container = pcall(item.getContainer, item)
-    win.openedIn = okC and container or nil
+    win.openedIn = homeOf(item, playerNum)
     win.openedSlot = slotOf(playerNum, item)
 
-    local okPg, owner = pcall(pageShowing, playerNum, win.openedIn)
+    local owner = nil
+    if win.openedIn ~= nil and win.openedIn == floorOf(playerNum) then
+        local okLoot, lootPage = pcall(getPlayerLoot, playerNum)
+        if okLoot then owner = lootPage end
+    else
+        local okPg, shownBy = pcall(pageShowing, playerNum, win.openedIn)
+        if okPg then owner = shownBy end
+    end
     local fallback = nil
     local okF, playerPage = pcall(getPlayerInventory, playerNum)
     if okF then fallback = playerPage end
-    win.ownerPage = (okPg and owner) or fallback
+    win.ownerPage = owner or fallback
     win:setWidth(widthFor(inv))
     win:setVisible(true)
     win:bringToTop()
@@ -293,8 +339,7 @@ local function prerenderImpl(self)
         end
     end
 
-    local okC, container = pcall(self.item.getContainer, self.item)
-    if okC and container ~= self.openedIn then
+    if homeOf(self.item, self.playerNum) ~= self.openedIn then
         return ContainerWindow.closeFor(self.playerNum)
     end
     local slot = slotOf(self.playerNum, self.item)

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -268,6 +268,11 @@ function ACTIONS.settings(self)
     end
 end
 
+local function dragIsLive()
+    local DragAndDrop = ComfyGrid.Interact and ComfyGrid.Interact.DragAndDrop
+    return DragAndDrop ~= nil and DragAndDrop.isDragging()
+end
+
 function WindowStrip:chipAt(x, y)
     return self.chips:hit(x, y) or self.chipsLeft:hit(x, y)
 end
@@ -321,6 +326,8 @@ function WindowStrip:onMouseUp(x, y)
 
     local id = self:chipAt(x, y)
     if id == nil then return false end
+
+    if dragIsLive() then return false end
     self:activateChip(id)
     return true
 end

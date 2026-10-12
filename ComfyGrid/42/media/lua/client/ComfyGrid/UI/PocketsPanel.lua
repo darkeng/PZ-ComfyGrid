@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -12,8 +12,10 @@ require "ComfyGrid/Core/Text"
 require "ComfyGrid/Model/Capacity"
 require "ComfyGrid/Model/ContainerModel"
 require "ComfyGrid/Model/ContainerName"
+require "ComfyGrid/Model/SectionCollapse"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Chrome/SectionRule"
+require "ComfyGrid/UI/Chrome/SectionCaret"
 require "ComfyGrid/UI/GridView"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
@@ -25,8 +27,10 @@ local Text = ComfyGrid.Core.Text
 local Capacity = ComfyGrid.Model.Capacity
 local ContainerModel = ComfyGrid.Model.ContainerModel
 local ContainerName = ComfyGrid.Model.ContainerName
+local SectionCollapse = ComfyGrid.Model.SectionCollapse
 local Style = ComfyGrid.UI.Style
 local SectionRule = ComfyGrid.UI.Chrome.SectionRule
+local SectionCaret = ComfyGrid.UI.Chrome.SectionCaret
 local GridView = ComfyGrid.UI.GridView
 
 local PLATE_BLEED = 3
@@ -82,7 +86,42 @@ local function resolveLabel(inv)
     return "?"
 end
 
+function PocketsPanel:isSectionCollapsed()
+    return SectionCollapse.isCollapsed(self.playerNum,
+        SectionCollapse.POCKETS_KEY)
+end
+
+function PocketsPanel:setSectionCollapsed(collapsed)
+    SectionCollapse.setCollapsed(self.playerNum, SectionCollapse.POCKETS_KEY,
+        collapsed)
+end
+
+function PocketsPanel:toggleSectionCollapsed()
+    return SectionCollapse.toggle(self.playerNum, SectionCollapse.POCKETS_KEY)
+end
+
+function PocketsPanel:isCollapsedHeaderUnderMouse()
+    return self:isSectionCollapsed() and self:isMouseOver()
+end
+
+local function drawTitle(self, titleH)
+    local caretX = SectionRule.pad()
+    local hot = self._caretPadHot
+        or (self:isMouseOver() and SectionCaret.contains(self:getMouseX(),
+            self:getMouseY(), caretX, 0, titleH))
+    local color = hot and SectionRule.TEXT_HI or SectionRule.TEXT
+    local advance = SectionCaret.draw(self, caretX, 0, titleH,
+        self:isSectionCollapsed(), color)
+    self._caretX = caretX
+    self._caretAdvance = advance
+    SectionRule.draw(self, SectionRule.info("IGUI_ComfyGrid_SectionPockets",
+        "Pockets"), 0, titleH, 0, advance)
+end
+
 local function prerenderImpl(self)
+    local PadFocus = ComfyGrid.Interact and ComfyGrid.Interact.PadFocus
+    self._caretPadHot = PadFocus ~= nil and PadFocus.cursorFor ~= nil
+        and PadFocus.cursorFor(self) == 0
     local inventories = self.inventories
     local islands = self.islands
     local gridViews = self.gridViews
@@ -140,9 +179,23 @@ local function prerenderImpl(self)
         end
     end
 
+    local sectionH = Style.FONT_H
+    local collapsed = self:isSectionCollapsed()
+    if self._islandsHidden ~= collapsed or mismatch then
+        self._islandsHidden = collapsed
+        for islandIndex = 1, #islands do
+            islands[islandIndex].gv:setVisible(not collapsed)
+        end
+    end
+    if collapsed then
+        local foldedH = sectionH + 1
+        if self.height ~= foldedH then self:setHeight(foldedH) end
+        drawTitle(self, sectionH)
+        return
+    end
+
     local w = self.width
     local stride = Style.CELL_STRIDE
-    local sectionH = Style.FONT_H
     local labelH = labelHeight()
 
     local x = PLATE_BLEED
@@ -190,8 +243,7 @@ local function prerenderImpl(self)
         end
     end
 
-    SectionRule.draw(self, SectionRule.info("IGUI_ComfyGrid_SectionPockets",
-        "Pockets"), 0, sectionH)
+    drawTitle(self, sectionH)
 end
 
 function PocketsPanel:prerender()
@@ -202,7 +254,36 @@ function PocketsPanel:prerender()
     end
 end
 
+function PocketsPanel.onMouseDown(_self, _x, _y)
+    return true
+end
+
+function PocketsPanel:onMouseUp(x, y)
+    local DragAndDrop = ComfyGrid.Interact and ComfyGrid.Interact.DragAndDrop
+    local dropping = DragAndDrop ~= nil and DragAndDrop.isDragging()
+    if (self._caretAdvance or 0) > 0 and not dropping
+            and SectionCaret.contains(x, y, self._caretX, 0, Style.FONT_H) then
+        self:toggleSectionCollapsed()
+    end
+    return true
+end
+
+function PocketsPanel:padChipCount()
+    return (self._caretAdvance or 0) > 0 and 1 or 0
+end
+
+function PocketsPanel:padChipAt(slot)
+    if slot == 0 and self:padChipCount() == 1 then return "caret" end
+    return nil
+end
+
+function PocketsPanel:padActivateChip(slot)
+    if self:padChipAt(slot) == "caret" then self:toggleSectionCollapsed() end
+end
+
 local function renderImpl(self)
+
+    if self._islandsHidden then return end
     local islands = self.islands
     local font = Style.FONT
     local labelH = labelHeight()

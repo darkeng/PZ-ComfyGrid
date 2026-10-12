@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -347,6 +347,23 @@ Events.OnGameBoot.Add(function()
         local ok, result = pcall(og_pageWheel, self, wheelDelta)
         self.getMouseX = saved
         if not ok then error(result) end
+        return result
+    end
+
+    local og_onBackpackClick = ISInventoryPage.onBackpackClick
+    function ISInventoryPage:onBackpackClick(button, ...)
+        local result = og_onBackpackClick(self, button, ...)
+        local SectionCollapse = ComfyGrid.Model
+            and ComfyGrid.Model.SectionCollapse
+        if SectionCollapse ~= nil and self.onCharacter == true
+                and button ~= nil then
+            local ok, err = pcall(SectionCollapse.expandInventory, self.player,
+                button.inventory)
+            if not ok then
+                Log.warn("InventoryPagePatch: unfold on button click failed: "
+                    .. tostring(err))
+            end
+        end
         return result
     end
 

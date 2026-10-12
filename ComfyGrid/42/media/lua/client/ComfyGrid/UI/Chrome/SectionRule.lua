@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -115,16 +115,17 @@ Style.onScaleChanged(function()
     for key in pairs(cache) do cache[key] = nil end
 end)
 
-function SectionRule.draw(el, info, y, band, rightPad)
+function SectionRule.draw(el, info, y, band, rightPad, labelInset)
     if el == nil or info == nil then return end
     band = band or Style.FONT_H
     rightPad = rightPad or 0
     local pad = SectionRule.pad()
+    local labelX = pad + (labelInset or 0)
     local textColor, line = SectionRule.TEXT, SectionRule.LINE
     local textY = y + math.floor((band - Style.FONT_H) / 2) + 1
-    el:drawText(info.label, pad, textY, textColor.r, textColor.g, textColor.b,
-        textColor.a, Style.FONT)
-    local lineX = pad + info.width + 6
+    el:drawText(info.label, labelX, textY, textColor.r, textColor.g,
+        textColor.b, textColor.a, Style.FONT)
+    local lineX = labelX + info.width + 6
     local lineW = el.width - pad - lineX - rightPad
     if lineW > 0 then
         el:drawRect(lineX, y + math.floor(band / 2), lineW, 1,

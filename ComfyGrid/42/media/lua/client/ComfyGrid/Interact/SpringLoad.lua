@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -17,15 +17,17 @@ local Log = ComfyGrid.Core.Log
 
 local HOLD_MS = 400
 
-local hoverButton = nil
+local hoverTarget = nil
 local hoverPage = nil
+local hoverTargetIsHeader = false
 local hoverSinceMs = 0
 
 local selectFailLogged = false
 
 local function reset()
-    hoverButton = nil
+    hoverTarget = nil
     hoverPage = nil
+    hoverTargetIsHeader = false
 end
 
 local function buttonOn(page)
@@ -40,50 +42,73 @@ local function buttonOn(page)
     return nil
 end
 
+local function collapsedHeaderOn(page)
+    if page == nil or page.onCharacter ~= true then return nil end
+    if not page:isReallyVisible() then return nil end
+    local pane = page.inventoryPane
+    local host = pane ~= nil and pane.comfyHost or nil
+    if host == nil or host.collapsedHeaderUnderMouse == nil then return nil end
+    return host:collapsedHeaderUnderMouse()
+end
+
+local function findHoverTarget()
+    local seats = getNumActivePlayers and getNumActivePlayers() or 1
+    for playerNum = 0, seats - 1 do
+        local okInventory, inventoryPage = pcall(getPlayerInventory, playerNum)
+        local button = okInventory and buttonOn(inventoryPage) or nil
+        if button ~= nil then return button, inventoryPage, false end
+        local okLoot, lootPage = pcall(getPlayerLoot, playerNum)
+        button = okLoot and buttonOn(lootPage) or nil
+        if button ~= nil then return button, lootPage, false end
+        local header = okInventory and collapsedHeaderOn(inventoryPage) or nil
+        if header ~= nil then return header, inventoryPage, true end
+    end
+    return nil, nil, false
+end
+
+local function openHoverTarget()
+    if hoverTargetIsHeader then
+        hoverTarget:setSectionCollapsed(false)
+        return
+    end
+    local button = hoverTarget
+    local pane = hoverPage ~= nil and hoverPage.inventoryPane or nil
+    if pane ~= nil and pane.inventory ~= button.inventory then
+        local ok, err = pcall(hoverPage.selectButtonForContainer, hoverPage,
+            button.inventory)
+        if not ok and not selectFailLogged then
+            selectFailLogged = true
+            Log.error("SpringLoad: container select failed (logged once): "
+                .. tostring(err))
+        end
+    end
+    local SectionCollapse = ComfyGrid.Model and ComfyGrid.Model.SectionCollapse
+    if SectionCollapse ~= nil and hoverPage.onCharacter == true then
+        SectionCollapse.expandInventory(hoverPage.player, button.inventory)
+    end
+end
+
 function SpringLoad._onTick()
     local DragAndDrop = ComfyGrid.Interact and ComfyGrid.Interact.DragAndDrop
     if DragAndDrop == nil or not DragAndDrop.isComfyDrag() then
-        if hoverButton ~= nil then reset() end
+        if hoverTarget ~= nil then reset() end
         return
     end
-    local button, page = nil, nil
-    local seats = getNumActivePlayers and getNumActivePlayers() or 1
-    for playerNum = 0, seats - 1 do
-        local okI, invPage = pcall(getPlayerInventory, playerNum)
-        button = okI and buttonOn(invPage) or nil
-        if button ~= nil then
-            page = invPage
-            break
-        end
-        local okL, lootPage = pcall(getPlayerLoot, playerNum)
-        button = okL and buttonOn(lootPage) or nil
-        if button ~= nil then
-            page = lootPage
-            break
-        end
-    end
-    if button == nil then
-        if hoverButton ~= nil then reset() end
+    local target, page, isHeader = findHoverTarget()
+    if target == nil then
+        if hoverTarget ~= nil then reset() end
         return
     end
-    if button ~= hoverButton then
+    if target ~= hoverTarget then
 
-        hoverButton = button
+        hoverTarget = target
         hoverPage = page
+        hoverTargetIsHeader = isHeader
         hoverSinceMs = getTimestampMs()
         return
     end
     if getTimestampMs() - hoverSinceMs < HOLD_MS then return end
-    local pane = hoverPage ~= nil and hoverPage.inventoryPane or nil
-    if pane == nil or pane.inventory == button.inventory then return end
-
-    local ok, err = pcall(hoverPage.selectButtonForContainer, hoverPage,
-        button.inventory)
-    if not ok and not selectFailLogged then
-        selectFailLogged = true
-        Log.error("SpringLoad: container select failed (logged once): "
-            .. tostring(err))
-    end
+    openHoverTarget()
 end
 
 if not ComfyGrid._springLoadTickHooked then

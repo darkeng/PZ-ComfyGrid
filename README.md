@@ -17,6 +17,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 ## Every container, one window
 
 - **Sections** — your pockets, every worn bag and every container within reach, stacked in one panel. No tabs.
+- **Fold a section** — the arrow by a section's name in your own inventory folds it down to its header; drop an item on a folded header to put it inside.
 - **Verbs on every header** — sort into category islands, pull in more of the same, spread across the open containers, send the lot over, or tip it on the floor.
 - **The object's own buttons too** — ovens, washers, campfires, mannequins and car boots put their controls right on their header.
 - **Reorder** — drag a container button to move it; the wheel cycles them in that same order.

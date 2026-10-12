@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -496,5 +496,38 @@ function DropHandler.resolve(gridView, localX, localY)
     end
 
     finishDrag(gridView, DragAndDrop)
+    return true
+end
+
+function DropHandler.resolveIntoContainer(model, playerNum)
+    if model == nil or model.inventory == nil then return false end
+    if GameMode.isTutorial() then return false end
+    local DragAndDrop = ComfyGrid.Interact.DragAndDrop
+    if DragAndDrop == nil or DragAndDrop.getDraggedStacks == nil then
+        return false
+    end
+    local dragged = DragAndDrop.getDraggedStacks()
+    if dragged == nil then return false end
+    local liveItems = collectDragged(dragged)
+    local inventory = model.inventory
+    local incomingItems = {}
+    for itemIndex = 1, #liveItems do
+        local liveItem = liveItems[itemIndex]
+        if liveItem:getContainer() ~= inventory then
+            incomingItems[#incomingItems + 1] = liveItem
+        end
+    end
+    if #incomingItems > 0 then
+        local playerObj = getSpecificPlayer(playerNum or 0)
+        local Transfer = ComfyGrid.Interact.Transfer
+        if playerObj ~= nil and Transfer ~= nil then
+            Transfer.moveItems(incomingItems, inventory, playerObj, nil)
+        else
+            Log.warn("DropHandler: cannot queue a header drop (missing "
+                .. (playerObj == nil and "player object" or "Transfer module")
+                .. "); drop consumed as no-op")
+        end
+    end
+    finishDrag(nil, DragAndDrop)
     return true
 end

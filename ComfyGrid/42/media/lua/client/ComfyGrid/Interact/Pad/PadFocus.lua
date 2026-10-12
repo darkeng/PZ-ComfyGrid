@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -67,12 +67,20 @@ local function addPlayerStripNodes(nodes, strips)
             panel = strips }
     end
     local pocketsPanel = strips.pocketsPanel
-    local pocketGrids = pocketsPanel ~= nil and pocketsPanel.gridViews
-        or nil
-    if pocketGrids ~= nil then
-        for j = 1, #pocketGrids do
-            nodes[#nodes + 1] = { kind = "pocket", el = pocketGrids[j],
+    if pocketsPanel ~= nil and pocketsPanel:getIsVisible() then
+
+        if pocketsPanel.padChipCount ~= nil then
+            nodes[#nodes + 1] = { kind = "chip", el = pocketsPanel,
                 panel = strips }
+        end
+        local pocketGrids = pocketsPanel.gridViews
+        for islandIndex = 1, #pocketGrids do
+
+            local island = pocketGrids[islandIndex]
+            if island:getIsVisible() then
+                nodes[#nodes + 1] = { kind = "pocket", el = island,
+                    panel = strips }
+            end
         end
     end
 end
@@ -84,7 +92,8 @@ local function addPanelNodes(nodes, panels)
         if panel.padChipCount ~= nil then
             nodes[#nodes + 1] = { kind = "chip", el = panel, panel = panel }
         end
-        if panel.gridView ~= nil then
+
+        if panel.gridView ~= nil and panel.gridView:getIsVisible() then
             nodes[#nodes + 1] = { kind = "grid", el = panel.gridView,
                 panel = panel }
         end

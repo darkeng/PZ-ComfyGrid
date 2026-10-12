@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -161,6 +161,7 @@ local function classFactsOf(item, fullType)
         keyring = instanceof(item, "KeyRing") == true,
         moveable = instanceof(item, "Moveable") == true,
         weapon = instanceof(item, "HandWeapon") == true,
+        literature = instanceof(item, "Literature") == true,
     }
     if fullType ~= nil then classFactsByType[fullType] = typeFacts end
     return typeFacts
@@ -209,6 +210,88 @@ function StackRules.isStackable(item)
     return true
 end
 
+local wornCanonicalByType = {}
+
+local function scriptOf(fullType)
+    local scriptManager = getScriptManager()
+    return scriptManager ~= nil and scriptManager:FindItem(fullType) or nil
+end
+
+local function scriptIconOf(itemScript)
+    if itemScript == nil or itemScript.getIcon == nil then return nil end
+    return tostring(itemScript:getIcon())
+end
+
+local function wornLinksOf(itemScript)
+    if itemScript == nil or itemScript.getClothingItemExtra == nil then
+        return nil
+    end
+    local wornLinks = itemScript:getClothingItemExtra()
+    if wornLinks == nil or wornLinks:size() == 0 then return nil end
+    return wornLinks
+end
+
+local function qualifiedType(listingType, typeName)
+    if string.find(typeName, ".", 1, true) ~= nil then return typeName end
+    local moduleName = string.match(listingType, "^([^%.]+)%.")
+    if moduleName == nil then return typeName end
+    return moduleName .. "." .. typeName
+end
+
+local function linksTo(itemScript, listingType, targetType)
+    local wornLinks = wornLinksOf(itemScript)
+    if wornLinks == nil then return false end
+    for linkIndex = 0, wornLinks:size() - 1 do
+        if qualifiedType(listingType, tostring(wornLinks:get(linkIndex)))
+                == targetType then
+            return true
+        end
+    end
+    return false
+end
+
+local function wornCanonicalOf(fullType)
+    local cachedCanonical = wornCanonicalByType[fullType]
+    if cachedCanonical ~= nil then return cachedCanonical end
+    local canonicalType = fullType
+    local ownScript = scriptOf(fullType)
+    local familyIcon = scriptIconOf(ownScript)
+    if familyIcon ~= nil and wornLinksOf(ownScript) ~= nil then
+        local familyMembers = { [fullType] = true }
+        local scriptsByType = { [fullType] = ownScript }
+        local pendingTypes, nextPendingIndex = { fullType }, 1
+        while nextPendingIndex <= #pendingTypes do
+            local visitingType = pendingTypes[nextPendingIndex]
+            nextPendingIndex = nextPendingIndex + 1
+            local wornLinks = wornLinksOf(scriptsByType[visitingType])
+            if wornLinks ~= nil then
+                for linkIndex = 0, wornLinks:size() - 1 do
+                    local siblingType = qualifiedType(visitingType,
+                        tostring(wornLinks:get(linkIndex)))
+                    if not familyMembers[siblingType] then
+                        local siblingScript = scriptOf(siblingType)
+                        if scriptIconOf(siblingScript) == familyIcon
+                                and linksTo(siblingScript, siblingType,
+                                    visitingType) then
+                            familyMembers[siblingType] = true
+                            scriptsByType[siblingType] = siblingScript
+                            pendingTypes[#pendingTypes + 1] = siblingType
+                        end
+                    end
+                end
+            end
+        end
+        for memberType in pairs(familyMembers) do
+            if memberType < canonicalType then canonicalType = memberType end
+        end
+        for memberType in pairs(familyMembers) do
+            wornCanonicalByType[memberType] = canonicalType
+        end
+    end
+    wornCanonicalByType[fullType] = canonicalType
+    return canonicalType
+end
+
 function StackRules.identityOf(item)
     if item == nil then return nil end
 
@@ -225,7 +308,14 @@ function StackRules.identityOf(item)
             return fullType .. "@" .. tostring(mediaIndex)
         end
     end
-    return fullType
+
+    if classFactsOf(item, fullType).literature and item:hasModData() then
+        local literatureTitle = item:getModData().literatureTitle
+        if literatureTitle ~= nil then
+            return fullType .. "@" .. tostring(literatureTitle)
+        end
+    end
+    return wornCanonicalOf(fullType)
 end
 
 function StackRules.isSameStack(stack, item)

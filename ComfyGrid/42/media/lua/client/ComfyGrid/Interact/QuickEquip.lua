@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,6 +11,7 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/Model/ContainerModel"
 require "ComfyGrid/Model/Equipment"
+require "ComfyGrid/Model/MealOrder"
 require "ComfyGrid/Interact/Tooltip"
 require "ComfyGrid/Interact/Consume"
 ComfyGrid = ComfyGrid or {}
@@ -22,6 +23,7 @@ local Log = ComfyGrid.Core.Log
 local ItemStack = ComfyGrid.Model.ItemStack
 local ContainerModel = ComfyGrid.Model.ContainerModel
 local Equipment = ComfyGrid.Model.Equipment
+local MealOrder = ComfyGrid.Model.MealOrder
 
 local lastError = nil
 
@@ -231,6 +233,11 @@ local function equipHovered()
 
         local item = ItemStack.frontItem(stack, inventory)
         if item == nil or isEquippableKind(item) then return false end
+
+        if MealOrder.isMeal(item) then
+            item = MealOrder.bestToEat(playerObj, ItemStack.getItems(stack, inventory))
+            if item == nil then return false end
+        end
 
         local Consume = ComfyGrid.Interact and ComfyGrid.Interact.Consume
         if Consume ~= nil and Consume.tryUse ~= nil then

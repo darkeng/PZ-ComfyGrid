@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -56,6 +56,22 @@ function PaneHost:showsInventory(inv)
         end
     end
     return false
+end
+
+function PaneHost:collapsedHeaderUnderMouse()
+    local panels = self.panels
+    for panelIndex = 1, #panels do
+        local panel = panels[panelIndex]
+        if panel ~= nil and panel:isCollapsedHeaderUnderMouse() then
+            return panel
+        end
+    end
+    local strips = self.strips
+    local pockets = strips ~= nil and strips.pocketsPanel or nil
+    if pockets ~= nil and pockets:isCollapsedHeaderUnderMouse() then
+        return pockets
+    end
+    return nil
 end
 
 function PaneHost.paneOf(element, playerNum)

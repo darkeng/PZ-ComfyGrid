@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -198,6 +198,14 @@ end
 
 function Draw.sortTexture()
     return Draw.glyphTexture("sort")
+end
+
+function Draw.caretOpenTexture()
+    return Draw.glyphTexture("caret_open")
+end
+
+function Draw.caretClosedTexture()
+    return Draw.glyphTexture("caret_closed")
 end
 
 function Draw.stowTexture()

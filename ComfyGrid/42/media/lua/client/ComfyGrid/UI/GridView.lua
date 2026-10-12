@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,6 +11,7 @@ require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/Model/Capacity"
+require "ComfyGrid/Model/RelayedBags"
 require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/SlotRenderer"
@@ -33,6 +34,7 @@ local Log = ComfyGrid.Core.Log
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local ItemStack = ComfyGrid.Model.ItemStack
 local Capacity = ComfyGrid.Model.Capacity
+local RelayedBags = ComfyGrid.Model.RelayedBags
 local Settings = ComfyGrid.Settings
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
@@ -1077,6 +1079,8 @@ local function openStackSurface(self, stack)
         return
     end
 
+    if RelayedBags.isInTransit(item) then return end
+
     local playerObj = getSpecificPlayer(self.playerNum)
     if playerObj ~= nil then
         local okEquipped, equipped = pcall(playerObj.isEquipped, playerObj, item)
@@ -1101,6 +1105,7 @@ local function wouldOpenSomething(self, stack)
     if not okItem or item == nil then return false end
     local bagInventory = ContainerWindow.inventoryOf(item)
     if bagInventory == nil then return false end
+    if RelayedBags.isInTransit(item) then return false end
 
     local playerObj = getSpecificPlayer(self.playerNum)
     if playerObj ~= nil then

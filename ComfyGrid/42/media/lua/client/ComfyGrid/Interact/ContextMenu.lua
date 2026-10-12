@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,6 +10,7 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Input"
 require "ComfyGrid/Core/VanillaStacks"
+require "ComfyGrid/Model/MealOrder"
 require "ComfyGrid/Interact/Tooltip"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Interact = ComfyGrid.Interact or {}
@@ -18,6 +19,7 @@ ComfyGrid.Interact.ContextMenu = ContextMenu
 
 local Log = ComfyGrid.Core.Log
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
+local MealOrder = ComfyGrid.Model.MealOrder
 
 local MAX_ANCESTOR_DEPTH = 8
 local function paneOf(gridView)
@@ -56,7 +58,10 @@ function ContextMenu.open(playerNum, stacks, gridView, absX, absY)
     local isInPlayerInventory = inventory:isInCharacterInventory(playerObj)
 
     local stackPane = pane or VanillaStacks.sidePaneFor(playerNum, isInPlayerInventory)
-    local stackList = VanillaStacks.listFrom(stacks, inventory, stackPane)
+
+    local function bestMealFirst(items) MealOrder.sortForMenu(playerObj, items) end
+    local stackList = VanillaStacks.listFrom(stacks, inventory, stackPane,
+        bestMealFirst)
 
     if #stackList == 0 then return false end
 

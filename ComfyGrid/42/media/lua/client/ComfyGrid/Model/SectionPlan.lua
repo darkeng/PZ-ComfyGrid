@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,6 +9,7 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Model/Capacity"
 require "ComfyGrid/Model/ContainerOrder"
+require "ComfyGrid/Model/RelayedBags"
 require "ComfyGrid/Settings"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Model = ComfyGrid.Model or {}
@@ -16,6 +17,7 @@ local SectionPlan = {}
 ComfyGrid.Model.SectionPlan = SectionPlan
 
 local Capacity = ComfyGrid.Model.Capacity
+local RelayedBags = ComfyGrid.Model.RelayedBags
 local Settings = ComfyGrid.Settings
 
 SectionPlan.POCKET_MAX_SLOTS = 6
@@ -39,6 +41,8 @@ local function clearArrayTail(array, count)
 end
 
 local function lootSectionAllowed(page, inv, playerObj)
+
+    if RelayedBags.isOutInventory(inv) then return false end
     local okParent, parent = pcall(inv.getParent, inv)
     if okParent and parent ~= nil and instanceof(parent, "IsoThumpable")
             and parent.isLockedToCharacter ~= nil then
@@ -149,7 +153,8 @@ function SectionPlan.STRATEGIES.single(plan, page, pane)
     clearArrayTail(sections, plan.count)
     clearArrayTail(plan.pockets, plan.pocketCount)
     local sectionCount = 0
-    if pane.inventory ~= nil then
+
+    if pane.inventory ~= nil and not RelayedBags.isOutInventory(pane.inventory) then
         sectionCount = 1
         sections[1] = pane.inventory
     end

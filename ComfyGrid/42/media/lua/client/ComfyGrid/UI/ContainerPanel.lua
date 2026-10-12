@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -13,10 +13,12 @@ require "ComfyGrid/Core/Notify"
 require "ComfyGrid/Model/Capacity"
 require "ComfyGrid/Model/ContainerName"
 require "ComfyGrid/Model/ContainerStatus"
+require "ComfyGrid/Model/SectionCollapse"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/Chrome/Chip"
 require "ComfyGrid/UI/Chrome/SectionRule"
+require "ComfyGrid/UI/Chrome/SectionCaret"
 require "ComfyGrid/UI/GridView"
 require "ComfyGrid/Interact/SortContainer"
 require "ComfyGrid/Interact/BulkTransfer"
@@ -31,10 +33,12 @@ local Log = ComfyGrid.Core.Log
 local Notify = ComfyGrid.Core.Notify
 local ContainerName = ComfyGrid.Model.ContainerName
 local ContainerStatus = ComfyGrid.Model.ContainerStatus
+local SectionCollapse = ComfyGrid.Model.SectionCollapse
 local Style = ComfyGrid.UI.Style
 local Draw = ComfyGrid.UI.Draw
 local Chip = ComfyGrid.UI.Chrome.Chip
 local SectionRule = ComfyGrid.UI.Chrome.SectionRule
+local SectionCaret = ComfyGrid.UI.Chrome.SectionCaret
 local GridView = ComfyGrid.UI.GridView
 
 local SECTION_TEXT = SectionRule.TEXT
@@ -180,7 +184,12 @@ local function selectZoneAt(self, x, y)
     local zoneW = self._selectZoneW
     local zoneH = self._selectZoneH
     if zoneW == nil or zoneH == nil or zoneW <= 0 then return false end
-    return x >= 0 and x < zoneW and y >= 0 and y < zoneH
+
+    local zoneLeft = 0
+    if (self._caretAdvance or 0) > 0 then
+        zoneLeft = self._caretX + self._caretAdvance
+    end
+    return x >= zoneLeft and x < zoneW and y >= 0 and y < zoneH
 end
 
 local function selectZoneHot(self, active)
@@ -189,6 +198,73 @@ local function selectZoneHot(self, active)
         return selectZoneAt(self, self:getMouseX(), self:getMouseY())
     end
     return false
+end
+
+local function collapseKeyOf(self)
+    local model = self.model
+    if model == nil then return nil end
+    if self._collapseKeyModel == model then return self._collapseKey end
+    local host = self.parent
+    if host == nil then return nil end
+    local pane = host.pane
+    local page = pane ~= nil and pane.inventoryPage or nil
+
+    if pane ~= nil and page == nil then return nil end
+    local key = nil
+    if page ~= nil and page.onCharacter == true then
+        key = SectionCollapse.keyForInventory(model.inventory, self.playerNum)
+    end
+    self._collapseKeyModel = model
+    self._collapseKey = key
+    return key
+end
+
+function ContainerPanel:isSectionCollapsible()
+    return collapseKeyOf(self) ~= nil
+end
+
+function ContainerPanel:isSectionCollapsed()
+    local key = collapseKeyOf(self)
+    if key == nil then return false end
+    return SectionCollapse.isCollapsed(self.playerNum, key)
+end
+
+function ContainerPanel:setSectionCollapsed(collapsed)
+    SectionCollapse.setCollapsed(self.playerNum, collapseKeyOf(self), collapsed)
+end
+
+function ContainerPanel:toggleSectionCollapsed()
+    return SectionCollapse.toggle(self.playerNum, collapseKeyOf(self))
+end
+
+local function caretShown(self)
+    return (self._caretAdvance or 0) > 0
+end
+
+local function caretAt(self, x, y)
+    if not caretShown(self) then return false end
+    return SectionCaret.contains(x, y, self._caretX, 0,
+        self._selectZoneH or Style.headerHeight())
+end
+
+local function dragIsLive()
+    local DragAndDrop = ComfyGrid.Interact and ComfyGrid.Interact.DragAndDrop
+    return DragAndDrop ~= nil and DragAndDrop.isDragging()
+end
+
+local function dropOnCollapsedHeader(self)
+    if not self:isSectionCollapsed() then return false end
+    local DragAndDrop = ComfyGrid.Interact and ComfyGrid.Interact.DragAndDrop
+    if DragAndDrop == nil or not DragAndDrop.isComfyDrag() then return false end
+    local DropHandler = ComfyGrid.Interact.DropHandler
+    if DropHandler == nil or DropHandler.resolveIntoContainer == nil then
+        return false
+    end
+    return DropHandler.resolveIntoContainer(self.model, self.playerNum)
+end
+
+function ContainerPanel:isCollapsedHeaderUnderMouse()
+    return self:isSectionCollapsed() and self:isMouseOver()
 end
 
 local GROUP_GAP = 16
@@ -384,6 +460,8 @@ function ContainerPanel:_buildGridView()
     gv:initialise()
     self:addChild(gv)
     self.gridView = gv
+
+    self._gridHidden = nil
 end
 
 function ContainerPanel:setModel(model)
@@ -401,6 +479,7 @@ local function resetChipRows(self)
     local padSlot = PadFocus ~= nil and PadFocus.cursorFor ~= nil
         and PadFocus.cursorFor(self) or nil
     local padId = padSlot ~= nil and self:padChipAt(padSlot) or nil
+    self._caretPadHot = padId == "caret"
     self.chips:clear()
     self.actions:clear()
     self.chips.padHot = padId
@@ -410,6 +489,16 @@ end
 local function syncGridBox(self, gridTop)
     local gv = self.gridView
     if not gv then return end
+
+    local collapsed = self:isSectionCollapsed()
+    if self._gridHidden ~= collapsed then
+        self._gridHidden = collapsed
+        gv:setVisible(not collapsed)
+    end
+    if collapsed then
+        if self.height ~= gridTop then self:setHeight(gridTop) end
+        return
+    end
     gv:setAvailableWidth(self.width)
     if gv.x ~= 0 then gv:setX(0) end
     if gv.y ~= gridTop then gv:setY(gridTop) end
@@ -525,6 +614,21 @@ local function publishSelectZone(self, budgetRight, headerH)
     self._selectZoneH = headerH
 end
 
+local function drawCaret(self, caretX, headerH, active)
+    local advance = 0
+    if self:isSectionCollapsible() then
+        local hot = self._caretPadHot
+            or (self:isMouseOver() and SectionCaret.contains(self:getMouseX(),
+                self:getMouseY(), caretX, 0, headerH))
+        local color = (active or hot) and SECTION_TEXT_HI or SECTION_TEXT
+        advance = SectionCaret.draw(self, caretX, 0, headerH,
+            self:isSectionCollapsed(), color)
+    end
+    self._caretX = caretX
+    self._caretAdvance = advance
+    return advance
+end
+
 local function drawHeader(self, headerH, wtText, active, textManager)
 
     local fontHgt = textManager:getFontHeight(Style.FONT)
@@ -541,9 +645,10 @@ local function drawHeader(self, headerH, wtText, active, textManager)
     if actionsLeft ~= nil then budgetRight = actionsLeft - 6 end
     refreshRenamedTitle(self)
     local headerText = headerTextWithStatus(self)
-    local nameW = drawFittedName(self, headerText, budgetRight, leftPad, textY,
+    local nameLeft = leftPad + drawCaret(self, leftPad, headerH, active)
+    local nameW = drawFittedName(self, headerText, budgetRight, nameLeft, textY,
         textColor, textManager)
-    drawHeaderRule(self, leftPad + nameW + 6, budgetRight,
+    drawHeaderRule(self, nameLeft + nameW + 6, budgetRight,
         textY + math.floor(fontHgt / 2), lineColor)
     publishSelectZone(self, budgetRight, headerH)
 end
@@ -712,6 +817,10 @@ end
 
 function ContainerPanel:activateChip(id)
     if id == nil or self.model == nil then return end
+    if id == "caret" then
+        self:toggleSectionCollapsed()
+        return
+    end
     local action = CHIP_ACTIONS[id]
     if action ~= nil then
         action(self)
@@ -726,10 +835,15 @@ function ContainerPanel:activateChip(id)
 end
 
 function ContainerPanel:padChipCount()
-    return self.actions.count + self.chips.count
+    local caretChips = caretShown(self) and 1 or 0
+    return caretChips + self.actions.count + self.chips.count
 end
 
 function ContainerPanel:padChipAt(slot)
+    if caretShown(self) then
+        if slot == 0 then return "caret" end
+        slot = slot - 1
+    end
     local actionCount = self.actions.count
     if slot < actionCount then return self.actions:idAt(slot + 1) end
     return self.chips:idAt(self.chips.count - (slot - actionCount))
@@ -749,9 +863,14 @@ end
 
 function ContainerPanel:onMouseUp(x, y)
     if self.model ~= nil then
+        if dropOnCollapsedHeader(self) then return true end
         local id = self.chips:hit(x, y) or self.actions:hit(x, y)
         if id ~= nil then
-            self:activateChip(id)
+
+            if not dragIsLive() then self:activateChip(id) end
+        elseif caretAt(self, x, y) then
+
+            if not dragIsLive() then self:toggleSectionCollapsed() end
         elseif selectZoneAt(self, x, y) then
             self:selectMe()
         end

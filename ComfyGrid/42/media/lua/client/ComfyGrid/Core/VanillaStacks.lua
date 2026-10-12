@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.2
+    Version: 1.9.3
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -46,20 +46,22 @@ function VanillaStacks.fromItems(items, _inventory, pane)
     }
 end
 
-function VanillaStacks.fromStack(stack, inventory, pane)
+function VanillaStacks.fromStack(stack, inventory, pane, orderItems)
 
     local ItemStack = ComfyGrid.Model.ItemStack
     if not stack or not ItemStack then return nil end
     local items = ItemStack.getItems(stack, inventory)
     if not items or #items == 0 then return nil end
+    if orderItems ~= nil then orderItems(items) end
     return VanillaStacks.fromItems(items, inventory, pane)
 end
 
-function VanillaStacks.listFrom(stacks, inventory, pane)
+function VanillaStacks.listFrom(stacks, inventory, pane, orderItems)
     local vanillaStackList = {}
     if not stacks then return vanillaStackList end
     for i = 1, #stacks do
-        local vanillaStack = VanillaStacks.fromStack(stacks[i], inventory, pane)
+        local vanillaStack = VanillaStacks.fromStack(stacks[i], inventory, pane,
+            orderItems)
         if vanillaStack then
             vanillaStackList[#vanillaStackList + 1] = vanillaStack
         end
