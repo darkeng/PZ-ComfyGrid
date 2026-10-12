@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.4
+    Version: 1.9.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,6 +9,7 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
+require "ComfyGrid/Core/Prefs"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Compat = ComfyGrid.Compat or {}
 local Warnings = {}
@@ -46,26 +47,44 @@ local function warningText(entry)
     return Text.tr(entry.key, entry.text)
 end
 
+local function showWarning(msg)
+    local Confirm = ComfyGrid.UI and ComfyGrid.UI.Chrome
+        and ComfyGrid.UI.Chrome.Confirm
+    if Confirm ~= nil and Confirm.open ~= nil then
+        local ok, err = pcall(Confirm.open, { text = msg, yesno = false })
+        if not ok then
+            Log.error("Warnings: dialog failed: " .. tostring(err))
+        end
+    end
+end
+
 function Warnings.check()
     for i = 1, #INCOMPATIBLE do
         local entry = INCOMPATIBLE[i]
         if isModActive(entry.id) then
-            local msg = warningText(entry)
             Log.warn("incompatible mod active: " .. entry.id)
-
-            local Confirm = ComfyGrid.UI and ComfyGrid.UI.Chrome
-                and ComfyGrid.UI.Chrome.Confirm
-            if Confirm ~= nil and Confirm.open ~= nil then
-                local ok, err = pcall(Confirm.open,
-                    { text = msg, yesno = false })
-                if not ok then
-                    Log.error("Warnings: dialog failed: " .. tostring(err))
-                end
-            end
+            showWarning(warningText(entry))
             return true
         end
     end
     return false
+end
+
+local HOTBAR_WARNED_KEY = "hotbarSharedWarned"
+
+function Warnings.hotbarShared()
+    if ComfyGrid._hotbarSharedWarned then return end
+    ComfyGrid._hotbarSharedWarned = true
+    local Prefs = ComfyGrid.Core.Prefs
+    if Prefs ~= nil and Prefs.get ~= nil then
+        if Prefs.get(HOTBAR_WARNED_KEY) == "1" then return end
+        Prefs.set(HOTBAR_WARNED_KEY, "1")
+    end
+    Log.warn("another mod sizes the hotbar too: it may blink")
+    showWarning(Text.tr("IGUI_ComfyGrid_HotbarShared",
+        "Comfy Grid: another mod also restyles the hotbar, so it may blink. To "
+            .. "keep the other mod's hotbar, turn off “Restyle the on-screen hotbar” "
+            .. "in Comfy Grid settings."))
 end
 
 if not ComfyGrid._compatWarningsHooked then

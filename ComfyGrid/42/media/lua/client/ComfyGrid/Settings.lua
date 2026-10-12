@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.4
+    Version: 1.9.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -151,12 +151,12 @@ local OPTION_DEFS = {
     { key = "HOTBAR_SECTION",     kind = "tickbox", group = "general",
       nameKey = "IGUI_ComfyGrid_OptHotbarSection",
       tipKey = "IGUI_ComfyGrid_OptHotbarSectionTip",
-      tooltip = "Turn it off if you use the bar at the bottom of the screen." },
+      tooltip = "Turn it off if you use the hotbar at the bottom of the screen." },
 
     { key = "HOTBAR_BAR",         kind = "tickbox", group = "general",
       nameKey = "IGUI_ComfyGrid_OptHotbarBar",
       tipKey = "IGUI_ComfyGrid_OptHotbarBarTip",
-      tooltip = "The bar at the bottom of the screen wears the mod's tiles. Turn it off to leave it to the game or to another mod." },
+      tooltip = "The hotbar at the bottom of the screen wears the mod's tiles. Turn it off to leave it to the game or to another mod." },
     { key = "SLOTS_PER_CAPACITY", kind = "slider", group = "style",
       min = 1, max = 4, step = 0.5,
       nameKey = "IGUI_ComfyGrid_OptSlotsPerCapacity",

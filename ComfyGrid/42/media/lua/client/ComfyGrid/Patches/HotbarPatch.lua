@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.4
+    Version: 1.9.5
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -47,6 +47,8 @@ end
 local function restoreMetrics(self)
     local vanillaMetrics = self._comfyHotbarOg
     if vanillaMetrics == nil then return false end
+
+    self._comfyHotbarWritten = nil
     if self.slotWidth == vanillaMetrics.slotWidth
             and self.slotHeight == vanillaMetrics.slotHeight
             and self.slotPad == vanillaMetrics.slotPad
@@ -63,6 +65,23 @@ local function restoreMetrics(self)
     return true
 end
 
+local FOREIGN_WRITES_TO_WARN = 3
+
+local function noteForeignWrites(self)
+    local written = self._comfyHotbarWritten
+    if written == nil then return end
+    if self.slotWidth == written.slotWidth and self.slotHeight == written.slotHeight
+            and self.slotPad == written.slotPad and self.margins == written.margins then
+        return
+    end
+    self._comfyForeignWrites = (self._comfyForeignWrites or 0) + 1
+    if self._comfyForeignWrites < FOREIGN_WRITES_TO_WARN then return end
+    local Warnings = ComfyGrid.Compat and ComfyGrid.Compat.Warnings
+    if Warnings ~= nil and Warnings.hotbarShared ~= nil then
+        Warnings.hotbarShared()
+    end
+end
+
 local function applyMetrics(self)
 
     snapshotVanillaMetrics(self)
@@ -75,11 +94,17 @@ local function applyMetrics(self)
             and self.slotPad == pad and self.margins == pad then
         return false
     end
+
+    noteForeignWrites(self)
     self.slotWidth = cell
     self.slotHeight = cell
     self.slotPad = pad
     self.margins = pad
     self:setHeight(cell + pad * 2 + 2)
+    local written = self._comfyHotbarWritten or {}
+    written.slotWidth, written.slotHeight = cell, cell
+    written.slotPad, written.margins = pad, pad
+    self._comfyHotbarWritten = written
     return true
 end
 

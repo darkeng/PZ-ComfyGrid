@@ -59,6 +59,7 @@
     "IGUI_ComfyGrid_SpareTwo": "两个空格",
     "IGUI_ComfyGrid_IncompatibleTetris": "Comfy Grid: 已启用 Inventory Tetris. 两者都会替换物品栏界面, 请禁用其中一个.",
     "IGUI_ComfyGrid_IncompatibleCleanUI": "Comfy Grid: 已启用 CleanUI. 两者都会替换物品栏界面, 请禁用其中一个.",
+    "IGUI_ComfyGrid_HotbarShared": "Comfy Grid: 另一个模组也重绘了底部快捷栏, 因此它可能会闪烁. 如需保留另一个模组的快捷栏, 请在 Comfy Grid 设置中关闭“重绘底部快捷栏”.",
     "IGUI_ComfyGrid_SlotPrimary": "主手",
     "IGUI_ComfyGrid_SlotSecondary": "副手",
     "IGUI_ComfyGrid_SlotHead": "头部",
