@@ -47,6 +47,8 @@
     "IGUI_ComfyGrid_OptSpareSlotsTip": "How many empty slots each container shows after its items.",
     "IGUI_ComfyGrid_OptStackByType": "Stack by type only",
     "IGUI_ComfyGrid_OptStackByTypeTip": "Identical items share a tile whatever their state.",
+    "IGUI_ComfyGrid_OptStackHeavy": "Stack heavy items",
+    "IGUI_ComfyGrid_OptStackHeavyTip": "Logs, tires and other heavy items share a tile too.",
     "IGUI_ComfyGrid_OptStatusBar": "Status bar on tiles",
     "IGUI_ComfyGrid_OptStatusBarTip": "The bar at a tile's edge: condition, charge, what's left and reading progress.",
     "IGUI_ComfyGrid_OptSortOrder": "Sort order",

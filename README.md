@@ -7,7 +7,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 ## The grid
 
 - **Square tiles** that reflow to your window width — no more scrolling a text list.
-- **Auto-stacking** — identical items share one tile with a counter whatever their state (fresh and stale food, a full and a half-used roll of tape); weapons, tools and heavy gear keep a tile of their own, while throwables pile up. An option restores strict grouping by state.
+- **Auto-stacking** — identical items share one tile with a counter whatever their state (fresh and stale food, a full and a half-used roll of tape); weapons, tools and heavy gear keep a tile of their own, while throwables pile up. One option restores strict grouping by state, another lets heavy gear stack too.
 - **Status at a glance** — a colour bar for freshness, condition, uses and fluid; rounds on guns and magazines; reading progress on books; a weight icon that reddens with the load; and a torn red cross over anything broken. The bar can be switched off.
 - **Marks that answer a question** — a star on your favourites, a snowflake on frozen food, a tick on what you have already read, and the volume number on a skill book, dimmed while your level is too low to read it.
 - **Sharper icons** — the base game's item art is rebuilt at twice its size for the tiles and the container buttons, which scale with the interface too, so neither magnifies a 32px sprite. The palette of the original art is kept exactly; icons added by other mods are left alone.
@@ -44,7 +44,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 ## Set up in game
 
-The gear in the title bar opens the mod's own panel, **split into tabs**: **five colour themes** — Comfy Grid, Dark, Slate, Olive and Sakura — plus interface scale, grid density, how many empty slots a container shows, stacking by type or state, instant transfers, and where the equipment lives. The equipment and the on-screen hotbar can be turned off altogether. The panel is a **window you can move and leave open**, so you can change a setting and watch the inventory change behind it. The column of container buttons can sit on the **left** instead of the right, with its own switch for each window. Every option applies live, a tooltip says what it does, and the foot of the panel shows which version of the mod you are running.
+The gear in the title bar opens the mod's own panel, **split into tabs**: **five colour themes** — Comfy Grid, Dark, Slate, Olive and Sakura — plus interface scale, grid density, how many empty slots a container shows, stacking by type or state, stacking heavy items, instant transfers, and where the equipment lives. The equipment and the on-screen hotbar can be turned off altogether. The panel is a **window you can move and leave open**, so you can change a setting and watch the inventory change behind it. The column of container buttons can sit on the **left** instead of the right, with its own switch for each window. Every option applies live, a tooltip says what it does, and the foot of the panel shows which version of the mod you are running.
 
 ![Themes](workshop/card_14_themes.png)
 

@@ -47,6 +47,8 @@
     "IGUI_ComfyGrid_OptSpareSlotsTip": "Сколько пустых ячеек контейнер показывает после своих предметов.",
     "IGUI_ComfyGrid_OptStackByType": "Складывать только по типу",
     "IGUI_ComfyGrid_OptStackByTypeTip": "Одинаковые предметы делят ячейку в любом состоянии.",
+    "IGUI_ComfyGrid_OptStackHeavy": "Складывать тяжёлые предметы",
+    "IGUI_ComfyGrid_OptStackHeavyTip": "Брёвна, колёса и другие тяжёлые предметы тоже делят ячейку.",
     "IGUI_ComfyGrid_OptStatusBar": "Полоса состояния на ячейках",
     "IGUI_ComfyGrid_OptStatusBarTip": "Полоса у края ячейки: состояние, заряд, остаток и прогресс чтения.",
     "IGUI_ComfyGrid_OptSortOrder": "Порядок сортировки",

@@ -47,6 +47,8 @@
     "IGUI_ComfyGrid_OptSpareSlotsTip": "每个容器在物品之后显示多少个空格.",
     "IGUI_ComfyGrid_OptStackByType": "仅按类型堆叠",
     "IGUI_ComfyGrid_OptStackByTypeTip": "同种物品不论状态都叠在一格.",
+    "IGUI_ComfyGrid_OptStackHeavy": "堆叠重物",
+    "IGUI_ComfyGrid_OptStackHeavyTip": "原木、轮胎等重物也叠在一格.",
     "IGUI_ComfyGrid_OptStatusBar": "格子上的状态条",
     "IGUI_ComfyGrid_OptStatusBarTip": "格子边缘的条：状态、电量、剩余量和阅读进度。",
     "IGUI_ComfyGrid_OptSortOrder": "排序方式",

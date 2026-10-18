@@ -47,6 +47,8 @@
     "IGUI_ComfyGrid_OptSpareSlotsTip": "Combien de cases vides chaque conteneur affiche après ses objets.",
     "IGUI_ComfyGrid_OptStackByType": "Empiler par type uniquement",
     "IGUI_ComfyGrid_OptStackByTypeTip": "Objets identiques dans la même case, quel que soit leur état.",
+    "IGUI_ComfyGrid_OptStackHeavy": "Empiler les objets lourds",
+    "IGUI_ComfyGrid_OptStackHeavyTip": "Bûches, pneus et autres objets lourds partagent aussi une case.",
     "IGUI_ComfyGrid_OptStatusBar": "Barre d'état sur les cases",
     "IGUI_ComfyGrid_OptStatusBarTip": "La barre au bord d'une case : état, charge, utilisations restantes et progression de lecture.",
     "IGUI_ComfyGrid_OptSortOrder": "Critère de tri",

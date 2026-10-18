@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.5
+    Version: 1.9.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -19,8 +19,17 @@ local Settings = ComfyGrid.Settings
 
 local floor = math.floor
 local concat = table.concat
+local lower = string.lower
+local match = string.match
 
 local tokenBuffer = {}
+
+local function isHeavy(item)
+    if item.getWeight == nil then return false end
+    local ok, scriptWeight = pcall(item.getWeight, item)
+    return ok and type(scriptWeight) == "number"
+        and scriptWeight >= StackRules.HEAVY_WEIGHT
+end
 
 function StackRules.bucketOf(item)
     local tokenCount = 0
@@ -30,6 +39,10 @@ function StackRules.bucketOf(item)
         if held ~= nil and held:getItems():size() > 0 then
             tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "bag:" .. tostring(item:getID())
         end
+    end
+
+    if Settings.get("STACK_HEAVY") == true and isHeavy(item) then
+        tokenCount = tokenCount + 1; tokenBuffer[tokenCount] = "heavy"
     end
     if Settings.get("STACK_BY_TYPE") == true then
         if item.isFavorite and item:isFavorite() then
@@ -130,11 +143,17 @@ end
 StackRules.HEAVY_WEIGHT = 5
 
 StackRules.MATERIAL_WEAPON_CATEGORY = "MaterialWeapon"
+local MATERIAL_WEAPON_SCRIPTED = lower(StackRules.MATERIAL_WEAPON_CATEGORY)
 
-local function isThrowable(item)
-    if item.isExplosive == nil then return false end
-    local ok, explosive = pcall(item.isExplosive, item)
-    if not ok or explosive ~= true then return false end
+local EXPLOSIVES_SCRIPTED = "explosives"
+
+local function isThrowable(item, facts)
+    local explosive = facts.scriptedCategory == EXPLOSIVES_SCRIPTED
+    if not explosive and item.isExplosive ~= nil then
+        local ok, liveExplosive = pcall(item.isExplosive, item)
+        explosive = ok and liveExplosive == true
+    end
+    if not explosive then return false end
     if item.isRanged ~= nil then
         local okRanged, ranged = pcall(item.isRanged, item)
         if okRanged and ranged == true then return false end
@@ -153,6 +172,18 @@ StackRules.NEVER_STACK_TYPES = {
 
 local classFactsByType = {}
 
+local function scriptedCategoryOf(item)
+    local scriptItem = item.getScriptItem ~= nil and item:getScriptItem() or nil
+    if scriptItem == nil or scriptItem.getLoadedScriptBodies == nil then return nil end
+    local bodies = scriptItem:getLoadedScriptBodies()
+    for bodyIndex = bodies:size() - 1, 1, -2 do
+        local body = lower(tostring(bodies:get(bodyIndex)))
+        local category = match("\n" .. body, "[^%w_]displaycategory%s*=%s*([%w_]+)")
+        if category ~= nil then return category end
+    end
+    return nil
+end
+
 local function classFactsOf(item, fullType)
     local typeFacts = fullType ~= nil and classFactsByType[fullType] or nil
     if typeFacts ~= nil then return typeFacts end
@@ -163,8 +194,17 @@ local function classFactsOf(item, fullType)
         weapon = instanceof(item, "HandWeapon") == true,
         literature = instanceof(item, "Literature") == true,
     }
+
+    if typeFacts.weapon then typeFacts.scriptedCategory = scriptedCategoryOf(item) end
     if fullType ~= nil then classFactsByType[fullType] = typeFacts end
     return typeFacts
+end
+
+local function isBuildingStock(item, facts)
+    if facts.scriptedCategory == MATERIAL_WEAPON_SCRIPTED then return true end
+    local displayCategory = item.getDisplayCategory ~= nil
+        and item:getDisplayCategory() or nil
+    return displayCategory == StackRules.MATERIAL_WEAPON_CATEGORY
 end
 
 function StackRules.isStackable(item)
@@ -188,20 +228,13 @@ function StackRules.isStackable(item)
     end
 
     if facts.weapon then
-        local displayCategory = item.getDisplayCategory ~= nil
-            and item:getDisplayCategory() or nil
-        if displayCategory ~= StackRules.MATERIAL_WEAPON_CATEGORY
-                and not isThrowable(item) then
+        if not isBuildingStock(item, facts) and not isThrowable(item, facts) then
             return false
         end
     end
 
-    if item.getWeight ~= nil then
-        local ok, scriptWeight = pcall(item.getWeight, item)
-        if ok and type(scriptWeight) == "number"
-                and scriptWeight >= StackRules.HEAVY_WEIGHT then
-            return false
-        end
+    if Settings.get("STACK_HEAVY") ~= true and isHeavy(item) then
+        return false
     end
 
     if fullType ~= nil and StackRules.NEVER_STACK_TYPES[fullType] then

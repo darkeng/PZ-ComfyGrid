@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.5
+    Version: 1.9.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -30,6 +30,8 @@ Settings.defaults = {
 
     SORT_ORDER = "category",
     STACK_BY_TYPE = true,
+
+    STACK_HEAVY = false,
 
     STATUS_BAR = true,
 
@@ -156,7 +158,8 @@ local OPTION_DEFS = {
     { key = "HOTBAR_BAR",         kind = "tickbox", group = "general",
       nameKey = "IGUI_ComfyGrid_OptHotbarBar",
       tipKey = "IGUI_ComfyGrid_OptHotbarBarTip",
-      tooltip = "The hotbar at the bottom of the screen wears the mod's tiles. Turn it off to leave it to the game or to another mod." },
+      tooltip = "The hotbar at the bottom of the screen wears the mod's tiles. "
+          .. "Turn it off to leave it to the game or to another mod." },
     { key = "SLOTS_PER_CAPACITY", kind = "slider", group = "style",
       min = 1, max = 4, step = 0.5,
       nameKey = "IGUI_ComfyGrid_OptSlotsPerCapacity",
@@ -166,6 +169,11 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptStackByType",
       tipKey = "IGUI_ComfyGrid_OptStackByTypeTip",
       tooltip = "Identical items share a tile whatever their state." },
+
+    { key = "STACK_HEAVY",        kind = "tickbox", group = "style",
+      nameKey = "IGUI_ComfyGrid_OptStackHeavy",
+      tipKey = "IGUI_ComfyGrid_OptStackHeavyTip",
+      tooltip = "Logs, tires and other heavy items share a tile too." },
 
     { key = "STATUS_BAR",         kind = "tickbox", group = "style",
       nameKey = "IGUI_ComfyGrid_OptStatusBar",

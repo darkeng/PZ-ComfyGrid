@@ -47,6 +47,8 @@
     "IGUI_ComfyGrid_OptSpareSlotsTip": "Cuántas casillas vacías muestra cada contenedor después de sus objetos.",
     "IGUI_ComfyGrid_OptStackByType": "Apilar solo por tipo",
     "IGUI_ComfyGrid_OptStackByTypeTip": "Los objetos iguales comparten casilla sin importar su estado.",
+    "IGUI_ComfyGrid_OptStackHeavy": "Apilar objetos pesados",
+    "IGUI_ComfyGrid_OptStackHeavyTip": "Los troncos, las ruedas y demás objetos pesados también comparten casilla.",
     "IGUI_ComfyGrid_OptStatusBar": "Barra de estado en las casillas",
     "IGUI_ComfyGrid_OptStatusBarTip": "La barra del borde de la casilla: estado, carga, uso restante y progreso de lectura.",
     "IGUI_ComfyGrid_OptSortOrder": "Criterio de orden",

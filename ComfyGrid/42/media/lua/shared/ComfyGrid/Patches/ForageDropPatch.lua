@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.5
+    Version: 1.9.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]

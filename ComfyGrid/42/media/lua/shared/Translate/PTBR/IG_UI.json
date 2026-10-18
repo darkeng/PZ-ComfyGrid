@@ -47,6 +47,8 @@
     "IGUI_ComfyGrid_OptSpareSlotsTip": "Quantos espaços vazios cada recipiente mostra depois dos seus itens.",
     "IGUI_ComfyGrid_OptStackByType": "Empilhar só por tipo",
     "IGUI_ComfyGrid_OptStackByTypeTip": "Itens iguais dividem um bloco, não importa o estado.",
+    "IGUI_ComfyGrid_OptStackHeavy": "Empilhar itens pesados",
+    "IGUI_ComfyGrid_OptStackHeavyTip": "Troncos, pneus e outros itens pesados também dividem um bloco.",
     "IGUI_ComfyGrid_OptStatusBar": "Barra de status nos blocos",
     "IGUI_ComfyGrid_OptStatusBarTip": "A barra na borda do bloco: condição, carga, uso restante e progresso de leitura.",
     "IGUI_ComfyGrid_OptSortOrder": "Critério de ordenação",

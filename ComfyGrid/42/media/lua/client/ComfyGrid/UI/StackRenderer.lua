@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.5
+    Version: 1.9.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -44,7 +44,7 @@ local countStrings = {}
 
 local VOLUME_OF_LVL = { [1] = 1, [3] = 2, [5] = 3, [7] = 4, [9] = 5 }
 
-local ammoStrings = {}
+local ammoTextSets = {}
 
 local BAR_COLORS = {}
 do
@@ -515,22 +515,23 @@ local function stackAllReadDone(stack, typeInfo, playerObj, inventory)
     return allRead
 end
 
-local function ammoTextFor(item, typeInfo)
+local function ammoTextsFor(item, typeInfo)
     if typeInfo.maxAmmo == nil or item.getCurrentAmmoCount == nil then return nil end
     local loaded = item:getCurrentAmmoCount() or 0
     local chambered = item.isRoundChambered ~= nil
         and item:isRoundChambered() or false
     local ammoKey = loaded * 1000 + typeInfo.maxAmmo + (chambered and 500000 or 0)
-    local text = ammoStrings[ammoKey]
-    if text == nil then
+    local texts = ammoTextSets[ammoKey]
+    if texts == nil then
         if chambered then
-            text = loaded .. "+1/" .. typeInfo.maxAmmo
+            texts = { loaded .. "+1/" .. typeInfo.maxAmmo, loaded .. "+1",
+                tostring(loaded + 1) }
         else
-            text = loaded .. "/" .. typeInfo.maxAmmo
+            texts = { loaded .. "/" .. typeInfo.maxAmmo, tostring(loaded) }
         end
-        ammoStrings[ammoKey] = text
+        ammoTextSets[ammoKey] = texts
     end
-    return text
+    return texts
 end
 
 local marks = {}
@@ -820,14 +821,18 @@ function StackRenderer.draw(ctx)
             end
         end
 
-        local ammoText = ammoTextFor(item, typeInfo)
-        if ammoText ~= nil then
-            local ammoX = textRight - measuredWidth(ammoText)
+        local ammoTexts = ammoTextsFor(item, typeInfo)
+        if ammoTexts ~= nil then
 
-            if ammoX >= markRight then
-                drawShadowedText(view, ammoText, ammoX,
-                    y + cellSize - Style.FONT_H - 1, colors.COUNT_TEXT,
-                    colors.COUNT_SHADOW)
+            for textIndex = 1, #ammoTexts do
+                local ammoText = ammoTexts[textIndex]
+                local ammoX = textRight - measuredWidth(ammoText)
+                if ammoX >= markRight then
+                    drawShadowedText(view, ammoText, ammoX,
+                        y + cellSize - Style.FONT_H - 1, colors.COUNT_TEXT,
+                        colors.COUNT_SHADOW)
+                    break
+                end
             end
         end
 
@@ -967,7 +972,7 @@ function StackRenderer.overlayInfo(item)
         if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
         barColor = BAR_COLORS[floor(frac * 100 + 0.5)]
     end
-    return frac, barColor, ammoTextFor(item, typeInfo)
+    return frac, barColor, ammoTextsFor(item, typeInfo)
 end
 
 function StackRenderer.isReadDone(item, playerObj)

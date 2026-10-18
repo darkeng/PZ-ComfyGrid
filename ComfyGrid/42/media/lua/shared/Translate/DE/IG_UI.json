@@ -47,6 +47,8 @@
     "IGUI_ComfyGrid_OptSpareSlotsTip": "Wie viele leere Felder jeder Behälter nach seinen Gegenständen zeigt.",
     "IGUI_ComfyGrid_OptStackByType": "Nur nach Typ stapeln",
     "IGUI_ComfyGrid_OptStackByTypeTip": "Gleiche Gegenstände teilen sich eine Kachel, Zustand egal.",
+    "IGUI_ComfyGrid_OptStackHeavy": "Schwere Gegenstände stapeln",
+    "IGUI_ComfyGrid_OptStackHeavyTip": "Baumstämme, Reifen und andere schwere Gegenstände teilen sich auch eine Kachel.",
     "IGUI_ComfyGrid_OptStatusBar": "Statusleiste auf den Kacheln",
     "IGUI_ComfyGrid_OptStatusBarTip": "Die Leiste am Rand einer Kachel: Zustand, Ladung, Rest und Lesefortschritt.",
     "IGUI_ComfyGrid_OptSortOrder": "Sortierung",

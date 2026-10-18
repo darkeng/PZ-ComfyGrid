@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.5
+    Version: 1.9.6
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -167,11 +167,11 @@ local function drawReadouts(self, x, y, size, item)
             and StackRenderer.drawBrokenMark ~= nil then
         StackRenderer.drawBrokenMark(self, x, y, size)
     end
-    local frac, col, ammoText = StackRenderer.overlayInfo(item)
+    local frac, col, ammoTexts = StackRenderer.overlayInfo(item)
     if frac ~= nil and col ~= nil then
         StackRenderer.drawStatusCapsule(self, x, y, size, frac, col)
     end
-    if ammoText == nil then return end
+    if ammoTexts == nil then return end
     local Style = ComfyGrid.UI.Style
     local fontHgt = Style ~= nil and Style.FONT_H or 16
     local byFont = ammoWidths[fontHgt]
@@ -179,16 +179,22 @@ local function drawReadouts(self, x, y, size, item)
         byFont = {}
         ammoWidths[fontHgt] = byFont
     end
-    local ammoWidth = byFont[ammoText]
-    if ammoWidth == nil then
-        ammoWidth = getTextManager():MeasureStringX(UIFont.Small, ammoText)
-        byFont[ammoText] = ammoWidth
+
+    for textIndex = 1, #ammoTexts do
+        local ammoText = ammoTexts[textIndex]
+        local ammoWidth = byFont[ammoText]
+        if ammoWidth == nil then
+            ammoWidth = getTextManager():MeasureStringX(UIFont.Small, ammoText)
+            byFont[ammoText] = ammoWidth
+        end
+        local ax = x + size - 9 - ammoWidth
+        if ax >= x + 2 then
+            local ty = y + size - fontHgt - 1
+            self:drawText(ammoText, ax + 1, ty + 1, 0, 0, 0, 1, UIFont.Small)
+            self:drawText(ammoText, ax, ty, 1, 1, 1, 1, UIFont.Small)
+            return
+        end
     end
-    local ax = x + size - 9 - ammoWidth
-    if ax < x + 2 then return end
-    local ty = y + size - fontHgt - 1
-    self:drawText(ammoText, ax + 1, ty + 1, 0, 0, 0, 1, UIFont.Small)
-    self:drawText(ammoText, ax, ty, 1, 1, 1, 1, UIFont.Small)
 end
 
 local function renderComfyBar(self)
