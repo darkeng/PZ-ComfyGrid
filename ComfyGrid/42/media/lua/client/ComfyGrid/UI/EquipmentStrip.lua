@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.6
+    Version: 1.9.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -19,6 +19,7 @@ require "ComfyGrid/UI/StackRenderer"
 require "ComfyGrid/UI/StripGestures"
 require "ComfyGrid/Interact/DragAndDrop"
 require "ComfyGrid/Interact/Unequip"
+require "ComfyGrid/Interact/HotbarAttach"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -33,6 +34,7 @@ local StackRenderer = ComfyGrid.UI.StackRenderer
 local StripGestures = ComfyGrid.UI.StripGestures
 local DragAndDrop = ComfyGrid.Interact.DragAndDrop
 local Unequip = ComfyGrid.Interact.Unequip
+local HotbarAttach = ComfyGrid.Interact.HotbarAttach
 
 local EquipmentStrip = ISUIElement:derive("ComfyEquipStrip")
 ComfyGrid.UI.EquipmentStrip = EquipmentStrip
@@ -710,6 +712,8 @@ local function equipIntoHand(self, entry, item, playerObj)
     local displaced = heldRead and heldItem or nil
     ISInventoryPaneContextMenu.equipWeapon(item, entry.hand == "primary",
         isTwoHanded(item), self.playerNum)
+
+    HotbarAttach.reserveAfterEquip(playerObj, item)
     return displaced
 end
 

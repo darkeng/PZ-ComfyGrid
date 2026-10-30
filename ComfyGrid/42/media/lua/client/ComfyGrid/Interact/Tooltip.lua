@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.6
+    Version: 1.9.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Core/Input"
 require "ComfyGrid/Model/ItemStack"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Interact = ComfyGrid.Interact or {}
@@ -15,6 +16,7 @@ local Tooltip = {}
 ComfyGrid.Interact.Tooltip = Tooltip
 
 local Log = ComfyGrid.Core.Log
+local Input = ComfyGrid.Core.Input
 local ItemStack = ComfyGrid.Model.ItemStack
 
 local function isDragActive()
@@ -123,6 +125,18 @@ function Tooltip.hoveredEquipment(pane)
         if hoveredItem ~= nil then return hoveredItem, "unequip" end
     end
     return nil
+end
+
+function Tooltip.hoveredScreenHotbar(playerNum)
+    local hotbar = Input.hotbarOf(playerNum)
+    if hotbar == nil or hotbar.attachedItems == nil or not hotbar:isReallyVisible()
+            or not hotbar:isMouseOver() then
+        return nil
+    end
+    local slotIndex = hotbar:getSlotIndexAt(hotbar:getMouseX(), hotbar:getMouseY())
+    local item = slotIndex ~= nil and hotbar.attachedItems[slotIndex] or nil
+    if item == nil then return nil end
+    return item, "detach"
 end
 
 local function popupOf(pane)

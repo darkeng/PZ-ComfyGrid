@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.6
+    Version: 1.9.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -36,6 +36,7 @@ require "ComfyGrid/UI/ContainerWindow"
 require "ComfyGrid/Interact/KeyBinds"
 require "ComfyGrid/Interact/QuickEquip"
 require "ComfyGrid/Interact/ItemApply"
+require "ComfyGrid/Interact/Rebait"
 require "ComfyGrid/Interact/BagRelay"
 
 local Log = ComfyGrid.Core.Log

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.6
+    Version: 1.9.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -14,12 +14,14 @@ require "ComfyGrid/Model/Equipment"
 require "ComfyGrid/Model/MealOrder"
 require "ComfyGrid/Interact/Tooltip"
 require "ComfyGrid/Interact/Consume"
+require "ComfyGrid/Interact/HotbarAttach"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Interact = ComfyGrid.Interact or {}
 local QuickEquip = {}
 ComfyGrid.Interact.QuickEquip = QuickEquip
 
 local Log = ComfyGrid.Core.Log
+local HotbarAttach = ComfyGrid.Interact.HotbarAttach
 local ItemStack = ComfyGrid.Model.ItemStack
 local ContainerModel = ComfyGrid.Model.ContainerModel
 local Equipment = ComfyGrid.Model.Equipment
@@ -226,6 +228,11 @@ local function equipHovered()
                 stack, inventory = Tooltip.hoveredStackOf(pane)
             end
         end
+
+        if stack == nil and Tooltip.hoveredScreenHotbar ~= nil then
+            local barItem, barVerb = Tooltip.hoveredScreenHotbar(0)
+            if barItem ~= nil then return sendBack(barItem, barVerb) end
+        end
     end
     if stack == nil or inventory == nil then return false end
     local front = equippableIn(stack, inventory)
@@ -290,6 +297,8 @@ local function equipHovered()
         local twoHands = front.isTwoHandWeapon ~= nil
             and front:isTwoHandWeapon() or false
         ISInventoryPaneContextMenu.equipWeapon(front, true, twoHands, 0)
+
+        HotbarAttach.reserveAfterEquip(playerObj, front)
     else
         return false
     end

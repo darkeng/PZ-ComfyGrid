@@ -156,5 +156,10 @@
     "IGUI_ComfyGrid_OptMultiSelectMod": "Marcar varias casillas con",
     "IGUI_ComfyGrid_OptMultiSelectModTip": "Se mantiene apretada al hacer clic para marcar varias casillas, o se arrastra para seleccionar en bloque.",
     "IGUI_ComfyGrid_PadInsteadMultiSelect": "El joystick usa L3",
-    "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Con joystick, las casillas se marcan con el botón del stick izquierdo. Desactivá el joystick para volver a elegir un modificador."
+    "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Con joystick, las casillas se marcan con el botón del stick izquierdo. Desactivá el joystick para volver a elegir un modificador.",
+    "IGUI_ComfyGrid_OptAutoRebait": "Reponer la carnada",
+    "IGUI_ComfyGrid_OptAutoRebaitTip": "La carnada perdida al pescar se repone con otra igual de tu inventario.",
+    "IGUI_ComfyGrid_Rebaiting": "Poniendo otra carnada",
+    "IGUI_ComfyGrid_OptWeaponToHotbar": "Armas equipadas a la barra de acceso rápido",
+    "IGUI_ComfyGrid_OptWeaponToHotbarTip": "Un arma que equipás con la tecla de usar o equipar, o arrastrándola a una mano, ocupa también un espacio libre de la barra de acceso rápido que le sirva. Nunca reemplaza lo que ya esté ahí."
 }

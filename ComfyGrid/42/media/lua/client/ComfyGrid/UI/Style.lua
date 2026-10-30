@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.6
+    Version: 1.9.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -243,6 +243,11 @@ Style.COLORS = {
     UNWANTED_CELL = { r = 0.115, g = 0.115, b = 0.120, a = 0.72 },
 
     FROZEN_CELL = { r = 0.17, g = 0.34, b = 0.46, a = 1.0 },
+
+    HOT_CELL = { r = 0.52, g = 0.24, b = 0.07, a = 1.0 },
+
+    BURNING      = { r = 1.00, g = 0.66, b = 0.20, a = 1.0 },
+    BURNING_LINE = { r = 0.16, g = 0.05, b = 0.02, a = 1.0 },
 
     BROKEN_WASH = { r = 0.0, g = 0.0, b = 0.0, a = 0.35 },
 

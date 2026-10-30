@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.6
+    Version: 1.9.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -33,7 +33,7 @@ ComfyGrid.Settings.onChanged("STATUS_BAR", function(newValue)
     showStatusBar = newValue
 end)
 
-local FROZEN_MARK_PX = 11
+local CORNER_MARK_PX = 11
 
 local UNWANTED_ALPHA = 0.40
 
@@ -186,46 +186,74 @@ local function stackHasBroken(stack, inventory)
     return broken
 end
 
-local stackFrozen = {}
-local stackFrozenEntries = 0
+local HOT_HEAT = 1.3
+local COLD_HEAT = 0.6
+local COOKING_HEAT = 1.6
 
-local function stackFrozenState(stack, inventory)
+local function memberTemperature(item, typeInfo)
+    if not typeInfo.isFood then
+        local itemHeat = item:getItemHeat()
+        return false, itemHeat > HOT_HEAT and 1 or (itemHeat < COLD_HEAT and -1 or 0), false
+    end
+    local heat = item:getHeat()
+    local frozen = item:isFrozen()
+    local side = heat > HOT_HEAT and 1 or (heat < COLD_HEAT and -1 or 0)
+    local burning = heat > COOKING_HEAT and not frozen and typeInfo.isCookable
+        and item:getCookingTime() > item:getMinutesToCook()
+    return frozen, side, burning == true
+end
+
+local stackTemperature = {}
+local stackTemperatureEntries = 0
+
+local function stackTemperatureState(stack, typeInfo, inventory)
     local now = getTimestampMs()
-    local entry = stackFrozen[stack]
+    local entry = stackTemperature[stack]
     if entry ~= nil and entry.count == stack.count
             and (now - entry.at) < MEMBER_RESCAN_MS then
-        return entry.state
+        return entry.frozen, entry.side, entry.burning
     end
-    local frozenCount, seen = 0, 0
+    local seen, frozenCount, hotCount, coldCount, burning = 0, 0, 0, 0, false
     for id in pairs(stack.itemIDs) do
         local member = inventory:getItemWithID(id)
         if member ~= nil then
             seen = seen + 1
-            if member.isFrozen ~= nil and member:isFrozen() then
-                frozenCount = frozenCount + 1
+            local memberFrozen, memberSide, memberBurning = memberTemperature(member, typeInfo)
+            if memberFrozen then frozenCount = frozenCount + 1 end
+            if memberSide > 0 then
+                hotCount = hotCount + 1
+            elseif memberSide < 0 then
+                coldCount = coldCount + 1
             end
+            if memberBurning then burning = true end
         end
     end
 
-    local state = 0
-    if frozenCount > 0 then
-        state = (frozenCount == seen) and 2 or 1
+    local frozen, side = 0, 0
+    if frozenCount > 0 then frozen = (frozenCount == seen) and 2 or 1 end
+    if seen > 0 then
+        if hotCount == seen then
+            side = 1
+        elseif coldCount == seen then
+            side = -1
+        end
     end
     if entry == nil then
-        stackFrozen, stackFrozenEntries, entry =
-            newMemoEntry(stackFrozen, stackFrozenEntries, stack)
+        stackTemperature, stackTemperatureEntries, entry =
+            newMemoEntry(stackTemperature, stackTemperatureEntries, stack)
     end
-    entry.count, entry.at, entry.state = stack.count, now, state
-    return state
+    entry.count, entry.at = stack.count, now
+    entry.frozen, entry.side, entry.burning = frozen, side, burning
+    return frozen, side, burning
 end
 
-local function frozenStateOf(stack, item, inventory)
+local function temperatureStateOf(stack, item, typeInfo, inventory)
     if stack.count == nil or stack.count <= 1 or not inventory
             or stack.itemIDs == nil then
-        if item.isFrozen ~= nil and item:isFrozen() then return 2 end
-        return 0
+        local frozen, side, burning = memberTemperature(item, typeInfo)
+        return frozen and 2 or 0, side, burning
     end
-    return stackFrozenState(stack, inventory)
+    return stackTemperatureState(stack, typeInfo, inventory)
 end
 
 local function totalStackWeight(stack, inventory)
@@ -303,6 +331,14 @@ local function typeDataFor(item, fullType)
         hasMedia = (item.getMediaData and item:getMediaData() ~= nil) or false,
     }
     typeInfo.readable = typeInfo.isLiterature or typeInfo.isMap or typeInfo.hasMedia
+
+    typeInfo.isCookable = typeInfo.isFood
+        and (item.isIsCookable ~= nil and item:isIsCookable()) or false
+
+    typeInfo.heatsAsItem = not typeInfo.isFood
+        and (item.isCookable ~= nil and item:isCookable())
+        and (item.getFluidContainer ~= nil and item:getFluidContainer() ~= nil)
+        or false
     if typeInfo.isDrainable and item.getMaxUses then
         typeInfo.maxUses = item:getMaxUses()
     end
@@ -582,6 +618,16 @@ local function drawMark(view, markSet, x, y, w, h, fillColor, lineColor)
         fillColor.r, fillColor.g, fillColor.b)
 end
 
+local function drawCornerMark(view, name, vanillaPath, basePx, rightEdge, cellBottom,
+        fillColor, lineColor)
+    local markSet = markTextures(name, vanillaPath)
+    if not markSet then return rightEdge end
+    local markWidth, markHeight = markFit(markSet.fill, floor(basePx * Style.SCALE + 0.5))
+    drawMark(view, markSet, rightEdge - markWidth, cellBottom - markHeight - 3,
+        markWidth, markHeight, fillColor, lineColor)
+    return rightEdge - markWidth - 2
+end
+
 local function drawShadowedText(view, text, x, y, color, shadowColor)
     if shadowColor ~= nil then
         local shadowOffset = floor(Style.SCALE + 0.5)
@@ -637,20 +683,23 @@ function StackRenderer.draw(ctx)
     end
 
     local typeInfo = nil
-    local frozen = 0
+    local frozen, heatSide, burning = 0, 0, false
     if item then
         typeInfo = typeDataFor(item,
             stack.itemType or (item.getFullType and item:getFullType()) or "?")
-        if typeInfo.isFood then
-            frozen = frozenStateOf(stack, item, ctx.inventory)
+        if typeInfo.isFood or typeInfo.heatsAsItem then
+            frozen, heatSide, burning =
+                temperatureStateOf(stack, item, typeInfo, ctx.inventory)
         end
     end
 
     local cellTint = tint
     if unwanted then
         cellTint = colors.UNWANTED_CELL
-    elseif frozen == 2 then
+    elseif frozen == 2 or heatSide < 0 then
         cellTint = colors.FROZEN_CELL
+    elseif heatSide > 0 then
+        cellTint = colors.HOT_CELL
     end
     SlotRenderer.drawCell(ctx, cellTint)
 
@@ -756,29 +805,21 @@ function StackRenderer.draw(ctx)
         end
 
         local clearRight = x + cellSize - Style.BAR_INSET - 1
+        local cellBottom = y + cellSize
         local textRight = clearRight
         if readTick then
-            local markSet = markTextures("tick", "media/ui/Tick_Mark-10.png")
-            if markSet then
-                local markSize = floor(10 * Style.SCALE + 0.5)
-                local markWidth, markHeight = markFit(markSet.fill, markSize)
-                drawMark(view, markSet, clearRight - markWidth,
-                    y + cellSize - markHeight - 3, markWidth, markHeight,
-                    colors.READ_TICK, colors.READ_TICK_LINE)
-                textRight = clearRight - markWidth - 2
-            end
+            textRight = drawCornerMark(view, "tick", "media/ui/Tick_Mark-10.png", 10,
+                textRight, cellBottom, colors.READ_TICK, colors.READ_TICK_LINE)
         end
 
         if frozen > 0 then
-            local markSet = markTextures("frozen", "media/ui/icon_frozen.png")
-            if markSet then
-                local markSize = floor(FROZEN_MARK_PX * Style.SCALE + 0.5)
-                local markWidth, markHeight = markFit(markSet.fill, markSize)
-                drawMark(view, markSet, textRight - markWidth,
-                    y + cellSize - markHeight - 3, markWidth, markHeight,
-                    colors.FROZEN, colors.FROZEN_LINE)
-                textRight = textRight - markWidth - 2
-            end
+            textRight = drawCornerMark(view, "frozen", "media/ui/icon_frozen.png",
+                CORNER_MARK_PX, textRight, cellBottom, colors.FROZEN, colors.FROZEN_LINE)
+        end
+
+        if burning then
+            textRight = drawCornerMark(view, "burning", nil, CORNER_MARK_PX,
+                textRight, cellBottom, colors.BURNING, colors.BURNING_LINE)
         end
 
         local weightIcon = nil

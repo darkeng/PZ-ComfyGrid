@@ -156,5 +156,10 @@
     "IGUI_ComfyGrid_OptMultiSelectMod": "Marcar várias casas com",
     "IGUI_ComfyGrid_OptMultiSelectModTip": "Mantenha pressionado ao clicar para marcar várias casas, ou arraste para selecioná-las em bloco.",
     "IGUI_ComfyGrid_PadInsteadMultiSelect": "O controle usa L3",
-    "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Com controle, as casas são marcadas com o botão do analógico esquerdo. Desative o controle para escolher um modificador novamente."
+    "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Com controle, as casas são marcadas com o botão do analógico esquerdo. Desative o controle para escolher um modificador novamente.",
+    "IGUI_ComfyGrid_OptAutoRebait": "Repor a isca",
+    "IGUI_ComfyGrid_OptAutoRebaitTip": "A isca perdida na pesca é reposta com outra igual do seu inventário.",
+    "IGUI_ComfyGrid_Rebaiting": "Colocando outra isca",
+    "IGUI_ComfyGrid_OptWeaponToHotbar": "Armas equipadas na barra de atalhos",
+    "IGUI_ComfyGrid_OptWeaponToHotbarTip": "Uma arma que você equipa com a tecla de usar ou equipar, ou arrastando para uma mão, também ocupa um espaço livre e compatível da barra de atalhos. Nunca substitui o que já estiver lá."
 }

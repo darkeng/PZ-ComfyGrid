@@ -8,8 +8,8 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 - **Square tiles** that reflow to your window width — no more scrolling a text list.
 - **Auto-stacking** — identical items share one tile with a counter whatever their state (fresh and stale food, a full and a half-used roll of tape); weapons, tools and heavy gear keep a tile of their own, while throwables pile up. One option restores strict grouping by state, another lets heavy gear stack too.
-- **Status at a glance** — a colour bar for freshness, condition, uses and fluid; rounds on guns and magazines; reading progress on books; a weight icon that reddens with the load; and a torn red cross over anything broken. The bar can be switched off.
-- **Marks that answer a question** — a star on your favourites, a snowflake on frozen food, a tick on what you have already read, and the volume number on a skill book, dimmed while your level is too low to read it.
+- **Status at a glance** — a colour bar for freshness, condition, uses and fluid; rounds on guns and magazines; reading progress on books; a weight icon that reddens with the load; a warm or cold tint on hot and chilled food; and a torn red cross over anything broken. The bar can be switched off.
+- **Marks that answer a question** — a star on your favourites, a snowflake on frozen food, a flame on food that is burning, a tick on what you have already read, and the volume number on a skill book, dimmed while your level is too low to read it.
 - **Sharper icons** — the base game's item art is rebuilt at twice its size for the tiles and the container buttons, which scale with the interface too, so neither magnifies a 32px sprite. The palette of the original art is kept exactly; icons added by other mods are left alone.
 - **Your arrangement stays put** — widen or narrow the window and the tiles keep the places you gave them, instead of reflowing like text.
 - **Stack inspector** — left-click a stack to see every item on its own, and drag one onto another to top it up.
@@ -18,7 +18,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 - **Sections** — your pockets, every worn bag and every container within reach, stacked in one panel. No tabs.
 - **Fold a section** — the arrow by a section's name in your own inventory folds it down to its header; drop an item on a folded header to put it inside.
-- **Verbs on every header** — sort into category islands, pull in more of the same, spread across the open containers, send the lot over, or tip it on the floor.
+- **Verbs on every header** — sort into category islands, alphabetical inside each, pull in more of the same, spread across the open containers, send the lot over, or tip it on the floor.
 - **The object's own buttons too** — ovens, washers, campfires, mannequins and car boots put their controls right on their header.
 - **Reorder** — drag a container button to move it; the wheel cycles them in that same order.
 - **The one you have selected stands out** — its section wears a lit header and an outline, and clicking a section name selects that container.
@@ -30,21 +30,21 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 - **Equipment window** — docked beside the inventory, with a live 3D character and every socket on the body part it dresses; drag a corner to make it bigger or smaller. Or a flat silhouette, or a row inside the inventory.
 - **Layer drawer** — click a socket to see everything you wear on that zone.
-- **The hotbar, redressed** — the bar at the bottom of the screen wears the same tiles, and an empty slot shows what belongs in it.
+- **The hotbar, redressed** — the bar at the bottom of the screen wears the same tiles, and an empty slot shows what belongs in it. A weapon you equip takes a free slot that fits it, and the move gesture or **E** over a slot takes the item off.
 
 ## Controls
 
 - **Drag** to move or swap; **Ctrl+click** or **Ctrl+drag** to multi-select; **Shift+click** quick-moves; hold a drag over a container to open it.
 - **A group keeps its shape** — drag several marked tiles and they land in the same arrangement they had, in this container or another.
 - **Pick your own gestures** — what moves an item (Shift, Ctrl, Alt or a double click) and what marks several tiles (Ctrl, Shift or Alt) are both yours to choose.
-- **Drop to use** — rounds onto a magazine, a magazine or sight onto its gun, a bottle onto another to pour, a half-used item onto its twin to combine. Right-click *Pour into* does it from any container.
+- **Drop to use** — rounds onto a magazine, a magazine or sight onto its gun, a bottle onto another to pour, a half-used item onto its twin to combine, bait, a hook or line onto a fishing rod. Right-click *Pour into* does it from any container. Bait lost while fishing goes back on from your inventory, the same bait only.
 - **E** over gear equips it, and over gear you already wear it takes it off; if the socket is taken, they swap. It also eats, drinks, opens, smokes and reads — and takes only the portion you need.
 - **Rebind that key from the inventory itself**, combinations included.
 - **Full controller support** — a cell cursor over every surface, one button per action, on-screen hints, stack splitting from the inspector. The stack viewer, the bag window and the mod's own settings panel all answer the pad. Steam Deck friendly.
 
 ## Set up in game
 
-The gear in the title bar opens the mod's own panel, **split into tabs**: **five colour themes** — Comfy Grid, Dark, Slate, Olive and Sakura — plus interface scale, grid density, how many empty slots a container shows, stacking by type or state, stacking heavy items, instant transfers, and where the equipment lives. The equipment and the on-screen hotbar can be turned off altogether. The panel is a **window you can move and leave open**, so you can change a setting and watch the inventory change behind it. The column of container buttons can sit on the **left** instead of the right, with its own switch for each window. Every option applies live, a tooltip says what it does, and the foot of the panel shows which version of the mod you are running.
+The gear in the title bar opens the mod's own panel, **split into tabs**: **five colour themes** — Comfy Grid, Dark, Slate, Olive and Sakura — plus interface scale, grid density, how many empty slots a container shows, stacking by type or state, stacking heavy items, replacing lost bait, putting equipped weapons on the hotbar, instant transfers, and where the equipment lives. The equipment and the on-screen hotbar can be turned off altogether. The panel is a **window you can move and leave open**, so you can change a setting and watch the inventory change behind it. The column of container buttons can sit on the **left** instead of the right, with its own switch for each window. Every option applies live, a tooltip says what it does, and the foot of the panel shows which version of the mod you are running.
 
 ![Themes](workshop/card_14_themes.png)
 

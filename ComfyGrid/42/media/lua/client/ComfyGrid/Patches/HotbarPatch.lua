@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.6
+    Version: 1.9.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -15,6 +15,7 @@ require "ComfyGrid/UI/HotbarGhosts"
 require "ComfyGrid/UI/Icons"
 require "ComfyGrid/UI/SlotRenderer"
 require "ComfyGrid/UI/StackRenderer"
+require "ComfyGrid/Interact/Unequip"
 
 local Input = ComfyGrid.Core.Input
 
@@ -316,6 +317,16 @@ end
 
 ComfyGrid._hotbarRender = renderComfyBar
 
+local function transferClaims(self, x, y)
+    if ISMouseDrag ~= nil and ISMouseDrag.dragging ~= nil then return false end
+    local slotIndex = self:getSlotIndexAt(x, y)
+    local item = slotIndex ~= nil and self.attachedItems ~= nil
+        and self.attachedItems[slotIndex] or nil
+    if item == nil then return false end
+    return ComfyGrid.Interact.Unequip.pressClaims(item, self.playerNum, "detach")
+end
+ComfyGrid._hotbarTransferClaim = transferClaims
+
 Events.OnGameBoot.Add(function()
 
     if ISHotbar._comfyPatched then return end
@@ -345,5 +356,15 @@ Events.OnGameBoot.Add(function()
     function ISHotbar:setSizeAndPosition()
         pcall(applyMetrics, self)
         return og_size(self)
+    end
+
+    local og_mouseUp = ISHotbar.onMouseUp
+    function ISHotbar:onMouseUp(x, y)
+        local claim = ComfyGrid._hotbarTransferClaim
+        if claim ~= nil then
+            local ok, claimed = pcall(claim, self, x, y)
+            if ok and claimed then return true end
+        end
+        return og_mouseUp(self, x, y)
     end
 end)

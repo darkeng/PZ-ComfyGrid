@@ -156,5 +156,10 @@
     "IGUI_ComfyGrid_OptMultiSelectMod": "Выделять несколько ячеек",
     "IGUI_ComfyGrid_OptMultiSelectModTip": "Удерживайте при клике, чтобы выделить несколько ячеек, или протяните рамкой.",
     "IGUI_ComfyGrid_PadInsteadMultiSelect": "Геймпад: L3",
-    "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "С геймпадом ячейки отмечаются кнопкой левого стика. Отключите геймпад, чтобы снова выбрать модификатор."
+    "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "С геймпадом ячейки отмечаются кнопкой левого стика. Отключите геймпад, чтобы снова выбрать модификатор.",
+    "IGUI_ComfyGrid_OptAutoRebait": "Заменять потерянную наживку",
+    "IGUI_ComfyGrid_OptAutoRebaitTip": "Наживка, потерянная на рыбалке, заменяется такой же из вашего инвентаря.",
+    "IGUI_ComfyGrid_Rebaiting": "Насаживаю новую наживку",
+    "IGUI_ComfyGrid_OptWeaponToHotbar": "Экипированное оружие на панель быстрого доступа",
+    "IGUI_ComfyGrid_OptWeaponToHotbarTip": "Оружие, взятое в руки клавишей использования или перетаскиванием в руку, также занимает свободную подходящую ячейку панели быстрого доступа. Занятые ячейки не заменяются."
 }

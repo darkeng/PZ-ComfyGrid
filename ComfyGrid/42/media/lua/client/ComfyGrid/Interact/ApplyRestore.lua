@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.6
+    Version: 1.9.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -258,10 +258,8 @@ local function restoreActionClass()
     RestoreAction.isValid = function() return true end
     RestoreAction.waitToStart = function() return false end
     function RestoreAction:update()
-
-        self:forceStop()
-    end
-    function RestoreAction:start()
+        if self.comfyRestored then return end
+        self.comfyRestored = true
         self:beginAddingActions()
         local ok, err = pcall(restore, self.comfyPlan)
         if not ok then

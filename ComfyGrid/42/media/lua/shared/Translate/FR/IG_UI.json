@@ -156,5 +156,10 @@
     "IGUI_ComfyGrid_OptMultiSelectMod": "Marquer plusieurs cases avec",
     "IGUI_ComfyGrid_OptMultiSelectModTip": "À maintenir en cliquant pour marquer plusieurs cases, ou à faire glisser pour les encadrer.",
     "IGUI_ComfyGrid_PadInsteadMultiSelect": "La manette utilise L3",
-    "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Avec une manette, les cases se marquent avec le bouton du stick gauche. Désactivez la manette pour choisir à nouveau un modificateur."
+    "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Avec une manette, les cases se marquent avec le bouton du stick gauche. Désactivez la manette pour choisir à nouveau un modificateur.",
+    "IGUI_ComfyGrid_OptAutoRebait": "Remplacer l'appât perdu",
+    "IGUI_ComfyGrid_OptAutoRebaitTip": "L'appât perdu en pêchant est remplacé par un appât identique de votre inventaire.",
+    "IGUI_ComfyGrid_Rebaiting": "Nouvel appât en place",
+    "IGUI_ComfyGrid_OptWeaponToHotbar": "Armes équipées dans la barre de raccourcis",
+    "IGUI_ComfyGrid_OptWeaponToHotbarTip": "Une arme équipée avec la touche utiliser ou équiper, ou glissée dans une main, prend aussi un emplacement libre et compatible de la barre de raccourcis. Elle ne remplace jamais ce qui s'y trouve déjà."
 }

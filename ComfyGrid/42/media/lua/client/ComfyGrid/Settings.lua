@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.6
+    Version: 1.9.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -22,6 +22,10 @@ Settings.defaults = {
     SCALE = 1,
     SLOTS_PER_CAPACITY = 2,
     INSTANT_TRANSFER = false,
+
+    AUTO_REBAIT = true,
+
+    WEAPON_TO_HOTBAR = true,
     PLAYER_LAYOUT = "compact",
 
     LOOT_LAYOUT = "sections",
@@ -225,6 +229,17 @@ local OPTION_DEFS = {
       padOff = "The pad uses Y",
       padOffTipKey = "IGUI_ComfyGrid_PadInsteadQuickEquipTip",
       padOffTip = "A joypad uses and equips from the Y menu. Turn the joypad off to bind a key again." },
+
+    { key = "AUTO_REBAIT",        kind = "tickbox", group = "controls",
+      nameKey = "IGUI_ComfyGrid_OptAutoRebait",
+      tipKey = "IGUI_ComfyGrid_OptAutoRebaitTip",
+      tooltip = "Bait lost while fishing is replaced with the same bait from your inventory." },
+
+    { key = "WEAPON_TO_HOTBAR",   kind = "tickbox", group = "controls",
+      nameKey = "IGUI_ComfyGrid_OptWeaponToHotbar",
+      tipKey = "IGUI_ComfyGrid_OptWeaponToHotbarTip",
+      tooltip = "A weapon you equip with the use key or by dragging it to a hand also takes"
+          .. " a free hotbar slot that fits it. It never replaces what is already there." },
 
     { key = "INSTANT_TRANSFER",   kind = "tickbox", group = "controls",
       nameKey = "IGUI_ComfyGrid_OptInstantTransfer",

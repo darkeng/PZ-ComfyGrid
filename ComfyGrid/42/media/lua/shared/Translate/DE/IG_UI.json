@@ -156,5 +156,10 @@
     "IGUI_ComfyGrid_OptMultiSelectMod": "Mehrere Felder markieren mit",
     "IGUI_ComfyGrid_OptMultiSelectModTip": "Beim Klicken gedrückt halten, um mehrere Felder zu markieren, oder ziehen, um sie einzurahmen.",
     "IGUI_ComfyGrid_PadInsteadMultiSelect": "Gamepad nutzt L3",
-    "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Mit Gamepad werden Felder mit dem linken Stick-Knopf markiert. Schalte das Gamepad ab, um wieder einen Modifikator zu wählen."
+    "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Mit Gamepad werden Felder mit dem linken Stick-Knopf markiert. Schalte das Gamepad ab, um wieder einen Modifikator zu wählen.",
+    "IGUI_ComfyGrid_OptAutoRebait": "Verlorenen Köder ersetzen",
+    "IGUI_ComfyGrid_OptAutoRebaitTip": "Beim Angeln verlorener Köder wird durch den gleichen Köder aus deinem Inventar ersetzt.",
+    "IGUI_ComfyGrid_Rebaiting": "Neuer Köder kommt dran",
+    "IGUI_ComfyGrid_OptWeaponToHotbar": "Ausgerüstete Waffen in die Hotbar",
+    "IGUI_ComfyGrid_OptWeaponToHotbarTip": "Eine Waffe, die du mit der Taste zum Benutzen oder Anlegen oder durch Ziehen in eine Hand ausrüstest, belegt auch einen freien, passenden Hotbar-Platz. Was dort schon ist, wird nie ersetzt."
 }

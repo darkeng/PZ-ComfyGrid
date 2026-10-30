@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.6
+    Version: 1.9.7
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -13,6 +13,7 @@ require "ComfyGrid/Model/StackRules"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/Interact/ApplyRestore"
 require "ComfyGrid/Interact/PourScheduler"
+require "ComfyGrid/Interact/FishingRig"
 
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Interact = ComfyGrid.Interact or {}
@@ -24,6 +25,7 @@ local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local ItemStack = ComfyGrid.Model.ItemStack
 local ApplyRestore = ComfyGrid.Interact.ApplyRestore
 local PourScheduler = ComfyGrid.Interact.PourScheduler
+local FishingRig = ComfyGrid.Interact.FishingRig
 
 ItemApply.KIND_FLUID = "fluid"
 ItemApply.KIND_AMMO_MAG = "ammoMag"
@@ -31,6 +33,9 @@ ItemApply.KIND_AMMO_GUN = "ammoGun"
 ItemApply.KIND_MAG_GUN = "magGun"
 ItemApply.KIND_PART_GUN = "partGun"
 ItemApply.KIND_DRAINABLE = "drainable"
+ItemApply.KIND_BAIT_ROD = "baitRod"
+ItemApply.KIND_HOOK_ROD = "hookRod"
+ItemApply.KIND_LINE_ROD = "lineRod"
 
 local function fluidOf(item)
     if item.getFluidContainer == nil then return nil end
@@ -71,6 +76,29 @@ local function partFits(part, weapon, playerObj)
     return okP and mounted == nil
 end
 
+local function fishingKindOf(src, rod, playerObj)
+    if rod.isBroken ~= nil and rod:isBroken() then return nil end
+    if FishingRig.isFishing(playerObj) then return nil end
+    local rig = rod:getModData()
+    local srcType = src:getFullType()
+
+    if FishingRig.isBait(src) then
+        if rig.fishing_Lure ~= nil then return nil end
+        return ItemApply.KIND_BAIT_ROD
+    end
+
+    if FishingRig.hasTag(src, "FISHING_HOOK") then
+        if rig.fishing_HookType == srcType then return nil end
+        return ItemApply.KIND_HOOK_ROD
+    end
+    if FishingRig.hasTag(src, "FISHING_LINE") then
+        local condition = tonumber(rig.fishing_LineCondition) or 1
+        if rig.fishing_LineType == srcType and condition >= 1 then return nil end
+        return ItemApply.KIND_LINE_ROD
+    end
+    return nil
+end
+
 function ItemApply.classify(src, dst, playerObj, insideStack)
     if src == nil or dst == nil or src == dst then return nil end
     if playerObj == nil then return nil end
@@ -92,6 +120,10 @@ function ItemApply.classify(src, dst, playerObj, insideStack)
     end
 
     if instanceof(dst, "HandWeapon") then
+
+        if FishingRig.isRod(dst) then
+            return fishingKindOf(src, dst, playerObj)
+        end
         local magType = dst.getMagazineType ~= nil and dst:getMagazineType() or nil
         local firearm = (magType ~= nil and magType ~= "") or isFirearm(dst)
         if magType ~= nil and magType ~= "" then
@@ -214,6 +246,63 @@ local function performFluid(src, dst, playerObj)
     return true
 end
 
+local TACKLE_ACTIONS = {
+    [ItemApply.KIND_BAIT_ROD] = "AIAttachLureAction",
+    [ItemApply.KIND_HOOK_ROD] = "ISChangeFishingRodEquip",
+    [ItemApply.KIND_LINE_ROD] = "ISChangeFishingRodEquip",
+}
+
+local consumingActionClasses = {}
+
+local function consumingActionClass(vanillaName, keptField)
+    local cached = consumingActionClasses[vanillaName]
+    if cached ~= nil then return cached end
+    local vanillaClass = _G[vanillaName]
+    if vanillaClass == nil or vanillaClass.derive == nil then return nil end
+    local derived = vanillaClass:derive(vanillaName)
+    derived.complete = vanillaClass.complete
+    function derived:isValid()
+
+        if isClient() and self:isStarted() then
+            local kept = self[keptField]
+            return kept ~= nil
+                and self.character:getInventory():containsID(kept:getID())
+        end
+        return vanillaClass.isValid(self)
+    end
+    consumingActionClasses[vanillaName] = derived
+    return derived
+end
+
+local function queueTackle(actionName, playerObj, rod, tackle)
+    local actionClass = consumingActionClass(actionName, "rod")
+    if actionClass == nil then return false end
+    local playerNum = playerObj:getPlayerNum()
+    ISInventoryPaneContextMenu.transferIfNeeded(playerObj, tackle)
+    ISInventoryPaneContextMenu.equipWeapon(tackle, false, false, playerNum)
+    ISInventoryPaneContextMenu.equipWeapon(rod, true, false, playerNum)
+    ISTimedActionQueue.add(actionClass:new(playerObj, rod, tackle))
+    return true
+end
+
+local function isNotBroken(item) return not item:isBroken() end
+
+local function queuePartMount(playerObj, weapon, part)
+    local actionClass = consumingActionClass("ISUpgradeWeapon", "weapon")
+    if actionClass == nil then return false end
+    local playerNum = playerObj:getPlayerNum()
+    ISInventoryPaneContextMenu.transferIfNeeded(playerObj, weapon)
+    ISInventoryPaneContextMenu.transferIfNeeded(playerObj, part)
+    ISInventoryPaneContextMenu.equipWeapon(part, false, false, playerNum)
+    local screwdriver = playerObj:getInventory():getFirstTagEvalRecurse(
+        ItemTag.SCREWDRIVER, isNotBroken)
+    if screwdriver ~= nil then
+        ISInventoryPaneContextMenu.equipWeapon(screwdriver, true, false, playerNum)
+    end
+    ISTimedActionQueue.add(actionClass:new(playerObj, weapon, part))
+    return true
+end
+
 function ItemApply.perform(kind, srcItems, dst, playerObj)
     if kind == nil or srcItems == nil or #srcItems == 0 or dst == nil
             or playerObj == nil then
@@ -223,8 +312,15 @@ function ItemApply.perform(kind, srcItems, dst, playerObj)
     if kind == ItemApply.KIND_FLUID then
         return performFluid(src, dst, playerObj)
     end
-    local plan = ApplyRestore.snapshot(dst, playerObj,
-        kind == ItemApply.KIND_DRAINABLE and srcItems or nil,
+
+    local tackleAction = TACKLE_ACTIONS[kind]
+    local extraItems = nil
+    if kind == ItemApply.KIND_DRAINABLE then
+        extraItems = srcItems
+    elseif tackleAction ~= nil then
+        extraItems = { src }
+    end
+    local plan = ApplyRestore.snapshot(dst, playerObj, extraItems,
         kind == ItemApply.KIND_PART_GUN)
     local queued = false
     if kind == ItemApply.KIND_DRAINABLE then
@@ -255,8 +351,9 @@ function ItemApply.perform(kind, srcItems, dst, playerObj)
         ISInventoryPaneContextMenu.onInsertMagazine(playerObj, dst, src)
         queued = true
     elseif kind == ItemApply.KIND_PART_GUN then
-        ISInventoryPaneContextMenu.onUpgradeWeapon(dst, src, playerObj)
-        queued = true
+        queued = queuePartMount(playerObj, dst, src)
+    elseif tackleAction ~= nil then
+        queued = queueTackle(tackleAction, playerObj, dst, src)
     end
     if queued then
         ApplyRestore.queue(plan, playerObj)
