@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.7
+    Version: 1.9.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -69,7 +69,7 @@ local isFoodType = {}
 local MIN_COLS = 2
 local MAX_COLS = 32
 
-local SPARE_TWO = 2
+local SPARE_COUNT = { two = 2, one = 1 }
 
 local DIRTY_STORM_FRAMES = 3
 local DIRTY_STORM_GAP_MS = 100
@@ -90,6 +90,7 @@ local function computeDims(self)
     local rows
     local limit = nil
     local spareSlots = self.spareSlotsEligible and Settings.get("SPARE_SLOTS") or "all"
+    local spareCount = SPARE_COUNT[spareSlots]
     if spareSlots == "row" then
 
         rows = math.ceil(grid:contentSlots() / cols)
@@ -97,12 +98,12 @@ local function computeDims(self)
                 grid.changeCount) then
             rows = rows + 1
         end
-    elseif spareSlots == "two" then
+    elseif spareCount ~= nil then
 
         limit = grid:contentSlots()
         if not Capacity.isFull(self.model.inventory, self.playerNum,
                 grid.changeCount) then
-            limit = limit + SPARE_TWO
+            limit = limit + spareCount
         end
         if limit < 1 then limit = 1 end
         rows = math.ceil(limit / cols)
@@ -181,6 +182,9 @@ function GridView:new(x, y, model, playerNum)
     view.marqueeX1, view.marqueeY1 = 0, 0
     view.marqueePressStack = nil
     view.marqueeBase = nil
+
+    view.rangeAnchorSlot = nil
+    view.rangePress = false
     return view
 end
 
@@ -210,10 +214,31 @@ local function toggleSelected(self, stack)
     end
 end
 
+local function selectSlotRange(self, lowSlot, highSlot)
+    local grid = self.model ~= nil and self.model.grid or nil
+    if grid == nil then return 0 end
+    local newSelection, count = {}, 0
+    local stacks = grid.data.stacks
+    for i = 1, #stacks do
+        local stack = stacks[i]
+        local slot = stack.slot
+        if slot ~= nil and (lowSlot == nil or slot >= lowSlot)
+                and (highSlot == nil or slot <= highSlot) then
+            newSelection[stack] = true
+            count = count + 1
+        end
+    end
+    self.selection = count > 0 and newSelection or nil
+    self.selectionCount = count
+    return count
+end
+
 local function syncSelection(self)
     local grid = self.model ~= nil and self.model.grid or nil
     if grid ~= self.selGrid then
         clearSelection(self)
+
+        self.rangeAnchorSlot = nil
         self.selGrid = grid
         self.selStamp = grid ~= nil and grid.changeCount or -1
         return
@@ -333,6 +358,10 @@ end
 
 local function transferModifierHeld()
     return askSettings("transferModifierHeld")
+end
+
+local function rangeSelectHeld()
+    return askSettings("rangeSelectHeld")
 end
 
 function GridView:prerender()
@@ -749,6 +778,11 @@ function GridView:padToggleSelect(stack)
     toggleSelected(self, stack)
 end
 
+function GridView:selectAllStacks()
+    syncSelection(self)
+    return selectSlotRange(self, nil, nil)
+end
+
 function GridView:padClearSelection()
     if self.selectionCount <= 0 then return false end
     clearSelection(self)
@@ -882,6 +916,8 @@ end
 local function endMarquee(self, wasClickable)
     if wasClickable and not self.marqueeActive and self.marqueePressStack ~= nil then
         toggleSelected(self, self.marqueePressStack)
+
+        self.rangeAnchorSlot = self.marqueePressStack.slot
     end
     self.marqueeArmed = false
     self.marqueeActive = false
@@ -906,6 +942,8 @@ local function mouseDownImpl(self, x, y)
     self.pressedStack = nil
     self.pressedSlot = nil
     self.dragDidStart = false
+
+    self.rangePress = false
     local stack, slot = stackAtPixel(self, x, y)
 
     if multiSelectHeld() then
@@ -920,6 +958,22 @@ local function mouseDownImpl(self, x, y)
             for selectedStack in pairs(self.selection) do base[selectedStack] = true end
         end
         self.marqueeBase = base
+        return
+    end
+
+    if rangeSelectHeld() then
+        syncSelection(self)
+
+        self.rangePress = true
+        self.pendingClick = nil
+        if self.rangeAnchorSlot ~= nil and slot ~= nil then
+            selectSlotRange(self, math.min(self.rangeAnchorSlot, slot),
+                math.max(self.rangeAnchorSlot, slot))
+        elseif stack ~= nil then
+            clearSelection(self)
+            toggleSelected(self, stack)
+            self.rangeAnchorSlot = stack.slot
+        end
         return
     end
     if stack == nil then
@@ -977,6 +1031,11 @@ local function mouseUpImpl(self, x, y)
 
     if self.marqueeArmed then endMarquee(self, true); return end
 
+    if self.rangePress then
+        self.rangePress = false
+        return
+    end
+
     if not self.dragDidStart and doubleClickOnRelease(self, x, y) then return end
     if DragAndDrop.isDragging() then
 
@@ -999,6 +1058,8 @@ local function mouseUpImpl(self, x, y)
             if not (gestureIsDoubleClick() and isSelected(self, stack)) then
                 clearSelection(self)
             end
+
+            self.rangeAnchorSlot = stack.slot
             self:onStackClicked(stack, x, y)
         end
     end
@@ -1009,6 +1070,7 @@ end
 local function mouseUpOutsideImpl(self, _x, _y)
 
     if self.marqueeArmed then endMarquee(self, false); return end
+    self.rangePress = false
     if not DragAndDrop.isDragOwner(self) then return end
     if DragAndDrop.isDragging() then
 

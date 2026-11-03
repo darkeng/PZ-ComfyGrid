@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.7
+    Version: 1.9.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -165,18 +165,29 @@ function SearchField:layoutIn(strip, leftEdge, rightEdge)
     if self.placed then self:drawPlate(strip) end
 end
 
+local function fieldMetrics(band, font)
+    local sideMargin = scaledPixels(6)
+    local textInset = scaledPixels(8)
+    local lineHeight = lineHeightOf(font)
+    local plateHeight = math.min(band - 2,
+        math.max(lineHeight + 2, band - 2 * scaledPixels(4)))
+    local clearSize = math.max(8, plateHeight - scaledPixels(8))
+    local minimumWidth = placeholderPixels() + 2 * textInset + clearSize
+    return plateHeight, clearSize, minimumWidth, sideMargin, textInset, lineHeight
+end
+
+function SearchField.roomNeeded(band)
+    local _, _, minimumWidth, sideMargin = fieldMetrics(band, Style.FONT or UIFont.Small)
+    return minimumWidth + 2 * sideMargin
+end
+
 function SearchField:computeLayout(strip, leftEdge, rightEdge)
 
     local headerFont = Style.FONT or UIFont.Small
     if self.font ~= headerFont then self:setFont(headerFont) end
     local band = strip.height
-    local sideMargin = scaledPixels(6)
-    local textInset = scaledPixels(8)
-    local lineHeight = lineHeightOf(self.font)
-    local plateHeight = math.min(band - 2,
-        math.max(lineHeight + 2, band - 2 * scaledPixels(4)))
-    local clearSize = math.max(8, plateHeight - scaledPixels(8))
-    local minimumWidth = placeholderPixels() + 2 * textInset + clearSize
+    local plateHeight, clearSize, minimumWidth, sideMargin, textInset, lineHeight =
+        fieldMetrics(band, self.font)
     local freeLeft = leftEdge + sideMargin
     local freeRight = rightEdge - sideMargin
     local wantedWidth = math.floor(strip.width * WIDTH_SHARE)

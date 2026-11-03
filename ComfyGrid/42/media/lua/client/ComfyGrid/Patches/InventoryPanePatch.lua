@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.7
+    Version: 1.9.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -110,6 +110,14 @@ Events.OnGameBoot.Add(function()
     function ISInventoryPane:render()
         if self.mode ~= "comfy" then return og_render(self) end
 
+    end
+
+    local og_update = ISInventoryPane.update
+    function ISInventoryPane:update()
+        og_update(self)
+        if self.mode ~= "comfy" then return end
+        local SelectAll = ComfyGrid.Interact and ComfyGrid.Interact.SelectAll
+        if SelectAll ~= nil then SelectAll.onPaneUpdate(self) end
     end
 
     local og_updateTooltip = ISInventoryPane.updateTooltip

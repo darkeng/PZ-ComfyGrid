@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.7
+    Version: 1.9.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -31,6 +31,62 @@ local function lineHeight()
     return math.max(Style.FONT_H or 14, 14) + 3
 end
 
+local function breaksAnywhere(code)
+    if code >= 0x3130 and code <= 0x318F then return false end
+    return (code >= 0x2E80 and code <= 0x9FFF)
+        or (code >= 0xF900 and code <= 0xFAFF)
+        or (code >= 0xFF00 and code <= 0xFFEF)
+end
+
+local NO_LINE_START = {}
+for _, code in ipairs({
+    0x3001, 0x3002, 0xFF0C, 0xFF0E, 0x30FB, 0xFF1A, 0xFF1B, 0xFF1F, 0xFF01,
+    0x30FC, 0x300D, 0x300F, 0xFF09, 0x3011, 0x3015, 0x3009, 0x300B,
+    0x3041, 0x3043, 0x3045, 0x3047, 0x3049, 0x3063, 0x3083, 0x3085, 0x3087,
+    0x308E, 0x30A1, 0x30A3, 0x30A5, 0x30A7, 0x30A9, 0x30C3, 0x30E3, 0x30E5,
+    0x30E7, 0x30EE, 0x30F5, 0x30F6,
+    0x21, 0x29, 0x2C, 0x2E, 0x3A, 0x3B, 0x3F, 0x5D, 0x7D,
+}) do NO_LINE_START[code] = true end
+local NO_LINE_END = {}
+for _, code in ipairs({
+    0x300C, 0x300E, 0xFF08, 0x3010, 0x3014, 0x3008, 0x300A, 0x28, 0x5B,
+}) do NO_LINE_END[code] = true end
+
+local function piecesOf(paragraph, out)
+    local current, currentSpaced = nil, false
+    local pendingSpace = false
+    local breakAfter, holdNext = false, false
+    for i = 1, #paragraph do
+        local char = string.sub(paragraph, i, i)
+        if char == " " or char == "\t" then
+            if current ~= nil then
+                out[#out + 1] = { text = current, spaced = currentSpaced }
+                current = nil
+            end
+            pendingSpace, holdNext = true, false
+        else
+            local code = string.byte(char)
+            local anywhere = breaksAnywhere(code)
+            local startsNew = current == nil or pendingSpace
+                or (not holdNext and not NO_LINE_START[code]
+                    and (breakAfter or anywhere))
+            if startsNew then
+                if current ~= nil then
+                    out[#out + 1] = { text = current, spaced = currentSpaced }
+                end
+                current, currentSpaced = char, pendingSpace
+            else
+                current = current .. char
+            end
+            pendingSpace = false
+            breakAfter = anywhere and not NO_LINE_END[code]
+            holdNext = NO_LINE_END[code] == true
+        end
+    end
+    if current ~= nil then out[#out + 1] = { text = current, spaced = currentSpaced } end
+    return out
+end
+
 local function wrap(text, maxW)
     local out = {}
     for paragraph in (tostring(text) .. "\n"):gmatch("([^\n]*)\n") do
@@ -38,13 +94,18 @@ local function wrap(text, maxW)
             out[#out + 1] = ""
         else
             local line = nil
-            for word in paragraph:gmatch("%S+") do
-                local candidate = line == nil and word or (line .. " " .. word)
-                if measure(candidate) <= maxW or line == nil then
+            local pieces = piecesOf(paragraph, {})
+            for i = 1, #pieces do
+                local piece = pieces[i]
+                local candidate = piece.text
+                if line ~= nil then
+                    candidate = line .. (piece.spaced and " " or "") .. piece.text
+                end
+                if line == nil or measure(candidate) <= maxW then
                     line = candidate
                 else
                     out[#out + 1] = line
-                    line = word
+                    line = piece.text
                 end
             end
             if line ~= nil then out[#out + 1] = line end

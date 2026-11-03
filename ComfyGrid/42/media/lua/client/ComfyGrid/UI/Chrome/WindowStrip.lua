@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.7
+    Version: 1.9.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -13,6 +13,7 @@ require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/Chrome/Chip"
 require "ComfyGrid/UI/Chrome/SearchField"
+require "ComfyGrid/UI/Chrome/CarryWeight"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 ComfyGrid.UI.Chrome = ComfyGrid.UI.Chrome or {}
@@ -91,7 +92,8 @@ local RIGHT_CHIPS = {
       when = function(page) return page.onCharacter == true end },
 }
 
-local DEFAULT_SPEC = { left = LEFT_CHIPS, right = RIGHT_CHIPS, search = true }
+local DEFAULT_SPEC = { left = LEFT_CHIPS, right = RIGHT_CHIPS, search = true,
+    carryWeight = true }
 
 local function chipWanted(def, page)
     return def.when == nil or def.when(page) == true
@@ -193,10 +195,25 @@ function WindowStrip:prerender()
             self.chipsLeft:add(def.id, def.tex(), tipOf(def, page))
         end
     end
-    if self.spec.search then self:layoutSearchField() end
+
+    local bandLeft = PAD + self.chipsLeft.consumed
+    local bandRight = self.width - PAD - self.chips.consumed
+    if self.spec.carryWeight then
+        local chrome = ComfyGrid.UI.Chrome
+        local CarryWeight = chrome ~= nil and chrome.CarryWeight or nil
+        local SearchField = chrome ~= nil and chrome.SearchField or nil
+        if CarryWeight ~= nil then
+            local searchNeeds = 0
+            if self.spec.search and SearchField ~= nil then
+                searchNeeds = SearchField.roomNeeded(self.height)
+            end
+            bandRight = CarryWeight.place(self, bandLeft, bandRight, searchNeeds)
+        end
+    end
+    if self.spec.search then self:layoutSearchField(bandLeft, bandRight) end
 end
 
-function WindowStrip:layoutSearchField()
+function WindowStrip:layoutSearchField(bandLeft, bandRight)
     local chrome = ComfyGrid.UI.Chrome
     local SearchField = chrome ~= nil and chrome.SearchField or nil
     if SearchField == nil then return end
@@ -209,8 +226,7 @@ function WindowStrip:layoutSearchField()
         SearchField.register(self.page, field)
     end
     field:applyPendingTerm()
-    field:layoutIn(self, PAD + self.chipsLeft.consumed,
-        self.width - PAD - self.chips.consumed)
+    field:layoutIn(self, bandLeft, bandRight)
 end
 
 local ACTIONS = {}

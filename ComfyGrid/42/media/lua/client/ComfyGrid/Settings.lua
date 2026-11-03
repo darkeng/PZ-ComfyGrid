@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.7
+    Version: 1.9.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -41,6 +41,8 @@ Settings.defaults = {
 
     CONTAINERS_LEFT_PLAYER = false,
     CONTAINERS_LEFT_LOOT = false,
+
+    TITLE_WEIGHT = true,
     HOTBAR_SECTION = false,
     HOTBAR_BAR = true,
     EQUIPMENT_VIEW = "window",
@@ -89,13 +91,15 @@ local OPTION_DEFS = {
       tooltip = "What the sort button arranges by." },
 
     { key = "SPARE_SLOTS",        kind = "choice", group = "style",
-      values = { "all", "row", "two" },
+      values = { "all", "row", "two", "one" },
       labelKeys = { "IGUI_ComfyGrid_SpareAll",
                     "IGUI_ComfyGrid_SpareRow",
-                    "IGUI_ComfyGrid_SpareTwo" },
+                    "IGUI_ComfyGrid_SpareTwo",
+                    "IGUI_ComfyGrid_SpareOne" },
       labels = { "Whole capacity",
                  "One free row",
-                 "Two free slots" },
+                 "Two free slots",
+                 "One free slot" },
       nameKey = "IGUI_ComfyGrid_OptSpareSlots",
       tipKey = "IGUI_ComfyGrid_OptSpareSlotsTip",
       tooltip = "How many empty slots each container shows after its items." },
@@ -154,6 +158,12 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptContainersLeftLoot",
       tipKey = "IGUI_ComfyGrid_OptContainersLeftLootTip",
       tooltip = "In the nearby-containers window, the column of container buttons moves to the left edge." },
+
+    { key = "TITLE_WEIGHT",       kind = "tickbox", group = "general",
+      nameKey = "IGUI_ComfyGrid_OptTitleWeight",
+      tipKey = "IGUI_ComfyGrid_OptTitleWeightTip",
+      tooltip = "The title bar of your inventory window shows the total weight you carry, "
+          .. "out of the most you can carry." },
     { key = "HOTBAR_SECTION",     kind = "tickbox", group = "general",
       nameKey = "IGUI_ComfyGrid_OptHotbarSection",
       tipKey = "IGUI_ComfyGrid_OptHotbarSectionTip",
@@ -318,6 +328,15 @@ end
 function Settings.transferModifierHeld()
     local Input = ComfyGrid.Core.Input
     return Input.transferModifierHeld(Settings.transferModifier())
+end
+
+function Settings.rangeSelectHeld()
+    local Input = ComfyGrid.Core.Input
+    local markModifier = Settings.multiSelectModifier()
+    if markModifier == "shift" or Settings.transferModifier() == "shift" then
+        return false
+    end
+    return Input.rangeSelectHeld(markModifier)
 end
 
 function Settings.tipFor(def)

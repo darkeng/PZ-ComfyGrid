@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.7
+    Version: 1.9.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -71,7 +71,10 @@ function Text.fitEllipsis(text, font, maxPx, maxCp)
 end
 
 function Text.formatLoad(load, capacity)
-    local loadText = string.format("%.1f", load)
-    loadText = loadText:gsub("%.0$", "")
-    return loadText .. "/" .. tostring(math.floor(capacity + 0.5))
+    return Text.formatWeight(load) .. "/" .. tostring(math.floor(capacity + 0.5))
+end
+
+function Text.formatWeight(load)
+    local loadText = string.format("%.1f", load):gsub("%.0$", "")
+    return loadText
 end

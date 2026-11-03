@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.7
+    Version: 1.9.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -43,6 +43,11 @@ end
 function Input.transferModifierHeld(mine)
     if mine == nil then return false end
     return Input.modifierHeld(mine)
+end
+
+function Input.rangeSelectHeld(markModifier)
+    if not Input.modifierHeld("shift") then return false end
+    return not Input.modifierHeld(markModifier)
 end
 
 function Input.hotbarOf(playerNum)

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.7
+    Version: 1.9.8
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -55,6 +55,31 @@ local function probeGrid(gridView)
     return model.grid:stackAt(slot), model.inventory
 end
 
+local boardScratch = {}
+local function boardsOf(pane)
+    table.wipe(boardScratch)
+    local host = pane.comfyHost
+    if host == nil or not host.panelShown then return boardScratch end
+    local strips = host.strips
+    local pocketsPanel = strips ~= nil and strips.pocketsPanel or nil
+    local islandGrids = pocketsPanel ~= nil and pocketsPanel.gridViews or nil
+    if islandGrids ~= nil then
+        for j = 1, #islandGrids do
+            if islandGrids[j] ~= nil then
+                boardScratch[#boardScratch + 1] = islandGrids[j]
+            end
+        end
+    end
+    local panels = host.panels
+    for i = 1, #panels do
+        local panel = panels[i]
+        if panel ~= nil and panel.gridView ~= nil then
+            boardScratch[#boardScratch + 1] = panel.gridView
+        end
+    end
+    return boardScratch
+end
+
 local function hoveredStack(pane)
 
     if overContainerWindow(pane) then
@@ -70,24 +95,9 @@ local function hoveredStack(pane)
         end
         return nil, nil
     end
-    local host = pane.comfyHost
-    if host == nil or not host.panelShown then return nil, nil end
-
-    local panels = host.panels
-
-    local strips = host.strips
-    local pocketsPanel = strips ~= nil and strips.pocketsPanel or nil
-    local islandGrids = pocketsPanel ~= nil and pocketsPanel.gridViews or nil
-    if islandGrids ~= nil then
-        for j = 1, #islandGrids do
-            local stack, inventory = probeGrid(islandGrids[j])
-            if inventory ~= nil then return stack, inventory end
-        end
-    end
-    for i = 1, #panels do
-        local panel = panels[i]
-        local stack, inventory = probeGrid(panel ~= nil and panel.gridView
-            or nil)
+    local boards = boardsOf(pane)
+    for i = 1, #boards do
+        local stack, inventory = probeGrid(boards[i])
         if inventory ~= nil then return stack, inventory end
     end
     return nil, nil
@@ -150,6 +160,20 @@ local function popupOf(pane)
             and layersPopup.current() or nil
     end
     if popup ~= nil and popup.hostPane == pane then return popup end
+    return nil
+end
+
+function Tooltip.hoveredBoardOf(pane)
+    if pane == nil or overContainerWindow(pane) then return nil end
+    local popup = popupOf(pane)
+    if popup ~= nil and popup.isMouseOver ~= nil and popup:isMouseOver() then
+        return nil
+    end
+    local boards = boardsOf(pane)
+    for i = 1, #boards do
+        local board = boards[i]
+        if board:isMouseOver() and board.model ~= nil then return board end
+    end
     return nil
 end
 

@@ -24,6 +24,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 - **The one you have selected stands out** — its section wears a lit header and an outline, and clicking a section name selects that container.
 - **One or all, in one click** — a button in the loot window's title bar switches between every container within reach and one at a time.
 - **Search** — a field in the header of the inventory window and the nearby containers window: matching items show a breathing animation in the current theme's colours, along with the bags, containers and sections that hold them.
+- **Your load in the title bar** — the inventory window's title bar shows the total weight you carry and the most you can carry. On a small window it makes room for the search field.
 - **Open a bag on the spot** — a backpack you are carrying opens in its own small window, without putting it on.
 
 ## Your character
@@ -34,9 +35,9 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 ## Controls
 
-- **Drag** to move or swap; **Ctrl+click** or **Ctrl+drag** to multi-select; **Shift+click** quick-moves; hold a drag over a container to open it.
+- **Drag** to move or swap; **Ctrl+click** or **Ctrl+drag** to multi-select, **Ctrl+A** to mark a whole container; **Shift+click** quick-moves; hold a drag over a container to open it.
 - **A group keeps its shape** — drag several marked tiles and they land in the same arrangement they had, in this container or another.
-- **Pick your own gestures** — what moves an item (Shift, Ctrl, Alt or a double click) and what marks several tiles (Ctrl, Shift or Alt) are both yours to choose.
+- **Pick your own gestures** — what moves an item (Shift, Ctrl, Alt or a double click) and what marks several tiles (Ctrl, Shift or Alt) are both yours to choose. With Shift free of both, Shift+click marks a range.
 - **Drop to use** — rounds onto a magazine, a magazine or sight onto its gun, a bottle onto another to pour, a half-used item onto its twin to combine, bait, a hook or line onto a fishing rod. Right-click *Pour into* does it from any container. Bait lost while fishing goes back on from your inventory, the same bait only.
 - **E** over gear equips it, and over gear you already wear it takes it off; if the socket is taken, they swap. It also eats, drinks, opens, smokes and reads — and takes only the portion you need.
 - **Rebind that key from the inventory itself**, combinations included.
@@ -44,11 +45,11 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 ## Set up in game
 
-The gear in the title bar opens the mod's own panel, **split into tabs**: **five colour themes** — Comfy Grid, Dark, Slate, Olive and Sakura — plus interface scale, grid density, how many empty slots a container shows, stacking by type or state, stacking heavy items, replacing lost bait, putting equipped weapons on the hotbar, instant transfers, and where the equipment lives. The equipment and the on-screen hotbar can be turned off altogether. The panel is a **window you can move and leave open**, so you can change a setting and watch the inventory change behind it. The column of container buttons can sit on the **left** instead of the right, with its own switch for each window. Every option applies live, a tooltip says what it does, and the foot of the panel shows which version of the mod you are running.
+The gear in the title bar opens the mod's own panel, **split into tabs**: **five colour themes** — Comfy Grid, Dark, Slate, Olive and Sakura — plus interface scale, grid density, how many empty slots a container shows (down to a single one), stacking by type or state, stacking heavy items, replacing lost bait, putting equipped weapons on the hotbar, the weight in the title bar, instant transfers, and where the equipment lives. The equipment and the on-screen hotbar can be turned off altogether. The panel is a **window you can move and leave open**, so you can change a setting and watch the inventory change behind it. The column of container buttons can sit on the **left** instead of the right, with its own switch for each window. Every option applies live, a tooltip says what it does, and the foot of the panel shows which version of the mod you are running.
 
 ![Themes](workshop/card_14_themes.png)
 
-**Full multiplayer support**, and 8 languages: English, Español, Español (AR), Français, Deutsch, Русский, 简体中文, Português (BR).
+**Full multiplayer support**, and 10 languages: English, Español, Español (AR), Français, Deutsch, Русский, 简体中文, 日本語, 한국어, Português (BR).
 
 Heads up: it replaces the vanilla inventory windows, so don't run it with Inventory Tetris or CleanUI — they replace the same UI. The mod warns you if it finds one.
 
