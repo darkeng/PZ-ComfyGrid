@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.8
+    Version: 1.9.9
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -50,6 +50,8 @@ Settings.defaults = {
 
     TRANSFER_GESTURE = "shift",
     MULTISELECT_MOD = "ctrl",
+
+    SELECT_ALL_SHORTCUT = true,
 }
 
 local GROUPS = {
@@ -240,6 +242,12 @@ local OPTION_DEFS = {
       padOffTipKey = "IGUI_ComfyGrid_PadInsteadQuickEquipTip",
       padOffTip = "A joypad uses and equips from the Y menu. Turn the joypad off to bind a key again." },
 
+    { key = "SELECT_ALL_SHORTCUT", kind = "tickbox", group = "controls",
+      nameKey = "IGUI_ComfyGrid_OptSelectAll",
+      tipKey = "IGUI_ComfyGrid_OptSelectAllTip",
+      tooltip = "Marks every tile of the container under the cursor. "
+          .. "Off while you move items with Ctrl and click." },
+
     { key = "AUTO_REBAIT",        kind = "tickbox", group = "controls",
       nameKey = "IGUI_ComfyGrid_OptAutoRebait",
       tipKey = "IGUI_ComfyGrid_OptAutoRebaitTip",
@@ -337,6 +345,11 @@ function Settings.rangeSelectHeld()
         return false
     end
     return Input.rangeSelectHeld(markModifier)
+end
+
+function Settings.selectAllShortcutActive()
+    return Settings.get("SELECT_ALL_SHORTCUT") ~= false
+        and Settings.transferModifier() ~= "ctrl"
 end
 
 function Settings.tipFor(def)

@@ -161,6 +161,8 @@
     "IGUI_ComfyGrid_OptMultiSelectModTip": "Mantenha pressionado ao clicar para marcar várias casas, ou arraste para selecioná-las em bloco.",
     "IGUI_ComfyGrid_PadInsteadMultiSelect": "O controle usa L3",
     "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Com controle, as casas são marcadas com o botão do analógico esquerdo. Desative o controle para escolher um modificador novamente.",
+    "IGUI_ComfyGrid_OptSelectAll": "Ctrl+A marca todas as casas",
+    "IGUI_ComfyGrid_OptSelectAllTip": "Marca todas as casas do recipiente sob o cursor. Fica desativado se você move itens com Ctrl e clique.",
     "IGUI_ComfyGrid_OptAutoRebait": "Repor a isca",
     "IGUI_ComfyGrid_OptAutoRebaitTip": "A isca perdida na pesca é reposta com outra igual do seu inventário.",
     "IGUI_ComfyGrid_Rebaiting": "Colocando outra isca",

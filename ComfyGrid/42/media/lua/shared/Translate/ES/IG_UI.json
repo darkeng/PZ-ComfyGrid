@@ -161,6 +161,8 @@
     "IGUI_ComfyGrid_OptMultiSelectModTip": "Se mantiene pulsada al hacer clic para marcar varias casillas, o se arrastra para seleccionar en bloque.",
     "IGUI_ComfyGrid_PadInsteadMultiSelect": "El mando usa L3",
     "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Con mando, las casillas se marcan con el botón del stick izquierdo. Desactiva el mando para volver a elegir un modificador.",
+    "IGUI_ComfyGrid_OptSelectAll": "Ctrl+A marca todas las casillas",
+    "IGUI_ComfyGrid_OptSelectAllTip": "Marca todas las casillas del contenedor bajo el cursor. Se desactiva si mueves objetos con Ctrl y clic.",
     "IGUI_ComfyGrid_OptAutoRebait": "Reponer el cebo",
     "IGUI_ComfyGrid_OptAutoRebaitTip": "El cebo perdido al pescar se repone con otro igual de tu inventario.",
     "IGUI_ComfyGrid_Rebaiting": "Poniendo otro cebo",

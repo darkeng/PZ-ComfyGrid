@@ -161,6 +161,8 @@
     "IGUI_ComfyGrid_OptMultiSelectModTip": "À maintenir en cliquant pour marquer plusieurs cases, ou à faire glisser pour les encadrer.",
     "IGUI_ComfyGrid_PadInsteadMultiSelect": "La manette utilise L3",
     "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Avec une manette, les cases se marquent avec le bouton du stick gauche. Désactivez la manette pour choisir à nouveau un modificateur.",
+    "IGUI_ComfyGrid_OptSelectAll": "Ctrl+A marque toutes les cases",
+    "IGUI_ComfyGrid_OptSelectAllTip": "Marque toutes les cases du conteneur sous le curseur. Désactivé si vous déplacez les objets avec Ctrl et clic.",
     "IGUI_ComfyGrid_OptAutoRebait": "Remplacer l'appât perdu",
     "IGUI_ComfyGrid_OptAutoRebaitTip": "L'appât perdu en pêchant est remplacé par un appât identique de votre inventaire.",
     "IGUI_ComfyGrid_Rebaiting": "Nouvel appât en place",

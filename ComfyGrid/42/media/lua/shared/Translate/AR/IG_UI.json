@@ -161,6 +161,8 @@
     "IGUI_ComfyGrid_OptMultiSelectModTip": "Se mantiene apretada al hacer clic para marcar varias casillas, o se arrastra para seleccionar en bloque.",
     "IGUI_ComfyGrid_PadInsteadMultiSelect": "El joystick usa L3",
     "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Con joystick, las casillas se marcan con el botón del stick izquierdo. Desactivá el joystick para volver a elegir un modificador.",
+    "IGUI_ComfyGrid_OptSelectAll": "Ctrl+A marca todas las casillas",
+    "IGUI_ComfyGrid_OptSelectAllTip": "Marca todas las casillas del contenedor bajo el cursor. Se desactiva si movés objetos con Ctrl y clic.",
     "IGUI_ComfyGrid_OptAutoRebait": "Reponer la carnada",
     "IGUI_ComfyGrid_OptAutoRebaitTip": "La carnada perdida al pescar se repone con otra igual de tu inventario.",
     "IGUI_ComfyGrid_Rebaiting": "Poniendo otra carnada",

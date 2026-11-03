@@ -161,6 +161,8 @@
     "IGUI_ComfyGrid_OptMultiSelectModTip": "Beim Klicken gedrückt halten, um mehrere Felder zu markieren, oder ziehen, um sie einzurahmen.",
     "IGUI_ComfyGrid_PadInsteadMultiSelect": "Gamepad nutzt L3",
     "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "Mit Gamepad werden Felder mit dem linken Stick-Knopf markiert. Schalte das Gamepad ab, um wieder einen Modifikator zu wählen.",
+    "IGUI_ComfyGrid_OptSelectAll": "Strg+A markiert alle Felder",
+    "IGUI_ComfyGrid_OptSelectAllTip": "Markiert alle Felder des Behälters unter dem Mauszeiger. Aus, solange du Gegenstände mit Strg und Klick bewegst.",
     "IGUI_ComfyGrid_OptAutoRebait": "Verlorenen Köder ersetzen",
     "IGUI_ComfyGrid_OptAutoRebaitTip": "Beim Angeln verlorener Köder wird durch den gleichen Köder aus deinem Inventar ersetzt.",
     "IGUI_ComfyGrid_Rebaiting": "Neuer Köder kommt dran",

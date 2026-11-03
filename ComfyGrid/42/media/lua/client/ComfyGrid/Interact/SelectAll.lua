@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.8
+    Version: 1.9.9
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -36,7 +36,9 @@ function SelectAll.onPaneUpdate(pane)
     if pane.doController then return end
     local playerNum = pane.player or 0
     local board = nil
-    if isCtrlKeyDown() then board = hoveredBoard(playerNum) end
+    if isCtrlKeyDown() and ComfyGrid.Settings.selectAllShortcutActive() then
+        board = hoveredBoard(playerNum)
+    end
     if board == nil then
         aHeld[playerNum] = false
         return

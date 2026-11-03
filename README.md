@@ -37,7 +37,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 
 - **Drag** to move or swap; **Ctrl+click** or **Ctrl+drag** to multi-select, **Ctrl+A** to mark a whole container; **Shift+click** quick-moves; hold a drag over a container to open it.
 - **A group keeps its shape** — drag several marked tiles and they land in the same arrangement they had, in this container or another.
-- **Pick your own gestures** — what moves an item (Shift, Ctrl, Alt or a double click) and what marks several tiles (Ctrl, Shift or Alt) are both yours to choose. With Shift free of both, Shift+click marks a range.
+- **Pick your own gestures** — what moves an item (Shift, Ctrl, Alt or a double click) and what marks several tiles (Ctrl, Shift or Alt) are both yours to choose. With Shift free of both, Shift+click marks a range. With Ctrl as the move gesture, Ctrl+A stays off, and it has its own switch too.
 - **Drop to use** — rounds onto a magazine, a magazine or sight onto its gun, a bottle onto another to pour, a half-used item onto its twin to combine, bait, a hook or line onto a fishing rod. Right-click *Pour into* does it from any container. Bait lost while fishing goes back on from your inventory, the same bait only.
 - **E** over gear equips it, and over gear you already wear it takes it off; if the socket is taken, they swap. It also eats, drinks, opens, smokes and reads — and takes only the portion you need.
 - **Rebind that key from the inventory itself**, combinations included.

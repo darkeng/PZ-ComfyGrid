@@ -161,6 +161,8 @@
     "IGUI_ComfyGrid_OptMultiSelectModTip": "Held with a click to mark several tiles, or dragged to rubber-band them.",
     "IGUI_ComfyGrid_PadInsteadMultiSelect": "The pad uses L3",
     "IGUI_ComfyGrid_PadInsteadMultiSelectTip": "A joypad marks tiles with the left stick button. Turn the joypad off to pick a modifier again.",
+    "IGUI_ComfyGrid_OptSelectAll": "Ctrl+A marks every tile",
+    "IGUI_ComfyGrid_OptSelectAllTip": "Marks every tile of the container under the cursor. Off while you move items with Ctrl and click.",
     "IGUI_ComfyGrid_OptAutoRebait": "Replace lost bait",
     "IGUI_ComfyGrid_OptAutoRebaitTip": "Bait lost while fishing is replaced with the same bait from your inventory.",
     "IGUI_ComfyGrid_Rebaiting": "Putting on new bait",
