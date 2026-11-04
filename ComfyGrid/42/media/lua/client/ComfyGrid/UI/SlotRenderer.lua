@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.9
+    Version: 1.9.10
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -73,6 +73,23 @@ function SlotRenderer.drawSelection(view, x, y)
         Blit.drawRect(view, x + 1, y + cell - 3, borderWidth, 2, alpha, red, green, blue)
         Blit.drawRect(view, x + 1, y + 3, 2, cell - 6, alpha, red, green, blue)
         Blit.drawRect(view, x + cell - 3, y + 3, 2, cell - 6, alpha, red, green, blue)
+    end
+end
+
+local RANGE_PREVIEW_EDGE_ALPHA = 0.75
+local RANGE_ANCHOR_EDGE_ALPHA = 0.95
+
+function SlotRenderer.drawRangeOutline(view, x, y, isAnchor)
+    local color = Style.COLORS.SELECTED
+    local cell = Style.CELL
+    if isAnchor then
+        view:drawRectBorder(x, y, cell, cell, RANGE_ANCHOR_EDGE_ALPHA,
+            color.r, color.g, color.b)
+        view:drawRectBorder(x + 1, y + 1, cell - 2, cell - 2,
+            RANGE_ANCHOR_EDGE_ALPHA, color.r, color.g, color.b)
+    else
+        view:drawRectBorder(x, y, cell, cell, RANGE_PREVIEW_EDGE_ALPHA,
+            color.r, color.g, color.b)
     end
 end
 

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.9
+    Version: 1.9.10
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -18,6 +18,7 @@ require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/ContainerPanel"
 require "ComfyGrid/UI/Chrome/WindowStrip"
+require "ComfyGrid/Interact/RangeSelect"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -32,6 +33,7 @@ local Style = ComfyGrid.UI.Style
 local Draw = ComfyGrid.UI.Draw
 local ContainerPanel = ComfyGrid.UI.ContainerPanel
 local WindowStrip = ComfyGrid.UI.Chrome.WindowStrip
+local RangeSelect = ComfyGrid.Interact.RangeSelect
 
 local ContainerWindow = ISPanel:derive("ComfyContainerWindow")
 ComfyGrid.UI.ContainerWindow = ContainerWindow
@@ -227,6 +229,9 @@ end
 function ContainerWindow.closeFor(playerNum)
     local win = windows[playerNum or 0]
     if win == nil then return end
+
+    local board = win.content ~= nil and win.content.gridView or nil
+    if board ~= nil then RangeSelect.drop(board) end
     win.item = nil
     win.ownerPage = nil
     win:setVisible(false)

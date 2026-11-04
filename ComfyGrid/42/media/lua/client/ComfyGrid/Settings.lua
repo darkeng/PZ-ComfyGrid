@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.9
+    Version: 1.9.10
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,12 +10,14 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Text"
 require "ComfyGrid/Core/Input"
+require "ComfyGrid/Core/Util"
 ComfyGrid = ComfyGrid or {}
 local Settings = {}
 ComfyGrid.Settings = Settings
 
 local Log = ComfyGrid.Core.Log
 local Text = ComfyGrid.Core.Text
+local Util = ComfyGrid.Core.Util
 
 Settings.defaults = {
     THEME = "amber",
@@ -222,9 +224,14 @@ local OPTION_DEFS = {
                     "IGUI_ComfyGrid_ModShift",
                     "IGUI_ComfyGrid_ModAlt" },
       labels = { "Ctrl", "Shift", "Alt" },
+
+      allows = function(value) return Settings.markModifierAllowed(value) end,
       nameKey = "IGUI_ComfyGrid_OptMultiSelectMod",
       tipKey = "IGUI_ComfyGrid_OptMultiSelectModTip",
-      tooltip = "Held with a click to mark several tiles, or dragged to rubber-band them.",
+
+      tooltip = "Click with it held to mark a tile. Keep holding it and click another to also mark "
+          .. "everything in between; let go between clicks to mark them one by one. "
+          .. "Drag to mark with a box.",
 
       padOffKey = "IGUI_ComfyGrid_PadInsteadMultiSelect",
       padOff = "The pad uses L3",
@@ -245,8 +252,8 @@ local OPTION_DEFS = {
     { key = "SELECT_ALL_SHORTCUT", kind = "tickbox", group = "controls",
       nameKey = "IGUI_ComfyGrid_OptSelectAll",
       tipKey = "IGUI_ComfyGrid_OptSelectAllTip",
-      tooltip = "Marks every tile of the container under the cursor. "
-          .. "Off while you move items with Ctrl and click." },
+      tooltip = "Marks every tile of the container under the cursor, or unmarks them all if they "
+          .. "already are. Does nothing while you walk, or if you move items with Ctrl and click." },
 
     { key = "AUTO_REBAIT",        kind = "tickbox", group = "controls",
       nameKey = "IGUI_ComfyGrid_OptAutoRebait",
@@ -506,6 +513,7 @@ function Settings.buildOptions()
     end
 
     modOptionsPage.apply = function(self)
+        local previousMark = liveValues.MULTISELECT_MOD
         for i = 1, #OPTION_DEFS do
             local def = OPTION_DEFS[i]
             local option = self:getOption(def.key)
@@ -520,60 +528,71 @@ function Settings.buildOptions()
                 end
             end
         end
+
+        pcall(Settings.applyModifierRule, previousMark)
     end
 end
 
-local swapping = false
-local function keepModifiersDistinct(changedKey, previous)
-    if swapping then return end
-    if changedKey ~= "MULTISELECT_MOD" and changedKey ~= "TRANSFER_GESTURE" then
-        return
+function Settings.markModifierAllowed(modifier)
+    return modifier ~= nil and modifier ~= Settings.transferModifier()
+end
+
+local function choiceAllowed(def, value)
+    return def.allows == nil or def.allows(value)
+end
+
+local function firstAllowedValue(def)
+    for i = 1, #def.values do
+        if choiceAllowed(def, def.values[i]) then return def.values[i] end
     end
-    local gesture = liveValues.TRANSFER_GESTURE
-    local multi = liveValues.MULTISELECT_MOD
-    if gesture == nil or multi == nil or gesture ~= multi then return end
+    return nil
+end
 
-    local otherKey = "TRANSFER_GESTURE"
-    if changedKey == "TRANSFER_GESTURE" then otherKey = "MULTISELECT_MOD" end
-    local otherDef = Settings.defOf(otherKey)
-    if otherDef == nil then return end
+function Settings.stepChoice(def, dir)
+    local values = def.values
+    local count = #values
+    local index = choiceIndexOf(def, Settings.get(def.key)) or 1
+    for _ = 1, count do
+        index = Util.wrapIndex(index, dir, 1, count)
+        if choiceAllowed(def, values[index]) then return values[index] end
+    end
+    return values[index]
+end
 
-    local target = nil
-    if previous ~= nil and choiceIndexOf(otherDef, previous) ~= nil
-            and previous ~= liveValues[changedKey] then
-        target = previous
+function Settings.applyModifierRule(previousMark)
+    local markDef = Settings.defOf("MULTISELECT_MOD")
+    if markDef == nil or choiceAllowed(markDef, liveValues.MULTISELECT_MOD) then return end
+    local target
+    if liveValues.MULTISELECT_MOD ~= previousMark and choiceAllowed(markDef, previousMark) then
+        target = previousMark
     else
-        for i = 1, #otherDef.values do
-            if otherDef.values[i] ~= liveValues[changedKey] then
-                target = otherDef.values[i]
-                break
-            end
-        end
+        target = firstAllowedValue(markDef)
     end
-    if target == nil then return end
-    swapping = true
-    pcall(Settings.set, otherKey, target)
-    swapping = false
+    if target ~= nil then pcall(Settings.set, "MULTISELECT_MOD", target) end
 end
 
 function Settings.set(key, value)
     local def = Settings.defOf(key)
     if def == nil or value == nil then return false end
     local previous = liveValues[key]
-    local changed = previous ~= value
+    local previousMark = liveValues.MULTISELECT_MOD
     setValue(key, value)
-    keepModifiersDistinct(key, previous)
+    if key == "MULTISELECT_MOD" or key == "TRANSFER_GESTURE" then
+        Settings.applyModifierRule(previousMark)
+    end
+
+    local final = liveValues[key]
 
     local option = modOptionsPage and modOptionsPage.getOption and modOptionsPage:getOption(key)
         or nil
     if option ~= nil and option.setValue ~= nil then
-        local stored = value
+        local stored = final
         if def.kind == "choice" then
-            stored = choiceIndexOf(def, value)
+            stored = choiceIndexOf(def, final)
         end
         if stored ~= nil then pcall(option.setValue, option, stored) end
     end
-    return changed
+    return final ~= previous
 end
 
 function Settings.save()

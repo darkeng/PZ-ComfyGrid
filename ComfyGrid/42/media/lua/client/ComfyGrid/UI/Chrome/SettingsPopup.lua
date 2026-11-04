@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.9
+    Version: 1.9.10
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Core/Util"
 require "ComfyGrid/Core/Text"
 require "ComfyGrid/Settings"
 require "ComfyGrid/UI/Style"
@@ -54,20 +55,7 @@ local function textWidth(text)
     return ok and w or 0
 end
 
-local function wrapStep(index, delta, low, high)
-    local nextIndex = index + delta
-    if nextIndex < low then
-        nextIndex = high
-    elseif nextIndex > high then
-        nextIndex = low
-    end
-    return nextIndex
-end
-
-local function stepChoice(def, dir)
-    local idx = Settings.choiceIndexOf(def, Settings.get(def.key)) or 1
-    return def.values[wrapStep(idx, dir, 1, #def.values)]
-end
+local wrapStep = ComfyGrid.Core.Util.wrapIndex
 
 local function controlWidthFor(row)
     local def = row.def
@@ -718,7 +706,7 @@ local function activateRow(self, rowIndex)
         pcall(Settings.set, def.key, Settings.get(def.key) ~= true)
     elseif row.kind == "choice" then
 
-        pcall(Settings.set, def.key, stepChoice(def, 1))
+        pcall(Settings.set, def.key, Settings.stepChoice(def, 1))
     end
 end
 
@@ -898,7 +886,7 @@ local function padAdjust(self, dir)
     local def = row.def
     if def.kind == "choice" then
 
-        pcall(Settings.set, def.key, stepChoice(def, dir))
+        pcall(Settings.set, def.key, Settings.stepChoice(def, dir))
     elseif def.kind == "slider" then
         local value = (Settings.get(def.key) or def.min) + dir * (def.step or 1)
         if value < def.min then

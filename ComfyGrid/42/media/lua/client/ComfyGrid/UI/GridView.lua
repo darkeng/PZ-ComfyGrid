@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.9
+    Version: 1.9.10
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -27,6 +27,7 @@ require "ComfyGrid/Interact/QuickMove"
 require "ComfyGrid/Interact/ContextMenu"
 require "ComfyGrid/Interact/Pad/PadFocus"
 require "ComfyGrid/Interact/Pad/PadCarry"
+require "ComfyGrid/Interact/RangeSelect"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -50,6 +51,7 @@ local QuickMove = ComfyGrid.Interact.QuickMove
 local ContextMenu = ComfyGrid.Interact.ContextMenu
 local PadFocus = ComfyGrid.Interact.PadFocus
 local PadCarry = ComfyGrid.Interact.PadCarry
+local RangeSelect = ComfyGrid.Interact.RangeSelect
 
 local GridView = ISUIElement:derive("ComfyGridView")
 ComfyGrid.UI.GridView = GridView
@@ -116,6 +118,10 @@ local function computeDims(self)
     return cols, rows, limit
 end
 
+local function dropAnchor(self)
+    RangeSelect.drop(self)
+end
+
 local function reflowColumns(self, cols)
     local previousCols = self.viewCols
     if previousCols == cols then return false end
@@ -135,6 +141,8 @@ local function reflowColumns(self, cols)
 
     if not grid:reflowColumns(previousCols, cols) then return false end
     self.viewCols = cols
+
+    dropAnchor(self)
     return true
 end
 
@@ -181,9 +189,11 @@ function GridView:new(x, y, model, playerNum)
     view.marqueeX0, view.marqueeY0 = 0, 0
     view.marqueeX1, view.marqueeY1 = 0, 0
     view.marqueePressStack = nil
+    view.marqueePressSlot = nil
     view.marqueeBase = nil
 
     view.rangeAnchorSlot = nil
+    view.markHoldAnchored = false
     view.rangePress = false
     return view
 end
@@ -214,21 +224,29 @@ local function toggleSelected(self, stack)
     end
 end
 
-local function selectSlotRange(self, lowSlot, highSlot)
+local function selectSlotRange(self, fromSlot, toSlot, keepMarks)
     local grid = self.model ~= nil and self.model.grid or nil
     if grid == nil then return 0 end
-    local newSelection, count = {}, 0
+    local lowSlot, highSlot = fromSlot, toSlot
+    if lowSlot ~= nil and highSlot ~= nil and lowSlot > highSlot then
+        lowSlot, highSlot = highSlot, lowSlot
+    end
+    local selection, count = {}, 0
+    if keepMarks and self.selection ~= nil then
+        selection, count = self.selection, self.selectionCount
+    end
     local stacks = grid.data.stacks
     for i = 1, #stacks do
         local stack = stacks[i]
         local slot = stack.slot
         if slot ~= nil and (lowSlot == nil or slot >= lowSlot)
-                and (highSlot == nil or slot <= highSlot) then
-            newSelection[stack] = true
+                and (highSlot == nil or slot <= highSlot)
+                and not selection[stack] then
+            selection[stack] = true
             count = count + 1
         end
     end
-    self.selection = count > 0 and newSelection or nil
+    self.selection = count > 0 and selection or nil
     self.selectionCount = count
     return count
 end
@@ -238,7 +256,7 @@ local function syncSelection(self)
     if grid ~= self.selGrid then
         clearSelection(self)
 
-        self.rangeAnchorSlot = nil
+        dropAnchor(self)
         self.selGrid = grid
         self.selStamp = grid ~= nil and grid.changeCount or -1
         return
@@ -369,6 +387,8 @@ function GridView:prerender()
 
     if self.pendingClick ~= nil then self:flushPendingClick() end
 
+    RangeSelect.tick(self)
+
     local ok, err = pcall(prerenderImpl, self)
     if not ok and err ~= lastPrerenderError then
         lastPrerenderError = err
@@ -444,6 +464,31 @@ function GridView:renderBoard()
             end
         end
     end
+end
+
+local function drawRangePreview(self, hoverSlot, cols, shownSlotCount, cullTop, cullBottom)
+    local anchorSlot = self.rangeAnchorSlot
+    if anchorSlot == nil or anchorSlot >= shownSlotCount then return end
+    if hoverSlot == nil and not self:isMouseOver() then return end
+    if not RangeSelect.nextClickRanges(self) then return end
+    local cell = Style.CELL
+    local stacks = self.model.grid.data.stacks
+    if hoverSlot ~= nil then
+
+        local lowSlot = math.min(anchorSlot, hoverSlot)
+        local highSlot = math.max(anchorSlot, hoverSlot)
+        for i = 1, #stacks do
+            local slot = stacks[i].slot
+            if slot ~= nil and slot >= lowSlot and slot <= highSlot then
+                local x, y = Style.pixelForSlot(slot, cols)
+                if cullTop == nil or (y + cell > cullTop and y < cullBottom) then
+                    SlotRenderer.drawRangeOutline(self, x, y, false)
+                end
+            end
+        end
+    end
+    local anchorX, anchorY = Style.pixelForSlot(anchorSlot, cols)
+    SlotRenderer.drawRangeOutline(self, anchorX, anchorY, true)
 end
 
 local function renderAll(self)
@@ -652,6 +697,7 @@ local function renderAll(self)
                 waitFraction * 6.2831853, 0.30, surface.accent)
         end
     end
+    drawRangePreview(self, hoverSlot, cols, shownSlotCount, cullTop, cullBottom)
 
     if self.marqueeActive then
         local bandX = math.min(self.marqueeX0, self.marqueeX1)
@@ -778,9 +824,15 @@ function GridView:padToggleSelect(stack)
     toggleSelected(self, stack)
 end
 
-function GridView:selectAllStacks()
+function GridView:toggleAllStacks()
     syncSelection(self)
-    return selectSlotRange(self, nil, nil)
+    local markedBefore = self.selectionCount
+    local total = selectSlotRange(self, nil, nil)
+    if total > 0 and markedBefore >= total then
+        clearSelection(self)
+        return 0
+    end
+    return total
 end
 
 function GridView:padClearSelection()
@@ -913,15 +965,31 @@ local function updateMarquee(self, mx, my)
     if self.marqueeActive then updateMarqueeSelection(self) end
 end
 
-local function endMarquee(self, wasClickable)
-    if wasClickable and not self.marqueeActive and self.marqueePressStack ~= nil then
-        toggleSelected(self, self.marqueePressStack)
+local function toggleMarqueePress(self)
+    if self.marqueePressStack ~= nil then toggleSelected(self, self.marqueePressStack) end
+end
+local function addMarkRange(self, fromSlot, toSlot)
+    selectSlotRange(self, fromSlot, toSlot, true)
+end
 
-        self.rangeAnchorSlot = self.marqueePressStack.slot
+local function replaceWithRange(self, fromSlot, toSlot)
+    selectSlotRange(self, fromSlot, toSlot)
+end
+local function markSlotAlone(self, slot)
+    clearSelection(self)
+    local stack = self.model.grid:stackAt(slot)
+    if stack ~= nil then toggleSelected(self, stack) end
+end
+
+local function endMarquee(self, wasClickable)
+    local pressSlot = self.marqueePressSlot
+    if wasClickable and not self.marqueeActive and pressSlot ~= nil then
+        RangeSelect.markClick(self, pressSlot, toggleMarqueePress, addMarkRange)
     end
     self.marqueeArmed = false
     self.marqueeActive = false
     self.marqueePressStack = nil
+    self.marqueePressSlot = nil
     self.marqueeBase = nil
     if bandOwner == self then bandOwner = nil end
 end
@@ -944,15 +1012,20 @@ local function mouseDownImpl(self, x, y)
     self.dragDidStart = false
 
     self.rangePress = false
+
+    RangeSelect.pressOn(self)
     local stack, slot = stackAtPixel(self, x, y)
 
     if multiSelectHeld() then
+
+        self.pendingClick = nil
         self.marqueeArmed = true
         bandOwner = self
         self.marqueeActive = false
         self.marqueeX0, self.marqueeY0 = x, y
         self.marqueeX1, self.marqueeY1 = x, y
         self.marqueePressStack = stack
+        self.marqueePressSlot = slot
         local base = {}
         if self.selection ~= nil then
             for selectedStack in pairs(self.selection) do base[selectedStack] = true end
@@ -961,21 +1034,16 @@ local function mouseDownImpl(self, x, y)
         return
     end
 
-    if rangeSelectHeld() then
+    if slot ~= nil and rangeSelectHeld() then
         syncSelection(self)
 
         self.rangePress = true
         self.pendingClick = nil
-        if self.rangeAnchorSlot ~= nil and slot ~= nil then
-            selectSlotRange(self, math.min(self.rangeAnchorSlot, slot),
-                math.max(self.rangeAnchorSlot, slot))
-        elseif stack ~= nil then
-            clearSelection(self)
-            toggleSelected(self, stack)
-            self.rangeAnchorSlot = stack.slot
-        end
+        RangeSelect.rangeClick(self, slot, replaceWithRange, markSlotAlone)
         return
     end
+
+    dropAnchor(self)
     if stack == nil then
 
         clearSelection(self)
@@ -1058,8 +1126,6 @@ local function mouseUpImpl(self, x, y)
             if not (gestureIsDoubleClick() and isSelected(self, stack)) then
                 clearSelection(self)
             end
-
-            self.rangeAnchorSlot = stack.slot
             self:onStackClicked(stack, x, y)
         end
     end
@@ -1085,6 +1151,8 @@ end
 
 local function rightMouseUpImpl(self, x, y)
     if DragAndDrop.isDragging() then return end
+
+    RangeSelect.dropAny()
 
     if DragAndDrop.isDragOwner(self) then
         DragAndDrop.endDrag()

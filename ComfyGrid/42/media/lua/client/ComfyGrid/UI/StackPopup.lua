@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.9
+    Version: 1.9.10
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -21,6 +21,7 @@ require "ComfyGrid/Interact/TransferJobs"
 require "ComfyGrid/Interact/QuickMove"
 require "ComfyGrid/Interact/ContextMenu"
 require "ComfyGrid/Interact/Pad/PadPopup"
+require "ComfyGrid/Interact/RangeSelect"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.UI = ComfyGrid.UI or {}
 
@@ -37,6 +38,7 @@ local TransferJobs = ComfyGrid.Interact.TransferJobs
 local QuickMove = ComfyGrid.Interact.QuickMove
 local ContextMenu = ComfyGrid.Interact.ContextMenu
 local PadPopup = ComfyGrid.Interact.PadPopup
+local RangeSelect = ComfyGrid.Interact.RangeSelect
 
 local StackPopup = ISPanel:derive("ComfyStackPopup")
 ComfyGrid.UI.StackPopup = StackPopup
@@ -97,9 +99,19 @@ function StackPopup:new(x, y, gridView, stack)
     o.marqueeX0, o.marqueeY0 = 0, 0
     o.marqueeX1, o.marqueeY1 = 0, 0
     o.marqueePressId = nil
+    o.marqueePressIdx = nil
     o.marqueeBase = nil
+
+    o.rangeAnchorSlot = nil
+    o.markHoldAnchored = false
+    o.rangePress = false
     o.titleH = Style.headerHeight()
     return o
+end
+
+local function tileIdAt(self, idx)
+    local tile = idx ~= nil and self.tiles[idx + 1] or nil
+    return tile ~= nil and tile.id or nil
 end
 
 local function rebuildTiles(self, stack)
@@ -220,6 +232,8 @@ end
 local function prerenderImpl(self)
 
     self:flushPendingClick()
+
+    RangeSelect.tick(self)
     local stack = resolveStack(self)
     if stack == nil then
         self:close()
@@ -246,7 +260,12 @@ local function prerenderImpl(self)
     local changeCount = self.model.grid.changeCount
     if changeCount ~= self.lastChangeCount then
         self.lastChangeCount = changeCount
+        local anchorId = tileIdAt(self, self.rangeAnchorSlot)
         rebuildTiles(self, stack)
+
+        if anchorId ~= nil and tileIdAt(self, self.rangeAnchorSlot) ~= anchorId then
+            RangeSelect.drop(self)
+        end
 
         if #self.tiles < 2 then
             self:close()
@@ -351,6 +370,29 @@ local function drawMarquee(self, bx, boardTop)
         0.9, selectedR, selectedG, selectedB)
 end
 
+local function drawRangePreview(self, bx, boardTop, bh)
+    if not RangeSelect.nextClickRanges(self) or not self:isMouseOver() then return end
+    local anchor = self.rangeAnchorSlot
+    local lastIdx = #self.tiles - 1
+    if anchor > lastIdx then return end
+    local cols = self.cols
+    local stride = Style.CELL_STRIDE
+    local firstVis = math.floor(self.yOffset / stride) * cols
+    local lastVis = math.min(lastIdx,
+        firstVis + (math.ceil(bh / stride) + 1) * cols - 1)
+    local hover = self.hoverTile
+    if hover ~= nil then
+        local lowIdx = math.max(math.min(anchor, hover), firstVis)
+        local highIdx = math.min(math.max(anchor, hover), lastVis)
+        for idx = lowIdx, highIdx do
+            local x, y = Style.pixelForSlot(idx, cols)
+            SlotRenderer.drawRangeOutline(self, bx + x, boardTop + y, false)
+        end
+    end
+    local anchorX, anchorY = Style.pixelForSlot(anchor, cols)
+    SlotRenderer.drawRangeOutline(self, bx + anchorX, boardTop + anchorY, true)
+end
+
 local function renderImpl(self)
     local bg = InspectorChrome.boardBackground()
     InspectorChrome.drawFrame(self, bg)
@@ -377,6 +419,7 @@ local function renderImpl(self)
     drawMemberTiles(self, inventory, bx, boardTop, bh, bg)
     InspectorChrome.drawTrailingCells(self, ctx, bx, boardTop)
     drawMarquee(self, bx, boardTop)
+    drawRangePreview(self, bx, boardTop, bh)
     InspectorChrome.drawHoverAndPadCursor(self, ctx, bx, boardTop)
     self:clearStencilRect()
 end
@@ -455,13 +498,54 @@ local function updateMarquee(self, mx, my)
     if self.marqueeActive then updateMarqueeSelection(self) end
 end
 
+local function selectTileRange(self, fromIdx, toIdx, keepMarks)
+    local lowIdx, highIdx = fromIdx, toIdx
+    if lowIdx ~= nil and highIdx ~= nil and lowIdx > highIdx then
+        lowIdx, highIdx = highIdx, lowIdx
+    end
+    local selection, count = {}, 0
+    if keepMarks and self.selection ~= nil then
+        selection, count = self.selection, self.selectionCount
+    end
+    local tiles = self.tiles
+    for i = 1, #tiles do
+        local idx = i - 1
+        local id = tiles[i].id
+        if (lowIdx == nil or idx >= lowIdx) and (highIdx == nil or idx <= highIdx)
+                and not selection[id] then
+            selection[id] = true
+            count = count + 1
+        end
+    end
+    self.selection = count > 0 and selection or nil
+    self.selectionCount = count
+    return count
+end
+
+local function toggleMarqueePress(self)
+    if self.marqueePressId ~= nil then toggleSelected(self, self.marqueePressId) end
+end
+local function addMarkRange(self, fromIdx, toIdx)
+    selectTileRange(self, fromIdx, toIdx, true)
+end
+
+local function replaceWithRange(self, fromIdx, toIdx)
+    selectTileRange(self, fromIdx, toIdx)
+end
+local function markTileAlone(self, idx)
+    clearSelection(self)
+    local id = tileIdAt(self, idx)
+    if id ~= nil then toggleSelected(self, id) end
+end
+
 local function endMarquee(self, wasClickable)
-    if wasClickable and not self.marqueeActive and self.marqueePressId ~= nil then
-        toggleSelected(self, self.marqueePressId)
+    if wasClickable and not self.marqueeActive then
+        RangeSelect.markClick(self, self.marqueePressIdx, toggleMarqueePress, addMarkRange)
     end
     self.marqueeArmed = false
     self.marqueeActive = false
     self.marqueePressId = nil
+    self.marqueePressIdx = nil
     self.marqueeBase = nil
 end
 
@@ -507,6 +591,16 @@ function StackPopup:padDragPayloadFor(idx)
     return payloadFor(self, tile.id)
 end
 
+function StackPopup:toggleAllStacks()
+    local markedBefore = self.selectionCount
+    local total = selectTileRange(self, nil, nil)
+    if total > 0 and markedBefore >= total then
+        clearSelection(self)
+        return 0
+    end
+    return total
+end
+
 function StackPopup:padClearSelection()
     if self.selectionCount <= 0 then return false end
     clearSelection(self)
@@ -549,6 +643,9 @@ local function mouseDownImpl(self, x, y)
     self.pressedId = nil
     self.draggedIds = nil
     self.dragDidStart = false
+    self.rangePress = false
+
+    RangeSelect.pressOn(self)
     local idx = tileAt(self, x, y)
     local tile = idx ~= nil and self.tiles[idx + 1] or nil
     local id = tile ~= nil and tile.id or nil
@@ -560,12 +657,15 @@ local function mouseDownImpl(self, x, y)
         markHeld = okMark and held == true
     end
     if markHeld then
+
+        self.pendingClick = nil
         local lx, ly = toBoard(self, x, y)
         self.marqueeArmed = true
         self.marqueeActive = false
         self.marqueeX0, self.marqueeY0 = lx, ly
         self.marqueeX1, self.marqueeY1 = lx, ly
         self.marqueePressId = id
+        self.marqueePressIdx = idx
         local base = {}
         if self.selection ~= nil then
             for sid in pairs(self.selection) do base[sid] = true end
@@ -573,6 +673,21 @@ local function mouseDownImpl(self, x, y)
         self.marqueeBase = base
         return
     end
+
+    local rangeHeld = false
+    if idx ~= nil and Settings ~= nil and Settings.rangeSelectHeld ~= nil then
+        local okRange, held = pcall(Settings.rangeSelectHeld)
+        rangeHeld = okRange and held == true
+    end
+    if rangeHeld then
+
+        self.rangePress = true
+        self.pendingClick = nil
+        RangeSelect.rangeClick(self, idx, replaceWithRange, markTileAlone)
+        return
+    end
+
+    RangeSelect.drop(self)
     if idx == nil then
         clearSelection(self)
         return
@@ -646,14 +761,19 @@ end
 
 local function mouseUpImpl(self, x, y)
 
-    if doubleClickOnRelease(self, x, y) then return end
-
     if self.marqueeArmed then
         endMarquee(self, true)
         self.pressedId = nil
         self.draggedIds = nil
         return
     end
+
+    if self.rangePress then
+        self.rangePress = false
+        return
+    end
+
+    if doubleClickOnRelease(self, x, y) then return end
     if DragAndDrop.isDragging() then
         if DragAndDrop.isDragOwner(self) then
 
@@ -728,6 +848,7 @@ function StackPopup:onComfyDragCancelled()
 end
 
 local function mouseUpOutsideImpl(self, _x, _y)
+    self.rangePress = false
     if self.marqueeArmed then endMarquee(self, false); return end
     if not DragAndDrop.isDragOwner(self) then return end
     if DragAndDrop.isDragging() then
@@ -741,6 +862,8 @@ end
 
 local function rightMouseUpImpl(self, _x, y)
     if DragAndDrop.isDragging() then return end
+
+    RangeSelect.dropAny()
     if DragAndDrop.isDragOwner(self) then
         DragAndDrop.endDrag()
         self.pressedId = nil
@@ -823,6 +946,7 @@ end
 function StackPopup:close()
 
     self.pendingClick = nil
+    RangeSelect.drop(self)
     InspectorChrome.dismantle(self)
     if instance == self then
         instance = nil
