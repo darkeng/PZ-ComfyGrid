@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.10
+    Version: 1.9.11
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -52,6 +52,8 @@ Settings.defaults = {
 
     TRANSFER_GESTURE = "shift",
     MULTISELECT_MOD = "ctrl",
+
+    MARK_RANGE = true,
 
     SELECT_ALL_SHORTCUT = true,
 }
@@ -229,9 +231,9 @@ local OPTION_DEFS = {
       nameKey = "IGUI_ComfyGrid_OptMultiSelectMod",
       tipKey = "IGUI_ComfyGrid_OptMultiSelectModTip",
 
-      tooltip = "Click with it held to mark a tile. Keep holding it and click another to also mark "
-          .. "everything in between; let go between clicks to mark them one by one. "
-          .. "Drag to mark with a box.",
+      tooltip = "Click with it held to mark a tile, or drag to mark with a box. With Mark ranges on, "
+          .. "keep holding it and click another to also mark everything in between; let go between "
+          .. "clicks to mark them one by one.",
 
       padOffKey = "IGUI_ComfyGrid_PadInsteadMultiSelect",
       padOff = "The pad uses L3",
@@ -248,6 +250,13 @@ local OPTION_DEFS = {
       padOff = "The pad uses Y",
       padOffTipKey = "IGUI_ComfyGrid_PadInsteadQuickEquipTip",
       padOffTip = "A joypad uses and equips from the Y menu. Turn the joypad off to bind a key again." },
+
+    { key = "MARK_RANGE",         kind = "tickbox", group = "controls",
+      nameKey = "IGUI_ComfyGrid_OptMarkRange",
+      tipKey = "IGUI_ComfyGrid_OptMarkRangeTip",
+      tooltip = "Holding the marking key, a second click also marks every tile in between. If Shift "
+          .. "is neither the move nor the marking key, Shift+click does the same. Off: every click "
+          .. "marks one tile, and Shift+click is a plain click." },
 
     { key = "SELECT_ALL_SHORTCUT", kind = "tickbox", group = "controls",
       nameKey = "IGUI_ComfyGrid_OptSelectAll",
@@ -345,7 +354,12 @@ function Settings.transferModifierHeld()
     return Input.transferModifierHeld(Settings.transferModifier())
 end
 
+function Settings.markRangeOn()
+    return Settings.get("MARK_RANGE") ~= false
+end
+
 function Settings.rangeSelectHeld()
+    if not Settings.markRangeOn() then return false end
     local Input = ComfyGrid.Core.Input
     local markModifier = Settings.multiSelectModifier()
     if markModifier == "shift" or Settings.transferModifier() == "shift" then

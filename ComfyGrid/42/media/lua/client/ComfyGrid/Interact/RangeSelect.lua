@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.10
+    Version: 1.9.11
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -40,8 +40,10 @@ function RangeSelect.markClick(surface, index, toggle, addRange)
     if index == nil then return end
     if surface.markHoldAnchored then
         addRange(surface, surface.rangeAnchorSlot, index)
-    else
-        toggle(surface)
+        return
+    end
+    toggle(surface)
+    if ComfyGrid.Settings.markRangeOn() then
         RangeSelect.setAnchor(surface, index, true)
     end
 end
