@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -12,6 +12,8 @@ require "ComfyGrid/Core/Text"
 require "ComfyGrid/Core/Notify"
 require "ComfyGrid/Core/GameMode"
 require "ComfyGrid/Model/ContainerModel"
+require "ComfyGrid/Model/ContainerView"
+require "ComfyGrid/Model/ItemVeil"
 require "ComfyGrid/Interact/TransferJobs"
 require "ComfyGrid/Interact/Transfer"
 require "ComfyGrid/Interact/QuickMove"
@@ -24,6 +26,8 @@ local Text = ComfyGrid.Core.Text
 local Notify = ComfyGrid.Core.Notify
 local GameMode = ComfyGrid.Core.GameMode
 local ContainerModel = ComfyGrid.Model.ContainerModel
+local ContainerView = ComfyGrid.Model.ContainerView
+local ItemVeil = ComfyGrid.Model.ItemVeil
 local Transfer = ComfyGrid.Interact.Transfer
 local QuickMove = ComfyGrid.Interact.QuickMove
 local TransferJobs = ComfyGrid.Interact.TransferJobs
@@ -56,14 +60,18 @@ local function fileUnder(typeMap, typeKey, item)
     bucket[#bucket + 1] = item
 end
 
-function BulkTransfer.typeMap(container)
+function BulkTransfer.typeMap(container, playerNum)
     if container == nil then return nil end
     local ok, items = pcall(container.getItems, container)
     if not ok or items == nil then return nil end
     local LookalikeTypes = ComfyGrid.Model and ComfyGrid.Model.LookalikeTypes
+    local veilOn = playerNum ~= nil and ItemVeil.isActive()
     local result = {}
     for i = 1, items:size() do
         local item = items:get(i - 1)
+        if item ~= nil and veilOn and ItemVeil.isVeiled(container, item, playerNum) then
+            item = nil
+        end
         if item ~= nil then
             local okT, itemType = pcall(item.getFullType, item)
             if okT and itemType ~= nil then
@@ -86,11 +94,11 @@ function BulkTransfer.typeMap(container)
     return result
 end
 
-function BulkTransfer.planStow(src, dest)
+function BulkTransfer.planStow(src, dest, playerNum)
     local list, map = {}, {}
     if src == nil or dest == nil or src == dest then return list, map end
-    local destTypes = BulkTransfer.typeMap(dest)
-    local srcTypes = BulkTransfer.typeMap(src)
+    local destTypes = BulkTransfer.typeMap(dest, playerNum)
+    local srcTypes = BulkTransfer.typeMap(src, playerNum)
     if destTypes == nil or srcTypes == nil then return list, map end
     for itemType in pairs(destTypes) do
         local candidates = srcTypes[itemType]
@@ -120,6 +128,7 @@ function BulkTransfer.planEmpty(src, dest, playerObj, playerNum)
     local ok, items = pcall(src.getItems, src)
     if not ok or items == nil then return list, map, nil, 0 end
     local total = items:size()
+    local veilOn = ItemVeil.isActive()
 
     local fromPlayer = QuickMove.isPlayerSide(src, playerObj)
 
@@ -161,6 +170,10 @@ function BulkTransfer.planEmpty(src, dest, playerObj, playerNum)
                     keep = false
                 end
             end
+
+            if keep and veilOn and ItemVeil.isVeiled(src, item, playerNum) then
+                keep = false
+            end
             if keep and map[item] == nil then
                 map[item] = true
                 list[#list + 1] = item
@@ -183,13 +196,13 @@ function BulkTransfer.planSpread(src, dests, playerObj, playerNum)
     if src == nil or dests == nil or playerObj == nil then
         return groups, map, list
     end
-    local pool = BulkTransfer.typeMap(src)
+    local pool = BulkTransfer.typeMap(src, playerNum)
     if pool == nil then return groups, map, list end
 
     local taken = {}
     for d = 1, #dests do
         local dest = dests[d]
-        local destMap = dest ~= nil and BulkTransfer.typeMap(dest) or nil
+        local destMap = dest ~= nil and BulkTransfer.typeMap(dest, playerNum) or nil
         if destMap ~= nil then
 
             local candidates, seen = {}, {}
@@ -284,6 +297,10 @@ function BulkTransfer.plan(kind, own, playerNum)
     local src, dest
     if kind == "stow" then src, dest = other, own else src, dest = own, other end
 
+    if ContainerView.isView(dest) then
+        return nil, nil, nil, nil, playerObj
+    end
+
     local ownStamp = changeStampOf(own, playerNum)
 
     local destCount = dests ~= nil and #dests or 1
@@ -304,7 +321,7 @@ function BulkTransfer.plan(kind, own, playerNum)
     end
     local list, map, extra
     if kind == "stow" then
-        list, map = BulkTransfer.planStow(src, dest)
+        list, map = BulkTransfer.planStow(src, dest, playerNum)
     elseif kind == "spread" then
         local groups
         groups, map, list = BulkTransfer.planSpread(src, dests, playerObj,

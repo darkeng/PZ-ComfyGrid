@@ -1,12 +1,13 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/Core/ActionQueue"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Interact = ComfyGrid.Interact or {}
 local TransferJobs = {}
@@ -55,11 +56,7 @@ function TransferJobs.unregister(container, item)
     end
 end
 
-function TransferJobs.queuedActions(character)
-    local queues = ISTimedActionQueue.queues
-    local characterQueue = queues ~= nil and queues[character] or nil
-    return characterQueue ~= nil and characterQueue.queue or nil
-end
+TransferJobs.queuedActions = ComfyGrid.Core.ActionQueue.queuedActions
 
 local function queueStillMoving(character, container)
     if character == nil then return false end

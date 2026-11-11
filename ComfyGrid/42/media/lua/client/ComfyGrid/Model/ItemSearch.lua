@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,12 +9,14 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Util"
+require "ComfyGrid/Model/ItemVeil"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Model = ComfyGrid.Model or {}
 local ItemSearch = {}
 ComfyGrid.Model.ItemSearch = ItemSearch
 
 local Log = ComfyGrid.Core.Log
+local ItemVeil = ComfyGrid.Model.ItemVeil
 
 local REFRESH_MS = 250
 local MAX_BAG_DEPTH = 8
@@ -147,7 +149,7 @@ end
 
 local walkedContainers = {}
 
-local function collectMatches(container, words, marks, depth)
+local function collectMatches(container, words, marks, depth, seat)
     if container == nil or depth > MAX_BAG_DEPTH then return false end
     local known = walkedContainers[container]
     if known ~= nil then return known end
@@ -155,15 +157,18 @@ local function collectMatches(container, words, marks, depth)
     walkedContainers[container] = false
     local items = container:getItems()
     local anyMatch = false
+
+    local veilHere = seat ~= nil and ItemVeil.boardVeils(container, seat)
     for itemIndex = 0, items:size() - 1 do
         local item = items:get(itemIndex)
 
-        if item ~= nil and not item:isHidden() then
+        if item ~= nil and not item:isHidden()
+                and not (veilHere and ItemVeil.isVeiled(container, item, seat)) then
             local marked = nameMatches(item, words)
             if instanceof(item, "InventoryContainer") then
                 local innerContainer = item:getInventory()
                 if innerContainer ~= nil
-                        and collectMatches(innerContainer, words, marks, depth + 1) then
+                        and collectMatches(innerContainer, words, marks, depth + 1, seat) then
                     marked = true
                 end
             end
@@ -178,13 +183,13 @@ local function collectMatches(container, words, marks, depth)
     return anyMatch
 end
 
-function ItemSearch.matchContainers(containers, rawText)
+function ItemSearch.matchContainers(containers, rawText, playerNum)
     local words = ItemSearch.wordsOf(rawText)
     if words == nil then return nil end
     local marks = { itemIds = {}, containers = {}, generation = 0 }
     wipe(walkedContainers)
     for containerIndex = 1, #containers do
-        collectMatches(containers[containerIndex], words, marks, 0)
+        collectMatches(containers[containerIndex], words, marks, 0, playerNum)
     end
     wipe(walkedContainers)
     return marks
@@ -218,22 +223,22 @@ function ItemSearch.wordsFor(page)
     return wordsByPage[page]
 end
 
-local function walkPage(page, words, marks)
+local function walkPage(page, words, marks, seat)
     local buttons = page.backpacks
     if type(buttons) ~= "table" then return end
     wipe(walkedContainers)
     for buttonIndex = 1, #buttons do
         local button = buttons[buttonIndex]
         local container = button ~= nil and button.inventory or nil
-        if container ~= nil then collectMatches(container, words, marks, 0) end
+        if container ~= nil then collectMatches(container, words, marks, 0, seat) end
     end
 end
 
-local function rebuildSeatMarks(marks, playerPage, playerWords, lootPage, lootWords)
+local function rebuildSeatMarks(marks, seat, playerPage, playerWords, lootPage, lootWords)
     wipe(marks.itemIds)
     wipe(marks.containers)
-    if playerWords ~= nil then walkPage(playerPage, playerWords, marks) end
-    if lootWords ~= nil then walkPage(lootPage, lootWords, marks) end
+    if playerWords ~= nil then walkPage(playerPage, playerWords, marks, seat) end
+    if lootWords ~= nil then walkPage(lootPage, lootWords, marks, seat) end
     wipe(walkedContainers)
     searchGeneration = searchGeneration + 1
     marks.generation = searchGeneration
@@ -250,8 +255,8 @@ function ItemSearch.marksFor(playerNum)
     local nowMs = getTimestampMs()
     if marks.stale or nowMs >= marks.expiresMs then
 
-        local walked, failure = pcall(rebuildSeatMarks, marks, playerPage, playerWords,
-            lootPage, lootWords)
+        local walked, failure = pcall(rebuildSeatMarks, marks, playerNum, playerPage,
+            playerWords, lootPage, lootWords)
         if not walked and failure ~= lastWalkError then
             lastWalkError = failure
             Log.warn("ItemSearch: walk failed: " .. tostring(failure))

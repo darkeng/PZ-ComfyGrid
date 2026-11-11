@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -13,6 +13,7 @@ require "ComfyGrid/Core/Notify"
 require "ComfyGrid/Model/Capacity"
 require "ComfyGrid/Model/ContainerName"
 require "ComfyGrid/Model/ContainerStatus"
+require "ComfyGrid/Model/ContainerView"
 require "ComfyGrid/Model/SectionCollapse"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/UI/Draw"
@@ -33,6 +34,7 @@ local Log = ComfyGrid.Core.Log
 local Notify = ComfyGrid.Core.Notify
 local ContainerName = ComfyGrid.Model.ContainerName
 local ContainerStatus = ComfyGrid.Model.ContainerStatus
+local ContainerView = ComfyGrid.Model.ContainerView
 local SectionCollapse = ComfyGrid.Model.SectionCollapse
 local Style = ComfyGrid.UI.Style
 local Draw = ComfyGrid.UI.Draw
@@ -114,9 +116,13 @@ local function syncPreview(self)
     end
 end
 
+local function bareHeader(self)
+    return self.noChips or (self.model ~= nil and self.model.grid.isView == true)
+end
+
 local function drawChips(self, rightX, y, h)
 
-    if self.noChips then return 0 end
+    if bareHeader(self) then return 0 end
     local row = self.chips
     row:reset(rightX, y, h)
     for i = 1, #CHIPS do
@@ -310,7 +316,7 @@ end
 
 local function drawActions(self, transferLeft, y, h)
 
-    if self.noChips then return nil end
+    if bareHeader(self) then return nil end
     local ObjectVerbs = ComfyGrid.Interact and ComfyGrid.Interact.ObjectVerbs
     if ObjectVerbs == nil or self.model == nil then return nil end
     local verbs = ObjectVerbs.of(self.model.inventory, self.playerNum)
@@ -385,6 +391,11 @@ end
 
 local function resolveDisplayName(inventory, playerNum)
     if not inventory then return "?" end
+
+    if ContainerView.isView(inventory) then
+        local buttonName = ContainerView.buttonName(inventory, playerNum)
+        if buttonName ~= nil then return buttonName end
+    end
 
     local containing = inventory:getContainingItem()
     if containing then

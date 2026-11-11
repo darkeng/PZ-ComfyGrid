@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -27,6 +27,11 @@ function Util.wrapIndex(index, delta, low, high)
         nextIndex = low
     end
     return nextIndex
+end
+
+function Util.isEmpty(tbl)
+    for _ in pairs(tbl) do return false end
+    return true
 end
 
 Util.wipe = table.wipe or function(tableToWipe)

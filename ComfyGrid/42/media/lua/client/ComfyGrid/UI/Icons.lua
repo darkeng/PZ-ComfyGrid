@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -19,25 +19,39 @@ local hits, misses = 0, 0
 
 local GAME_PACKS = { UI = true, UI2 = true }
 
+local function packOf(tex)
+    if tex.getPath == nil then return nil end
+    local okPath, packPath = pcall(tex.getPath, tex)
+    if not okPath or packPath == nil then return nil end
+    return tostring(packPath):match("@pack/([^/]+)/")
+end
+
+local function fileNameOf(path)
+    local base = path:gsub("\\", "/"):match("([^/]+)$")
+    if base == nil then return nil end
+    return (base:gsub("%.[Pp][Nn][Gg]$", ""))
+end
+
 local function gameNameOf(tex)
     local name = tex:getName()
     if name == nil or name == "" then return nil end
     if name:find("[/\\]") ~= nil then
-        local path = name:gsub("\\", "/")
-        if path:lower():find("/mods/", 1, true) ~= nil then return nil end
-        local base = path:match("([^/]+)$")
-        if base == nil then return nil end
-        base = base:gsub("%.[Pp][Nn][Gg]$", "")
-        return base
+        if name:gsub("\\", "/"):lower():find("/mods/", 1, true) ~= nil then return nil end
+        return fileNameOf(name)
     end
-    if tex.getPath ~= nil then
-        local okPath, packPath = pcall(tex.getPath, tex)
-        if okPath and packPath ~= nil then
-            local pack = tostring(packPath):match("@pack/([^/]+)/")
-            if pack ~= nil and not GAME_PACKS[pack] then return nil end
-        end
-    end
+    local pack = packOf(tex)
+    if pack ~= nil and not GAME_PACKS[pack] then return nil end
     return name
+end
+
+local OWN_PACK = "ComfyGridIcons"
+
+local function authorTwinOf(path)
+    local fileName = fileNameOf(path)
+    if fileName == nil then return false end
+    local twin = Texture.trygetTexture(PREFIX .. fileName)
+    if twin == nil or packOf(twin) == OWN_PACK then return false end
+    return twin
 end
 
 function Icons.hiRes(tex)
@@ -49,7 +63,11 @@ function Icons.hiRes(tex)
     if Texture ~= nil and Texture.trygetTexture ~= nil and tex.getName ~= nil then
         local name = tex:getName()
         if name ~= nil and name ~= "" then
-            hiRes = Texture.trygetTexture(PREFIX .. name) or false
+            if name:find("[/\\]") ~= nil then
+                hiRes = authorTwinOf(name)
+            else
+                hiRes = Texture.trygetTexture(PREFIX .. name) or false
+            end
         end
     end
     hiByTex[tex] = hiRes

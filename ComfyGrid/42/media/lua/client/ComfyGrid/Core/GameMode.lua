@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -14,11 +14,11 @@ ComfyGrid.Core.GameMode = GameMode
 
 function GameMode.isTutorial()
     local okCore, core = pcall(getCore)
-    if not okCore or core == nil or core.getGameMode == nil then
+    if not okCore or core == nil or core.isTutorial == nil then
         return false
     end
-    local okMode, mode = pcall(core.getGameMode, core)
-    return okMode and tostring(mode) == "Tutorial"
+    local okMode, tutorial = pcall(core.isTutorial, core)
+    return okMode and tutorial == true
 end
 
 return GameMode

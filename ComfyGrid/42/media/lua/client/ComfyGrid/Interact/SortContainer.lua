@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -9,6 +9,7 @@
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Model/SortPlan"
+require "ComfyGrid/Model/ItemVeil"
 require "ComfyGrid/Model/Persistence"
 
 ComfyGrid = ComfyGrid or {}
@@ -18,6 +19,7 @@ ComfyGrid.Interact.SortContainer = SortContainer
 
 local Log = ComfyGrid.Core.Log
 local SortPlan = ComfyGrid.Model.SortPlan
+local ItemVeil = ComfyGrid.Model.ItemVeil
 local Persistence = ComfyGrid.Model.Persistence
 
 local COOLDOWN_MS = 1000
@@ -67,6 +69,16 @@ function SortContainer.run(model)
 
     if grid.pendingClaims ~= nil then
         return SortContainer.BUSY
+    end
+
+    if ItemVeil.isActive() then
+        local stacks = grid.data.stacks or {}
+        for i = 1, #stacks do
+            if ItemVeil.stackIsVeiled(stacks[i], inventory, model.playerNum,
+                    grid.itemById) then
+                return SortContainer.FAILED
+            end
+        end
     end
 
     local now = 0

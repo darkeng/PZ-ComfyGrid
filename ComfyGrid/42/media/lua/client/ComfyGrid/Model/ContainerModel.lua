@@ -1,13 +1,14 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Model/ContainerView"
 require "ComfyGrid/Model/Herbalist"
 require "ComfyGrid/Model/Persistence"
 require "ComfyGrid/Model/SlotGrid"
@@ -18,6 +19,7 @@ ContainerModel.__index = ContainerModel
 ComfyGrid.Model.ContainerModel = ContainerModel
 
 local Log = ComfyGrid.Core.Log
+local ContainerView = ComfyGrid.Model.ContainerView
 local Persistence = ComfyGrid.Model.Persistence
 local SlotGrid = ComfyGrid.Model.SlotGrid
 
@@ -42,11 +44,15 @@ local GOLDEN_FRACTION = 0.6180339887498949
 local modelSerial = 0
 
 local function newModel(inventory, playerNum, isPlayerMain)
+
+    local isView = isPlayerMain ~= true and ContainerView.isView(inventory)
+    local grid = SlotGrid:new(inventory, Persistence.gridDataFor(inventory, playerNum), playerNum,
+        isView)
     local model = setmetatable({
         inventory = inventory,
         playerNum = playerNum,
         isPlayerMain = isPlayerMain == true,
-        grid = SlotGrid:new(inventory, Persistence.gridDataFor(inventory, playerNum), playerNum),
+        grid = grid,
 
         needsImmediateRefresh = false,
         lastRefreshMs = 0,

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -261,13 +261,21 @@ local function buttonTopOnPage(buttonPanel, button)
     return (buttonPanel.y or 0) + button:getY() + scroll
 end
 
-function WindowChrome.selection(page)
-    if page.isCollapsed then return end
+local function buttonColumn(page)
+    if page.isCollapsed then return nil end
     local pane = page.inventoryPane
-    if pane == nil or pane.mode ~= "comfy" then return end
-    local panel = page.containerButtonPanel
+    if pane == nil or pane.mode ~= "comfy" then return nil end
+    local buttonPanel = page.containerButtonPanel
     local buttons = page.backpacks
-    if panel == nil or type(buttons) ~= "table" or #buttons == 0 then return end
+    if buttonPanel == nil or type(buttons) ~= "table" then return nil end
+    local columnTop = buttonPanel.y or 0
+    return buttonPanel, buttons, buttonPanel.x or 0, columnTop,
+        columnTop + (buttonPanel.height or 0)
+end
+
+function WindowChrome.selection(page)
+    local panel, buttons, panelX, columnTop, columnBottom = buttonColumn(page)
+    if panel == nil or #buttons == 0 then return end
     local surface = Style.COLORS ~= nil and Style.COLORS.SURFACE or nil
     if surface == nil or surface.accent == nil then return end
 
@@ -277,13 +285,10 @@ function WindowChrome.selection(page)
     local buttonSize = page.buttonSize
     if buttonSize == nil or buttonSize <= 0 then return end
     local bar = math.max(2, math.floor(buttonSize * 0.075 + 0.5))
-    local panelX = panel.x or 0
 
     local left = panelX == 0
     local x = left and (panelX + buttonSize - bar) or panelX
 
-    local columnTop = panel.y or 0
-    local columnBottom = columnTop + (panel.height or 0)
     for i = 1, #buttons do
         local button = buttons[i]
         if button ~= nil and button.inventory == selected
@@ -300,21 +305,14 @@ function WindowChrome.selection(page)
 end
 
 function WindowChrome.searchMarks(page)
-    if page.isCollapsed then return end
-    local pane = page.inventoryPane
-    if pane == nil or pane.mode ~= "comfy" then return end
+    local buttonPanel, buttons, panelX, columnTop, columnBottom = buttonColumn(page)
+    if buttonPanel == nil then return end
     local ItemSearch = ComfyGrid.Model and ComfyGrid.Model.ItemSearch or nil
     local SlotRenderer = ComfyGrid.UI and ComfyGrid.UI.SlotRenderer or nil
     if ItemSearch == nil or SlotRenderer == nil then return end
     local marks = ItemSearch.marksFor(page.player)
     if marks == nil then return end
-    local buttonPanel = page.containerButtonPanel
-    local buttons = page.backpacks
-    if buttonPanel == nil or type(buttons) ~= "table" then return end
     local pulse = SlotRenderer.applyPulse()
-    local panelX = buttonPanel.x or 0
-    local columnTop = buttonPanel.y or 0
-    local columnBottom = columnTop + (buttonPanel.height or 0)
     for buttonIndex = 1, #buttons do
         local button = buttons[buttonIndex]
         if button ~= nil and button:getIsVisible()
@@ -327,6 +325,27 @@ function WindowChrome.searchMarks(page)
             if bottom - top >= 2 then
                 SlotRenderer.drawSearchBox(page, panelX + button:getX(), top,
                     button:getWidth(), bottom - top, pulse, true)
+            end
+        end
+    end
+end
+
+function WindowChrome.veilMarks(page)
+    local buttonPanel, buttons, panelX, columnTop, columnBottom = buttonColumn(page)
+    if buttonPanel == nil then return end
+    local StackRenderer = ComfyGrid.UI and ComfyGrid.UI.StackRenderer or nil
+    if StackRenderer == nil or StackRenderer.drawVeilMark == nil then return end
+
+    local marginShare = (1 - StackRenderer.VEIL_MARK_FRAC) * 0.5
+    for buttonIndex = 1, #buttons do
+        local button = buttons[buttonIndex]
+        if button ~= nil and button.comfyVeiled == true and button:getIsVisible() then
+            local top = buttonTopOnPage(buttonPanel, button)
+            local size = button:getWidth()
+            local boxTop = top + (button:getHeight() - size) * 0.5
+            local margin = size * marginShare
+            if boxTop + margin >= columnTop and boxTop + size - margin <= columnBottom then
+                StackRenderer.drawVeilMark(page, panelX + button:getX(), boxTop, size)
             end
         end
     end

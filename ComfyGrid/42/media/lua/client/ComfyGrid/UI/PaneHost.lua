@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -123,6 +123,14 @@ local function panelShowsInventory(panel, inv)
     return panel.model ~= nil and panel.model.inventory == inv
 end
 
+local PICK_WINDOW_MS = 500
+
+local function pickedOnPurpose(page, inventory)
+    return page ~= nil and page.comfyPickedInventory == inventory
+        and page.comfyPickedAtMs ~= nil
+        and getTimestampMs() - page.comfyPickedAtMs < PICK_WINDOW_MS
+end
+
 local function layout(self)
     local pane = self.pane
     if not pane then return end
@@ -186,9 +194,20 @@ local function layout(self)
             self.yOffset = 0
         else
             local y = stripsHeight(self)
+            local viewport = self:viewportHeight()
             for i = 1, panelCount do
                 if panelShowsInventory(panels[i], pane.inventory) then
-                    self.yOffset = y
+                    local shown = math.min(panels[i].height, viewport)
+                    local inView = y >= self.yOffset
+                        and y + shown <= self.yOffset + viewport
+
+                    if not inView then
+                        local ContainerView = ComfyGrid.Model and ComfyGrid.Model.ContainerView
+                        local holdStill = ContainerView ~= nil
+                            and not pickedOnPurpose(pane.inventoryPage, pane.inventory)
+                            and ContainerView.viewTransferUnderway(pane.player or 0)
+                        if not holdStill then self.yOffset = y end
+                    end
                     break
                 end
                 y = y + panels[i].height + SECTION_GAP

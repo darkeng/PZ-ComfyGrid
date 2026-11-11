@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,6 +10,7 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Prefs"
 require "ComfyGrid/Compat/Warnings"
+require "ComfyGrid/Compat/ImmersiveSearching"
 require "ComfyGrid/UI/Themes"
 require "ComfyGrid/UI/Draw"
 require "ComfyGrid/UI/IconWarmup"

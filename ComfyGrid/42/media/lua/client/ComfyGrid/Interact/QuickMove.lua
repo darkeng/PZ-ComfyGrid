@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,10 +10,13 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Core/GameMode"
+require "ComfyGrid/Model/ContainerSide"
+require "ComfyGrid/Model/ContainerView"
 
 local Log = ComfyGrid.Core.Log
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local GameMode = ComfyGrid.Core.GameMode
+local ContainerView = ComfyGrid.Model.ContainerView
 
 local QuickMove = {}
 ComfyGrid.Interact.QuickMove = QuickMove
@@ -77,20 +80,80 @@ local function selectedContainer(page)
     return page.inventory
 end
 
-local function isPlayerSide(inventory, playerObj)
-    if inventory == nil or playerObj == nil then return false end
-    if inventory == playerObj:getInventory() then return true end
-    local ok, inChar = pcall(inventory.isInCharacterInventory, inventory,
-        playerObj)
-    return ok and inChar == true
-end
+local isPlayerSide = ComfyGrid.Model.ContainerSide.isCarried
 QuickMove.isPlayerSide = isPlayerSide
 
-function QuickMove.destinationFor(sourceInventory, playerObj, playerNum)
+local function takes(container, item, playerObj)
+    if item == nil or ComfyGrid.Interact.Transfer.isFloor(container) then return true end
+    local okAllowed, allowed = pcall(container.isItemAllowed, container, item)
+    if not okAllowed or allowed ~= true then return false end
+    local okRoom, room = pcall(container.hasRoomFor, container, playerObj, item)
+    return okRoom and room == true
+end
+
+local function candidatesOn(page, sourceInventory)
+    local candidates = {}
+    local ContainerOrder = ComfyGrid.Model and ComfyGrid.Model.ContainerOrder
+    local buttons = ContainerOrder ~= nil and ContainerOrder.sequenceFor ~= nil
+        and ContainerOrder.sequenceFor(page) or nil
+    if buttons == nil then buttons = page.backpacks end
+    if type(buttons) ~= "table" then return candidates end
+    for i = 1, #buttons do
+        local container = buttons[i] ~= nil and buttons[i].inventory or nil
+        if container ~= nil and container ~= sourceInventory
+                and not ContainerView.isView(container) then
+            candidates[#candidates + 1] = container
+        end
+    end
+    return candidates
+end
+
+local function firstThatTakes(candidates, item, playerObj)
+    for i = 1, #candidates do
+        if takes(candidates[i], item, playerObj) then return candidates[i] end
+    end
+    return nil
+end
+
+local function notAView(selected, page, sourceInventory, playerObj, sampleItem)
+    if selected == nil or not ContainerView.isView(selected) then return selected, nil end
+    if page == nil then return nil, nil end
+    return firstThatTakes(candidatesOn(page, sourceInventory), sampleItem, playerObj), page
+end
+
+local function moveToFirstTakers(items, candidates, fallback, playerObj, Transfer)
+    local targets, itemsFor = {}, {}
+    for i = 1, #items do
+        local target = firstThatTakes(candidates, items[i], playerObj) or fallback
+        if target ~= nil then
+            if itemsFor[target] == nil then
+                itemsFor[target] = {}
+                targets[#targets + 1] = target
+            end
+            local list = itemsFor[target]
+            list[#list + 1] = items[i]
+        end
+    end
+    local queuedCount = 0
+    for i = 1, #targets do
+        local target = targets[i]
+        local remaining, carried = Transfer.escalateHeavyItems(itemsFor[target], target, playerObj)
+        queuedCount = queuedCount + carried
+        if #remaining > 0 then
+            queuedCount = queuedCount + Transfer.moveItems(remaining, target, playerObj, nil)
+        end
+    end
+    return queuedCount
+end
+
+function QuickMove.destinationFor(sourceInventory, playerObj, playerNum, sampleItem)
     local playerInv = playerObj:getInventory()
     if not isPlayerSide(sourceInventory, playerObj) then
 
-        return selectedContainer(getPlayerInventory(playerNum)) or playerInv
+        local playerPage = getPlayerInventory(playerNum)
+        local destination, viewPage = notAView(selectedContainer(playerPage), playerPage,
+            sourceInventory, playerObj, sampleItem)
+        return destination or playerInv, viewPage
     end
 
     local ContainerWindow = ComfyGrid.UI ~= nil
@@ -100,7 +163,9 @@ function QuickMove.destinationFor(sourceInventory, playerObj, playerNum)
             sourceInventory)
         if ok and shown == true then return playerInv end
     end
-    return selectedContainer(getPlayerLoot(playerNum))
+    local lootPage = getPlayerLoot(playerNum)
+    return notAView(selectedContainer(lootPage), lootPage, sourceInventory, playerObj,
+        sampleItem)
 end
 
 function QuickMove.otherSideContainers(sourceInventory, playerObj, playerNum,
@@ -117,7 +182,9 @@ function QuickMove.otherSideContainers(sourceInventory, playerObj, playerNum,
     for i = 1, #other.backpacks do
         local button = other.backpacks[i]
         local container = button ~= nil and button.inventory or nil
-        if container ~= nil and container ~= sourceInventory then
+
+        if container ~= nil and container ~= sourceInventory
+                and not ContainerView.isView(container) then
             out[#out + 1] = container
         end
     end
@@ -142,15 +209,23 @@ function QuickMove.run(stacks, sourceInventory, playerNum)
     end
     if #liveItems == 0 then return false end
 
-    local dest = QuickMove.destinationFor(sourceInventory, playerObj, playerNum)
-
-    if dest == nil or dest == sourceInventory then return false end
-
     local Transfer = ComfyGrid.Interact.Transfer
     if Transfer == nil then
         Log.warn("QuickMove: Transfer module missing; nothing queued")
         return false
     end
+
+    local dest, viewPage = QuickMove.destinationFor(sourceInventory, playerObj, playerNum,
+        liveItems[1])
+
+    if viewPage ~= nil and #liveItems > 1 then
+        local fallback = viewPage == getPlayerInventory(playerNum)
+            and playerObj:getInventory() or nil
+        return moveToFirstTakers(liveItems, candidatesOn(viewPage, sourceInventory),
+            fallback, playerObj, Transfer) > 0
+    end
+
+    if dest == nil or dest == sourceInventory then return false end
 
     local carried
     liveItems, carried = Transfer.escalateHeavyItems(liveItems, dest,

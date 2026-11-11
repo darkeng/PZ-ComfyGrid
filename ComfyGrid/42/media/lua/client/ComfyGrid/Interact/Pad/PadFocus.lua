@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -829,6 +829,10 @@ function PadFocus.peek(page)
     local stack = nil
     if model ~= nil and model.grid ~= nil then
         stack = model.grid:stackAt(slot)
+
+        if stack ~= nil and el.isVeiledStack ~= nil and el:isVeiledStack(stack) then
+            stack = nil
+        end
     end
     return kind or "grid", el, slot, stack
 end

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,6 +10,7 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/Input"
 require "ComfyGrid/Model/ItemStack"
+require "ComfyGrid/Model/ItemVeil"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Interact = ComfyGrid.Interact or {}
 local Tooltip = {}
@@ -18,6 +19,7 @@ ComfyGrid.Interact.Tooltip = Tooltip
 local Log = ComfyGrid.Core.Log
 local Input = ComfyGrid.Core.Input
 local ItemStack = ComfyGrid.Model.ItemStack
+local ItemVeil = ComfyGrid.Model.ItemVeil
 
 local function isDragActive()
     local dnd = ComfyGrid.Interact.DragAndDrop
@@ -80,7 +82,7 @@ local function boardsOf(pane)
     return boardScratch
 end
 
-local function hoveredStack(pane)
+local function rawHoveredStack(pane)
 
     if overContainerWindow(pane) then
         local windowGrid = containerWindowGrid(pane)
@@ -101,6 +103,15 @@ local function hoveredStack(pane)
         if inventory ~= nil then return stack, inventory end
     end
     return nil, nil
+end
+
+local function hoveredStack(pane)
+    local stack, inventory = rawHoveredStack(pane)
+    if stack ~= nil and inventory ~= nil
+            and ItemVeil.stackIsVeiled(stack, inventory, pane ~= nil and pane.player or 0) then
+        return nil, inventory
+    end
+    return stack, inventory
 end
 
 Tooltip.hoveredStackOf = hoveredStack

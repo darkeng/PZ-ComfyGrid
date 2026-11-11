@@ -51,6 +51,8 @@ The gear in the title bar opens the mod's own panel, **split into tabs**: **five
 
 **Full multiplayer support**, and 10 languages: English, Español, Español (AR), Français, Deutsch, Русский, 简体中文, 日本語, 한국어, Português (BR).
 
+Works with **Proximity Inventory** and **Immersive Searching**.
+
 Heads up: it replaces the vanilla inventory windows, so don't run it with Inventory Tetris or CleanUI — they replace the same UI. The mod warns you if it finds one.
 
 ## Install

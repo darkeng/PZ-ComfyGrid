@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -72,13 +72,20 @@ local MAX_FIGURE_SCALE = 3
 
 local SNAP = 0.03
 
+local function floorFigureWidth()
+    local minimumHeight = EquipmentStrip.minFigureHeight()
+    local width = Avatar.widthFor(minimumHeight)
+    while Avatar.heightFor(width) < minimumHeight do width = width + 1 end
+    return width
+end
+
 local function clampFigureScale(requestedScale)
     if type(requestedScale) ~= "number" or requestedScale ~= requestedScale then
         requestedScale = 1
     end
-    local natural = Avatar.heightFor(FIGURE_TILES * Style.CELL)
-    local minimumScale = natural > 0
-        and EquipmentStrip.minFigureHeight() / natural or 1
+    local naturalWidth = FIGURE_TILES * Style.CELL
+    local minimumScale = naturalWidth > 0
+        and floorFigureWidth() / naturalWidth or 1
     if minimumScale > 1 then minimumScale = 1 end
     if requestedScale < minimumScale then requestedScale = minimumScale end
     if requestedScale > MAX_FIGURE_SCALE then requestedScale = MAX_FIGURE_SCALE end

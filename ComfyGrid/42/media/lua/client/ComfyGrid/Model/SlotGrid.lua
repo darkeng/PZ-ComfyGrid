@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -13,6 +13,7 @@ require "ComfyGrid/Core/Util"
 require "ComfyGrid/Model/StackRules"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/Model/Capacity"
+require "ComfyGrid/Model/ContainerView"
 require "ComfyGrid/Model/Persistence"
 require "ComfyGrid/Model/ReflowPlan"
 
@@ -21,6 +22,7 @@ local Util = ComfyGrid.Core.Util
 local StackRules = ComfyGrid.Model.StackRules
 local ItemStack = ComfyGrid.Model.ItemStack
 local Capacity = ComfyGrid.Model.Capacity
+local ContainerView = ComfyGrid.Model.ContainerView
 local Persistence = ComfyGrid.Model.Persistence
 local ReflowPlan = ComfyGrid.Model.ReflowPlan
 
@@ -63,6 +65,14 @@ local function isItemExcluded(item, hotbar, excludeEquipped)
         end
     end
     return false
+end
+
+local function viewAdmits(self, item)
+    local owner = item:getContainer()
+    if owner == nil then return false end
+    if owner == self.inventory then return true end
+    local sources = self.viewSources
+    return sources ~= nil and sources[owner] == true
 end
 
 local function isOwnMainInventory(self)
@@ -148,7 +158,7 @@ function SlotGrid:_snapshotItems()
     self.snapCount = entryCount
 end
 
-function SlotGrid:new(inventory, persistentGridData, playerNum)
+function SlotGrid:new(inventory, persistentGridData, playerNum, isView)
     local grid = setmetatable({}, self)
     grid.inventory = inventory
     grid.data = persistentGridData
@@ -161,6 +171,9 @@ function SlotGrid:new(inventory, persistentGridData, playerNum)
 
     grid.refusalLogged = false
     grid.refusalPasses = 0
+
+    grid.isView = isView == true
+    grid.viewSources = nil
 
     grid.changeCount = 0
     grid:_rebuildSlotMap()
@@ -241,7 +254,10 @@ end
 function SlotGrid:insertItem(item, slot)
     if item == nil then return false end
 
-    if item:getContainer() ~= self.inventory then return false end
+    if item:getContainer() ~= self.inventory
+            and not (self.isView and viewAdmits(self, item)) then
+        return false
+    end
 
     local explicit = slot ~= nil
     if slot == nil then
@@ -568,8 +584,7 @@ function SlotGrid:releaseClaim(id)
     if claims == nil or id == nil then return end
     claims[id] = nil
 
-    for _ in pairs(claims) do return end
-    self.pendingClaims = nil
+    if Util.isEmpty(claims) then self.pendingClaims = nil end
 end
 
 function SlotGrid:validate()
@@ -581,6 +596,11 @@ function SlotGrid:validate()
 
     local excludeEquipped = isOwnMainInventory(self)
     local hotbar = excludeEquipped and getHotbar(self.playerNum) or nil
+
+    if self.isView then
+        self.viewSources = ContainerView.sourcesOf(inventory, self.playerNum,
+            self.viewSources)
+    end
 
     local emptyRead = false
     if not excludeEquipped and type(stacks) == "table" and #stacks > 0
@@ -625,6 +645,9 @@ function SlotGrid:validate()
 
                         drop = not emptyRead
                     elseif isItemExcluded(item, hotbar, excludeEquipped) then
+                        drop = true
+                    elseif self.isView and not viewAdmits(self, item) then
+
                         drop = true
 
                     elseif kept > 0 and kept >= StackRules.maxStackOf(item) then
@@ -805,7 +828,8 @@ function SlotGrid:reconcile(snapshotIsCurrent)
         local id = snapIds[snapIndex]
 
         if positioned[id] ~= true
-                and not isItemExcluded(item, hotbar, excludeEquipped) then
+                and not isItemExcluded(item, hotbar, excludeEquipped)
+                and not (self.isView and not viewAdmits(self, item)) then
             if inserted >= MAX_RECONCILE_INSERTS then
                 self.needsMoreReconcile = true
                 break
@@ -835,12 +859,13 @@ function SlotGrid:reconcile(snapshotIsCurrent)
             if not held then
                 if claimed then
                     inserted = inserted + 1
-                elseif positioned[id] ~= nil then
 
-                elseif self:insertItem(item) then
-                    inserted = inserted + 1
-                else
-                    failed = failed + 1
+                elseif positioned[id] == nil then
+                    if self:insertItem(item) then
+                        inserted = inserted + 1
+                    else
+                        failed = failed + 1
+                    end
                 end
             end
         end

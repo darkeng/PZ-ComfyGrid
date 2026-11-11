@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -42,6 +42,8 @@ local function isModActive(modId)
     local okSlashed, foundSlashed = pcall(mods.contains, mods, "\\" .. modId)
     return okSlashed and foundSlashed or false
 end
+
+Warnings.isModActive = isModActive
 
 local function warningText(entry)
     return Text.tr(entry.key, entry.text)

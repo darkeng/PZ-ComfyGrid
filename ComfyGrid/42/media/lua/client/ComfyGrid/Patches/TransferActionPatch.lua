@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -192,6 +192,47 @@ Events.OnGameBoot.Add(function()
         end
     end
 
+    local function ignoreSelection() end
+
+    local function restoreField(tbl, key, value)
+        tbl[key] = nil
+        if tbl[key] ~= value then tbl[key] = value end
+    end
+
+    local function keepsSelection(action, loot, ContainerView)
+        local viewSelected = action.comfyViewSelected
+        if viewSelected == nil then
+            local pane = loot.inventoryPane
+            viewSelected = pane ~= nil and ContainerView.isView(pane.inventory)
+            action.comfyViewSelected = viewSelected
+        end
+        return viewSelected or ContainerView.transferShownByView(action, loot)
+    end
+    local function withViewKept(action, fn)
+        local ContainerView = ComfyGrid.Model and ComfyGrid.Model.ContainerView
+        local playerNum = playerNumFor(action.character)
+        local loot = playerNum ~= nil and getPlayerLoot(playerNum) or nil
+        if ContainerView == nil or loot == nil
+                or not keepsSelection(action, loot, ContainerView) then
+            return fn(action)
+        end
+
+        ContainerView.noteViewTransfer(playerNum)
+        local selectSetter = loot.selectButtonForContainer
+        local forceSetter = loot.setForceSelectedContainer
+        loot.selectButtonForContainer = ignoreSelection
+        loot.setForceSelectedContainer = ignoreSelection
+        local ok, err = pcall(fn, action)
+        restoreField(loot, "selectButtonForContainer", selectSetter)
+        restoreField(loot, "setForceSelectedContainer", forceSetter)
+        if not ok then error(err, 0) end
+    end
+
+    local og_update = ISInventoryTransferAction.update
+    function ISInventoryTransferAction:update()
+        withViewKept(self, og_update)
+    end
+
     local og_perform = ISInventoryTransferAction.perform
     function ISInventoryTransferAction:perform()
         local group = nil
@@ -199,7 +240,7 @@ Events.OnGameBoot.Add(function()
             local queueList = self.queueList
             group = type(queueList) == "table" and queueList[1] or nil
         end
-        og_perform(self)
+        withViewKept(self, og_perform)
         if group == nil then return end
         local items = type(group) == "table" and group.items or nil
         if type(items) ~= "table" then return end

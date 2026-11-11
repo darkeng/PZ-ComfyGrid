@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -264,10 +264,7 @@ local function equipHovered()
         if queueLength(playerObj) > queued then return true end
 
         local okMap, isMap = pcall(item.IsMap, item)
-        if okMap and isMap then
-            local okDark, tooDark = pcall(playerObj.tooDarkToRead, playerObj)
-            return not (okDark and tooDark)
-        end
+        if okMap and isMap then return false end
 
         if dryOffWith(playerObj, item) then return true end
 

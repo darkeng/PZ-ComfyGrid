@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -181,6 +181,13 @@ Events.OnGameBoot.Add(function()
         end
     end
 
+    local og_selectContainer = ISInventoryPage.selectContainer
+    function ISInventoryPage:selectContainer(button, ...)
+        self.comfyPickedInventory = button ~= nil and button.inventory or nil
+        self.comfyPickedAtMs = getTimestampMs()
+        return og_selectContainer(self, button, ...)
+    end
+
     local og_pagePrerender = ISInventoryPage.prerender
     function ISInventoryPage:prerender()
         local WindowChrome = chromeModule("WindowChrome")
@@ -229,6 +236,9 @@ Events.OnGameBoot.Add(function()
             pcall(WindowChrome.selection, self)
         end
 
+        if WindowChrome ~= nil and WindowChrome.veilMarks ~= nil then
+            pcall(WindowChrome.veilMarks, self)
+        end
         if WindowChrome ~= nil and WindowChrome.searchMarks ~= nil then
             pcall(WindowChrome.searchMarks, self)
         end

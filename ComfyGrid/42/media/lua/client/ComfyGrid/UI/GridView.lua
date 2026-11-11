@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -10,6 +10,7 @@ require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Model/ItemStack"
+require "ComfyGrid/Model/ItemVeil"
 require "ComfyGrid/Model/Capacity"
 require "ComfyGrid/Model/RelayedBags"
 require "ComfyGrid/Settings"
@@ -34,6 +35,7 @@ ComfyGrid.UI = ComfyGrid.UI or {}
 local Log = ComfyGrid.Core.Log
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local ItemStack = ComfyGrid.Model.ItemStack
+local ItemVeil = ComfyGrid.Model.ItemVeil
 local Capacity = ComfyGrid.Model.Capacity
 local RelayedBags = ComfyGrid.Model.RelayedBags
 local Settings = ComfyGrid.Settings
@@ -61,7 +63,8 @@ local DRAG_SOURCE_WASH_ALPHA = 0.6
 local MARQUEE_FILL_ALPHA = 0.18
 local MARQUEE_EDGE_ALPHA = 0.9
 
-local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0, inventory = false }
+local ctx = { view = false, stack = false, item = false, slot = 0, x = 0, y = 0, playerNum = 0, inventory = false,
+    veiled = false }
 
 local lastPrerenderError = nil
 local lastRenderError = nil
@@ -208,6 +211,15 @@ local function isSelected(self, stack)
     return selection ~= nil and selection[stack] == true
 end
 
+local function isVeiledStack(self, stack)
+    if stack == nil or not ItemVeil.isActive() then return false end
+    local model = self.model
+    if model == nil or model.grid == nil then return false end
+    return ItemVeil.stackIsVeiled(stack, model.inventory, self.playerNum,
+        model.grid.itemById)
+end
+GridView.isVeiledStack = isVeiledStack
+
 local function toggleSelected(self, stack)
     local selection = self.selection
     if selection == nil then
@@ -218,7 +230,7 @@ local function toggleSelected(self, stack)
         selection[stack] = nil
         self.selectionCount = self.selectionCount - 1
         if self.selectionCount <= 0 then clearSelection(self) end
-    else
+    elseif not isVeiledStack(self, stack) then
         selection[stack] = true
         self.selectionCount = self.selectionCount + 1
     end
@@ -241,7 +253,7 @@ local function selectSlotRange(self, fromSlot, toSlot, keepMarks)
         local slot = stack.slot
         if slot ~= nil and (lowSlot == nil or slot >= lowSlot)
                 and (highSlot == nil or slot <= highSlot)
-                and not selection[stack] then
+                and not selection[stack] and not isVeiledStack(self, stack) then
             selection[stack] = true
             count = count + 1
         end
@@ -491,6 +503,25 @@ local function drawRangePreview(self, hoverSlot, cols, shownSlotCount, cullTop, 
     SlotRenderer.drawRangeOutline(self, anchorX, anchorY, true)
 end
 
+local function drawDial(self, cellX, cellY, fraction)
+
+    local Draw = ComfyGrid.UI.Draw
+    if Draw == nil or Draw.disc == nil or Draw.pie == nil then return end
+    local cell = Style.CELL
+    local surface = Style.COLORS.SURFACE
+    local dialCenterX = cellX + cell * 0.5
+    local dialCenterY = cellY + cell * 0.5
+    local dialRadius = cell * 0.34
+
+    local scrimDiameter = math.floor(dialRadius * 2 + 4)
+    Draw.disc(self, math.floor(dialCenterX - scrimDiameter * 0.5),
+        math.floor(dialCenterY - scrimDiameter * 0.5), scrimDiameter,
+        0.55, surface.bg)
+
+    Draw.pie(self, dialCenterX, dialCenterY, dialRadius,
+        fraction * 6.2831853, 0.30, surface.accent)
+end
+
 local function renderAll(self)
     self:renderBoard()
     local model = self.model
@@ -511,6 +542,9 @@ local function renderAll(self)
     local liveSlot = self.hoverSlot
     local stacks = grid.data.stacks
     local refreshItemById = grid.itemById
+
+    local boardVeils = ItemVeil.boardVeils(inventory, self.playerNum)
+    local uncoveringSlot, uncoveringFraction = nil, 0
     ctx.view = self
     ctx.playerNum = self.playerNum
     ctx.inventory = inventory
@@ -535,6 +569,8 @@ local function renderAll(self)
 
     local jobs = TransferJobs.itemsFor(inventory)
     local currentAction = StackRenderer.currentActionOf(self.playerNum)
+
+    local askVeilProgress = boardVeils and currentAction ~= nil and ItemVeil.hasProgress()
 
     local highlightIds = Highlight.idsFor(self.playerNum)
 
@@ -579,24 +615,35 @@ local function renderAll(self)
                         if member ~= nil and member ~= front then updateItem(member) end
                     end
                 end
+
+                local veiled = boardVeils and ItemVeil.membersVeiled(stack, inventory,
+                    self.playerNum, refreshItemById)
+                if veiled and askVeilProgress and uncoveringSlot == nil then
+                    local progress = ItemVeil.stackProgress(stack, inventory,
+                        currentAction, refreshItemById)
+                    if progress ~= nil then
+                        uncoveringSlot, uncoveringFraction = stack.slot, progress
+                    end
+                end
                 ctx.stack = stack
-                ctx.item = front
+                ctx.item = (not veiled) and front or nil
+                ctx.veiled = veiled
                 ctx.slot = stack.slot
                 ctx.x = cellX
                 ctx.y = cellY
                 drawTileCached(ctx, frameStartMs, stack.slot == liveSlot)
+                if not veiled then
 
-                if searchMarks ~= nil and ItemSearch.marksStack(searchMarks,
-                        stack, searchChangeCount) then
-                    SlotRenderer.drawSearchHint(ctx, searchPulse)
-                end
-                if applySrc ~= nil
-                        and ItemApply.hintFor(applySrc, front, applyPlayer) then
-                    SlotRenderer.drawApplyHint(ctx, applyPulse)
-                end
-                if highlightIds ~= nil
-                        and Highlight.hasStack(highlightIds, stack) then
-                    SlotRenderer.drawHighlight(ctx)
+                    if searchMarks ~= nil and ItemSearch.marksStack(searchMarks,
+                            stack, searchChangeCount) then
+                        SlotRenderer.drawSearchHint(ctx, searchPulse)
+                    end
+                    if applySrc ~= nil and ItemApply.hintFor(applySrc, front, applyPlayer) then
+                        SlotRenderer.drawApplyHint(ctx, applyPulse)
+                    end
+                    if highlightIds ~= nil and Highlight.hasStack(highlightIds, stack) then
+                        SlotRenderer.drawHighlight(ctx)
+                    end
                 end
 
                 if stack == draggedStack or stack == padCarried
@@ -681,21 +728,12 @@ local function renderAll(self)
         local waitFraction = elapsed / CLICK_DELAY_MS
         if waitFraction < 0 then waitFraction = 0 elseif waitFraction > 1 then waitFraction = 1 end
         local pendingX, pendingY = pixelForSlot(pending.slot, cols)
-        local surface = Style.COLORS.SURFACE
+        drawDial(self, pendingX, pendingY, waitFraction)
+    end
 
-        local dialCenterX = pendingX + cell * 0.5
-        local dialCenterY = pendingY + cell * 0.5
-        local dialRadius = cell * 0.34
-        if Draw ~= nil and Draw.disc ~= nil and Draw.pie ~= nil then
-
-            local scrimDiameter = math.floor(dialRadius * 2 + 4)
-            Draw.disc(self, math.floor(dialCenterX - scrimDiameter * 0.5),
-                math.floor(dialCenterY - scrimDiameter * 0.5), scrimDiameter,
-                0.55, surface.bg)
-
-            Draw.pie(self, dialCenterX, dialCenterY, dialRadius,
-                waitFraction * 6.2831853, 0.30, surface.accent)
-        end
+    if uncoveringSlot ~= nil and uncoveringSlot < shownSlotCount then
+        local uncoveringX, uncoveringY = pixelForSlot(uncoveringSlot, cols)
+        drawDial(self, uncoveringX, uncoveringY, uncoveringFraction)
     end
     drawRangePreview(self, hoverSlot, cols, shownSlotCount, cullTop, cullBottom)
 
@@ -1016,6 +1054,8 @@ local function mouseDownImpl(self, x, y)
     RangeSelect.pressOn(self)
     local stack, slot = stackAtPixel(self, x, y)
 
+    if isVeiledStack(self, stack) then return end
+
     if multiSelectHeld() then
 
         self.pendingClick = nil
@@ -1085,6 +1125,7 @@ local function doubleClickOnRelease(self, x, y)
     if getTimestampMs() - pending.atMs > CLICK_DELAY_MS then return false end
     local stack = stackAtPixel(self, x, y)
     if stack == nil or stack.slot ~= pending.slot then return false end
+    if isVeiledStack(self, stack) then return false end
     self.pendingClick = nil
     doubleClickTransfer(self, stack)
 
@@ -1160,7 +1201,7 @@ local function rightMouseUpImpl(self, x, y)
         self.pressedSlot = nil
     end
     local stack = stackAtPixel(self, x, y)
-    if stack == nil then return end
+    if stack == nil or isVeiledStack(self, stack) then return end
     if isSelected(self, stack) and self.selectionCount > 1 then
 
         local menuStacks = { stack }
@@ -1289,7 +1330,7 @@ function GridView:onMouseDoubleClick(x, y)
     if not gestureIsDoubleClick() then return true end
     if self.model == nil then return true end
     local stack = stackAtPixel(self, x, y)
-    if stack == nil then return true end
+    if stack == nil or isVeiledStack(self, stack) then return true end
     doubleClickTransfer(self, stack)
     return true
 end

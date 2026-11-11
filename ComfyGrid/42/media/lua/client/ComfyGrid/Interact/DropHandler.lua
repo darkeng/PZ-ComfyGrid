@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,12 +11,14 @@ require "ComfyGrid/Core/Input"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Core/GameMode"
+require "ComfyGrid/Model/ContainerModel"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/Model/Persistence"
 require "ComfyGrid/Model/ReflowPlan"
 require "ComfyGrid/Interact/QuickMove"
 
 local Log = ComfyGrid.Core.Log
+local ContainerModel = ComfyGrid.Model.ContainerModel
 local ItemStack = ComfyGrid.Model.ItemStack
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local GameMode = ComfyGrid.Core.GameMode
@@ -379,6 +381,18 @@ function DropHandler.resolve(gridView, localX, localY)
     local dragged = DragAndDrop.getDraggedStacks()
     if dragged == nil then return false end
 
+    if gridView.model.grid.isView then
+        finishDrag(gridView, DragAndDrop)
+        return true
+    end
+
+    local targetStack = gridView.model.grid:stackAt(targetSlot)
+    if targetStack ~= nil and gridView.isVeiledStack ~= nil
+            and gridView:isVeiledStack(targetStack) then
+        finishDrag(gridView, DragAndDrop)
+        return true
+    end
+
     local liveItems, comfyStacks, normalized = collectDragged(dragged)
     if #liveItems == 0 then
 
@@ -475,6 +489,11 @@ function DropHandler.resolve(gridView, localX, localY)
                 if occupant ~= nil and type(tag.slot) == "number" then
                     local srcInv = liveItems[1]:getContainer()
                     local uniform = srcInv ~= nil and srcInv ~= inventory
+
+                    if uniform then
+                        local srcModel = ContainerModel.getOrCreate(srcInv, playerNum)
+                        uniform = srcModel ~= nil and gridOwnsStack(srcModel.grid, tag)
+                    end
                     for i = 2, #liveItems do
                         if liveItems[i]:getContainer() ~= srcInv then
                             uniform = false
@@ -508,6 +527,11 @@ function DropHandler.resolveIntoContainer(model, playerNum)
     end
     local dragged = DragAndDrop.getDraggedStacks()
     if dragged == nil then return false end
+
+    if model.grid.isView then
+        finishDrag(nil, DragAndDrop)
+        return true
+    end
     local liveItems = collectDragged(dragged)
     local inventory = model.inventory
     local incomingItems = {}

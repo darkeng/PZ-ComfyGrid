@@ -1,13 +1,15 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
 require "ComfyGrid/Core/Log"
+require "ComfyGrid/Model/ContainerSide"
+require "ComfyGrid/Model/ContainerView"
 require "ComfyGrid/Model/ItemStack"
 require "ComfyGrid/Core/VanillaStacks"
 require "ComfyGrid/Interact/TransferJobs"
@@ -17,6 +19,8 @@ local Transfer = {}
 ComfyGrid.Interact.Transfer = Transfer
 
 local Log = ComfyGrid.Core.Log
+local ContainerSide = ComfyGrid.Model.ContainerSide
+local ContainerView = ComfyGrid.Model.ContainerView
 local ItemStack = ComfyGrid.Model.ItemStack
 local VanillaStacks = ComfyGrid.Core.VanillaStacks
 local TransferJobs = ComfyGrid.Interact.TransferJobs
@@ -41,20 +45,30 @@ local function isFloor(inventory)
 end
 Transfer.isFloor = isFloor
 
-local function isCorpseGrabFromVehicle(item, src, destInventory, playerObj)
+local function isCorpseGrab(item, destInventory, playerObj)
+    if item == nil or destInventory == nil or playerObj == nil then return false end
+    if not item:isHumanCorpse() then return false end
+    return ContainerSide.isCarried(destInventory, playerObj)
+end
+
+local function isCorpseGrabFromVehicle(item, destInventory, playerObj)
 
     if playerObj:getVehicle() == nil then return false end
-    if ISInventoryTransferUtil == nil
-            or ISInventoryTransferUtil.isCharacterGrabbingCorpseItem == nil then
-        return false
+    return isCorpseGrab(item, destInventory, playerObj)
+end
+
+local function newTransferAction(playerObj, item, src, destInventory)
+    if ISGrabCorpseItem ~= nil and isCorpseGrab(item, destInventory, playerObj) then
+        return ISGrabCorpseItem:new(playerObj, item)
     end
-    return ISInventoryTransferUtil.isCharacterGrabbingCorpseItem(playerObj, item,
-        src, destInventory) == true
+    return ISInventoryTransferUtil.newInventoryTransferAction(playerObj, item, src,
+        destInventory)
 end
 
 local function transferSourceOf(item, destInventory, playerObj, destIsFloor)
     local src = item ~= nil and item:getContainer() or nil
     if src == nil or src == destInventory then return nil end
+    if ContainerView.isView(destInventory) then return nil end
     if destInventory:isInside(item) then return nil end
     if not destIsFloor and not destInventory:isItemAllowed(item) then
         return nil
@@ -63,7 +77,7 @@ local function transferSourceOf(item, destInventory, playerObj, destIsFloor)
             and not destInventory:isInCharacterInventory(playerObj) then
         return nil
     end
-    if isCorpseGrabFromVehicle(item, src, destInventory, playerObj) then
+    if isCorpseGrabFromVehicle(item, destInventory, playerObj) then
         return nil
     end
     return src
@@ -218,8 +232,7 @@ function Transfer.moveItems(items, destInventory, playerObj, destSlot,
         local group = groups[src]
         for i = 1, #group do
 
-            local action = ISInventoryTransferUtil.newInventoryTransferAction(
-                playerObj, group[i], src, destInventory)
+            local action = newTransferAction(playerObj, group[i], src, destInventory)
             if action then
 
                 if destSlot ~= nil and action.setComfyTarget then
@@ -327,8 +340,8 @@ function Transfer.moveStacksOrdered(stacks, destInventory, playerObj, slots, src
             if destIsFloor and extinguishForFloor(item, playerNum) then
                 extra = extra + 1
             else
-                local action = ISInventoryTransferUtil.newInventoryTransferAction(
-                    playerObj, item, sources[i], destInventory)
+                local action = newTransferAction(playerObj, item, sources[i],
+                    destInventory)
                 if action then
                     if slot ~= nil and action.setComfyTarget then
                         action:setComfyTarget(slot)

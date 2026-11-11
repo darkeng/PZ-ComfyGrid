@@ -1,12 +1,13 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.9.11
+    Version: 1.10.0
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
 
 require "ComfyGrid/ComfyGrid"
+require "ComfyGrid/Core/ActionQueue"
 require "ComfyGrid/Core/Log"
 require "ComfyGrid/Core/TextureCache"
 require "ComfyGrid/Settings"
@@ -20,6 +21,7 @@ local StackRenderer = {}
 ComfyGrid.UI.StackRenderer = StackRenderer
 
 local Log = ComfyGrid.Core.Log
+local ActionQueue = ComfyGrid.Core.ActionQueue
 local Style = ComfyGrid.UI.Style
 local SlotRenderer = ComfyGrid.UI.SlotRenderer
 local Icons = ComfyGrid.UI.Icons
@@ -39,6 +41,10 @@ local UNWANTED_ALPHA = 0.40
 
 local UNWANTED_MARK_FRAC = 0.66
 local UNWANTED_MARK_ALPHA = 0.22
+
+local VEIL_MARK_FRAC = 0.65
+StackRenderer.VEIL_MARK_FRAC = VEIL_MARK_FRAC
+local VEIL_MARK_ALPHA = 0.7
 
 local countStrings = {}
 
@@ -117,6 +123,8 @@ local weightLineTexture = TextureCache.lazy("media/textures/comfy_weight_line.pn
 
 local brokenTexture = TextureCache.lazy("media/textures/comfy_broken.png")
 local brokenLineTexture = TextureCache.lazy("media/textures/comfy_broken_line.png")
+
+local veilTexture = TextureCache.lazy("media/textures/comfy_veil.png")
 
 local BROKEN_SPAN = 0.86
 
@@ -605,6 +613,17 @@ local function markFit(tex, boxSize)
     return w, h
 end
 
+function StackRenderer.drawVeilMark(view, x, y, boxSize)
+    local veilMark = veilTexture()
+    if veilMark == nil or view == nil then return false end
+    local markSize = floor(boxSize * VEIL_MARK_FRAC + 0.5)
+    local offset = (boxSize - markSize) * 0.5
+    local line = Style.COLORS.SURFACE.line
+    Blit.drawTextureScaled(view, veilMark, x + offset, y + offset, markSize, markSize,
+        VEIL_MARK_ALPHA, line.r, line.g, line.b)
+    return true
+end
+
 local function drawMark(view, markSet, x, y, w, h, fillColor, lineColor)
     if not markSet.ours then
         Blit.drawTextureScaled(view, markSet.fill, x, y, w, h, 1, 1, 1, 1)
@@ -673,7 +692,9 @@ function StackRenderer.draw(ctx)
     local iconPad = Style.PAD
 
     local colors = Style.COLORS
-    local tint = Style.tintForCategory(stack.category)
+
+    local veiled = ctx.veiled == true
+    local tint = Style.tintForCategory((not veiled) and stack.category or nil)
 
     local unwanted = false
     local viewer = nil
@@ -756,10 +777,13 @@ function StackRenderer.draw(ctx)
     end
     if not tex then
 
-        local placeholder = colors.PLACEHOLDER_TEXT
-        view:drawTextCentre("?", x + cellSize * 0.5,
-            y + (cellSize - Style.FONT_H) * 0.5, placeholder.r, placeholder.g,
-            placeholder.b, placeholder.a, Style.FONT)
+        if not (veiled and StackRenderer.drawVeilMark(view, x, y, cellSize)) then
+
+            local placeholder = colors.PLACEHOLDER_TEXT
+            view:drawTextCentre("?", x + cellSize * 0.5,
+                y + (cellSize - Style.FONT_H) * 0.5, placeholder.r, placeholder.g,
+                placeholder.b, placeholder.a, Style.FONT)
+        end
     end
 
     if item then
@@ -927,7 +951,8 @@ function StackRenderer.draw(ctx)
     end
 
     local count = stack.count
-    if count and count > 1 then
+
+    if count and count > 1 and not veiled then
 
         local textX = x + 2
         if brokenBadge then
@@ -960,11 +985,7 @@ end
 
 function StackRenderer.currentActionOf(playerNum)
     local playerObj = playerNum ~= nil and getSpecificPlayer(playerNum) or nil
-    if playerObj == nil then return nil end
-    local queues = ISTimedActionQueue.queues
-    local actionQueue = queues ~= nil and queues[playerObj] or nil
-    local queuedActions = actionQueue ~= nil and actionQueue.queue or nil
-    return queuedActions ~= nil and queuedActions[1] or nil
+    return ActionQueue.runningAction(playerObj)
 end
 
 function StackRenderer.jobDeltaOf(item, currentAction)
