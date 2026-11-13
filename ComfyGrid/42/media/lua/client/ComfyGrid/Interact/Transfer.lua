@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -85,32 +85,68 @@ end
 
 local function alwaysAdmit() return true end
 
-local function newWeightBudget(destInventory, playerObj)
+local function weightsOf(item, destSq)
+    local itemWeight = item:getUnequippedWeight()
+    if destSq ~= nil and item:isOnGroundOrInsideBagOnSquare(destSq) then
+        return itemWeight, 0
+    end
+    return itemWeight, itemWeight
+end
+
+local function vanillaActionAccepts(item, destInventory, playerObj)
+    local src = item:getContainer()
+    if src == nil or not src:contains(item) then return false end
+
+    local ok, valid = pcall(function()
+        local action = ISInventoryTransferAction:new(playerObj, item, src,
+            destInventory)
+        return action:isValid()
+    end)
+    return ok and valid == true
+end
+
+local function limitRaisedElsewhere(candidates, destInventory, destSq, playerObj)
+    for i = 1, #candidates do
+        local item = candidates[i]
+        local itemWeight, itemToFloor = weightsOf(item, destSq)
+        if not destInventory:hasRoomFor(playerObj, itemWeight, itemToFloor)
+                and vanillaActionAccepts(item, destInventory, playerObj) then
+            return true
+        end
+    end
+    return false
+end
+
+local function newWeightBudget(destInventory, playerObj, candidates)
     local total, toFloor = 0, 0
     local destSq = destInventory:hasWorldItem()
         and destInventory:getWorldItem():getSquare() or nil
+    local raisedElsewhere = nil
     return function(item)
-        local itemWeight = item:getUnequippedWeight()
-        local newToFloor = toFloor
-        if destSq == nil or not item:isOnGroundOrInsideBagOnSquare(destSq) then
-            newToFloor = toFloor + itemWeight
+        local itemWeight, itemToFloor = weightsOf(item, destSq)
+        if destInventory:hasRoomFor(playerObj, total + itemWeight,
+                toFloor + itemToFloor) then
+            total = total + itemWeight
+            toFloor = toFloor + itemToFloor
+            return true
         end
-        if not destInventory:hasRoomFor(playerObj, total + itemWeight,
-                newToFloor) then
-            return false
+        if raisedElsewhere == nil then
+            raisedElsewhere = limitRaisedElsewhere(candidates, destInventory,
+                destSq, playerObj)
         end
-        total = total + itemWeight
-        toFloor = newToFloor
-        return true
+        return raisedElsewhere
+            and vanillaActionAccepts(item, destInventory, playerObj)
     end
 end
 
-local function admissionFor(destInventory, playerObj, skipBudget)
+Transfer.weightBudget = newWeightBudget
+
+local function admissionFor(destInventory, playerObj, skipBudget, candidates)
     local destIsFloor = isFloor(destInventory)
     if destIsFloor or skipBudget then
         return destIsFloor, alwaysAdmit
     end
-    return false, newWeightBudget(destInventory, playerObj)
+    return false, newWeightBudget(destInventory, playerObj, candidates)
 end
 
 local function sortLightestFirst(items)
@@ -175,14 +211,14 @@ function Transfer.moveItems(items, destInventory, playerObj, destSlot,
 
     local playerNum = playerObj:getPlayerNum()
 
-    local destIsFloor, admit = admissionFor(destInventory, playerObj,
-        skipBudget)
-
     local sorted = {}
     for i = 1, #items do
         if items[i] ~= nil then sorted[#sorted + 1] = items[i] end
     end
     sortLightestFirst(sorted)
+
+    local destIsFloor, admit = admissionFor(destInventory, playerObj,
+        skipBudget, sorted)
 
     local admitted, sources = {}, {}
     for i = 1, #sorted do
@@ -293,16 +329,23 @@ function Transfer.moveStacksOrdered(stacks, destInventory, playerObj, slots, src
     end
     local playerNum = playerObj:getPlayerNum()
 
-    local destIsFloor, admit = admissionFor(destInventory, playerObj)
+    local itemsOf, everything = {}, {}
+    for stackIndex = 1, #stacks do
+        local items = {}
+        appendStackItems(items, stacks[stackIndex], srcInventory,
+            "Transfer.moveStacksOrdered")
+        itemsOf[stackIndex] = items
+        for i = 1, #items do everything[#everything + 1] = items[i] end
+    end
+
+    local destIsFloor, admit = admissionFor(destInventory, playerObj, nil,
+        everything)
 
     local plan = {}
     local admittedTotal = 0
     for stackIndex = 1, #stacks do
         local slot = slots and slots[stackIndex] or nil
-
-        local items = {}
-        appendStackItems(items, stacks[stackIndex], srcInventory,
-            "Transfer.moveStacksOrdered")
+        local items = itemsOf[stackIndex]
 
         local admitted = {}
         local sources = {}

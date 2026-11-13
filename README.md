@@ -41,7 +41,7 @@ Project Zomboid's list inventory, rebuilt as a grid of square tiles. Made for Bu
 - **Drop to use** — rounds onto a magazine, a magazine or sight onto its gun, a bottle onto another to pour, a half-used item onto its twin to combine, bait, a hook or line onto a fishing rod. Right-click *Pour into* does it from any container. Bait lost while fishing goes back on from your inventory, the same bait only.
 - **E** over gear equips it, and over gear you already wear it takes it off; if the socket is taken, they swap. It also eats, drinks, opens, smokes and reads — and takes only the portion you need.
 - **Rebind that key from the inventory itself**, combinations included.
-- **Full controller support** — a cell cursor over every surface, one button per action, on-screen hints, stack splitting from the inspector. The stack viewer, the bag window and the mod's own settings panel all answer the pad. Steam Deck friendly.
+- **Full controller support** — a cell cursor over every surface that the D-pad takes to the nearest thing in the direction you press, LB and RB that follow the game's own shoulder-button option, one button per action, on-screen hints, stack splitting from the inspector. The stack viewer, the bag window and the mod's own settings panel all answer the pad. Steam Deck friendly.
 
 ## Set up in game
 

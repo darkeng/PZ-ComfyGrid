@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -191,6 +191,21 @@ local function sortLikeVanilla(items, playerNum)
     end
 end
 
+local function spreadAdmission(dest, playerObj, candidates)
+    if not Transfer.isFloor(dest) then
+        return Transfer.weightBudget(dest, playerObj, candidates)
+    end
+    local weight = 0
+    return function(item)
+        local okW, itemWeight = pcall(item.getUnequippedWeight, item)
+        if not okW or itemWeight == nil then itemWeight = 0 end
+        local okR, room = pcall(dest.hasRoomFor, dest, playerObj, weight + itemWeight)
+        if not (okR and room) then return false end
+        weight = weight + itemWeight
+        return true
+    end
+end
+
 function BulkTransfer.planSpread(src, dests, playerObj, playerNum)
     local groups, list, map = {}, {}, {}
     if src == nil or dests == nil or playerObj == nil then
@@ -222,19 +237,16 @@ function BulkTransfer.planSpread(src, dests, playerObj, playerNum)
             end
             sortLikeVanilla(candidates, playerNum)
 
-            local picked, weight = {}, 0.0
+            local admit = spreadAdmission(dest, playerObj, candidates)
+            local picked = {}
             for i = 1, #candidates do
                 local item = candidates[i]
-                local okW, itemWeight = pcall(item.getUnequippedWeight, item)
-                if not okW or itemWeight == nil then itemWeight = 0 end
-                local okR, room = pcall(dest.hasRoomFor, dest, playerObj,
-                    weight + itemWeight)
-                if not (okR and room) then break end
+                local okAdmit, admitted = pcall(admit, item)
+                if not (okAdmit and admitted) then break end
                 picked[#picked + 1] = item
                 taken[item] = true
                 map[item] = true
                 list[#list + 1] = item
-                weight = weight + itemWeight
             end
             if #picked > 0 then
                 groups[#groups + 1] = { dest = dest, items = picked }

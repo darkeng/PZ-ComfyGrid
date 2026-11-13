@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -275,6 +275,11 @@ end
 function PocketsPanel:padChipAt(slot)
     if slot == 0 and self:padChipCount() == 1 then return "caret" end
     return nil
+end
+
+function PocketsPanel:padChipRect(slot)
+    if self:padChipAt(slot) ~= "caret" then return nil end
+    return SectionCaret.rect(self._caretX, 0, Style.FONT_H)
 end
 
 function PocketsPanel:padActivateChip(slot)

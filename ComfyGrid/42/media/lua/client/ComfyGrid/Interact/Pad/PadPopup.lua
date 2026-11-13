@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -33,6 +33,15 @@ end
 function PadPopup.releaseFocus(popup)
     local seat = popup.playerNum or 0
     if getFocusForPlayer(seat) ~= popup then return end
+    local PadFocus = ComfyGrid.Interact.PadFocus
+    local PadTargets = ComfyGrid.Interact.PadTargets
+    local tile = popup.padTile
+    local rect = {}
+    if PadFocus ~= nil and PadTargets ~= nil and tile ~= nil
+            and PadTargets.cellRect({ el = popup }, tile, rect)
+            and PadFocus.landBeneath(seat, rect, popup) then
+        return
+    end
     setJoypadFocus(seat, popup._padReturnPage)
 end
 

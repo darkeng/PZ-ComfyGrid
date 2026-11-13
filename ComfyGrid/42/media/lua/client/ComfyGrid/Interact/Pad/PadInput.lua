@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -13,6 +13,7 @@ require "ComfyGrid/Interact/QuickMove"
 require "ComfyGrid/Interact/ContextMenu"
 require "ComfyGrid/Interact/Pad/PadFocus"
 require "ComfyGrid/Interact/Pad/PadCarry"
+require "ComfyGrid/Interact/Pad/PadShoulder"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Interact = ComfyGrid.Interact or {}
 local PadInput = {}
@@ -24,6 +25,7 @@ local QuickMove = ComfyGrid.Interact.QuickMove
 local ContextMenu = ComfyGrid.Interact.ContextMenu
 local PadFocus = ComfyGrid.Interact.PadFocus
 local PadCarry = ComfyGrid.Interact.PadCarry
+local PadShoulder = ComfyGrid.Interact.PadShoulder
 
 local function hotbarIndexOf(strip, seat, itemId)
     if itemId == nil then return nil end
@@ -169,10 +171,6 @@ local function verbB(page, seat)
         local _, el = PadFocus.peek(page)
         if el ~= nil and el == ContainerWindow.gridFor(seat) then
             ContainerWindow.closeFor(seat)
-            local playerObj = getSpecificPlayer(seat)
-            if playerObj ~= nil then
-                PadFocus.focusInventory(page, playerObj:getInventory())
-            end
             return true
         end
     end
@@ -180,18 +178,12 @@ local function verbB(page, seat)
     return true
 end
 
-local function verbShoulder(page, seat, wantLoot)
-    if page.onCharacter ~= wantLoot then return false end
-    local target = wantLoot and getPlayerLoot(seat) or getPlayerInventory(seat)
-    return PadFocus.focusWindow(page, target)
+local function verbLB(page, _seat)
+    return PadShoulder.press(page, false)
 end
 
-local function verbLB(page, seat)
-    return verbShoulder(page, seat, false)
-end
-
-local function verbRB(page, seat)
-    return verbShoulder(page, seat, true)
+local function verbRB(page, _seat)
+    return PadShoulder.press(page, true)
 end
 
 local function equipEntryWithLayers(el, slot)
@@ -225,14 +217,7 @@ local function verbInspect(page, seat)
                 PadPopup.focus(popup, page)
             elseif ok then
 
-                local ContainerWindow = ComfyGrid.UI
-                    and ComfyGrid.UI.ContainerWindow
-                local bagGrid = ContainerWindow ~= nil
-                    and ContainerWindow.gridFor ~= nil
-                    and ContainerWindow.gridFor(seat) or nil
-                local inv = bagGrid ~= nil and bagGrid.model ~= nil
-                    and bagGrid.model.inventory or nil
-                if inv ~= nil then PadFocus.focusInventory(page, inv) end
+                PadFocus.enterBagWindow(page)
             end
         end
     end
@@ -294,15 +279,16 @@ function PadInput.promptFor(page, slotKey)
         if PadCarry.isCarrying(page.player) then return nil end
         return PadFocus.canMove(page) ~= nil and promptText("Move") or nil
     end
-    if slotKey == "LB" then
+    if slotKey == "LB" or slotKey == "RB" then
 
-        if page.onCharacter then return promptText("Section") end
-        return promptText("Inventory")
-    end
-    if slotKey == "RB" then
-
-        if page.onCharacter then return promptText("Loot") end
-        return promptText("Container")
+        local action = PadShoulder.actionOf(page, slotKey == "RB")
+        if action == "switch" then
+            return promptText(page.onCharacter and "Section" or "Container")
+        end
+        if action == "go" then
+            return promptText(slotKey == "RB" and "Loot" or "Inventory")
+        end
+        return nil
     end
 
     if slotKey == "L3" then

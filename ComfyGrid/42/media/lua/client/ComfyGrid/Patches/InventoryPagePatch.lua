@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -435,6 +435,8 @@ Events.OnGameBoot.Add(function()
         ISInventoryPage[methodName] = function(self, joypadData)
             local Pad = padModule(self, "PadFocus")
             if Pad ~= nil then raiseHintBar(self) end
+            local Shoulder = padModule(self, "PadShoulder")
+            if Shoulder ~= nil and Shoulder.dpad(self, joypadData, dy) then return end
             if Pad ~= nil and Pad.onDir(self, dx, dy) then return end
             return og_onJoypadDir(self, joypadData)
         end

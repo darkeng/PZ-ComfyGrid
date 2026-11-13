@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -193,6 +193,18 @@ function Row:idAt(i)
     if i < 1 or i > self.count then return nil end
     local rect = self._rects[i]
     return rect ~= nil and rect.id or nil
+end
+
+function Row:rectAt(i)
+    if i < 1 or i > self.count then return nil end
+    local rect = self._rects[i]
+    if rect == nil then return nil end
+    return rect.x, rect.y, rect.s, rect.s
+end
+
+function Chip.slotAcross(forward, backward, slot)
+    if slot < forward.count then return forward, slot + 1 end
+    return backward, backward.count - (slot - forward.count)
 end
 
 function Row:hit(x, y)

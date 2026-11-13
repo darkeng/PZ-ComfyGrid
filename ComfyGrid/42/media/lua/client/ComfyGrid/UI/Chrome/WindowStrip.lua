@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -317,9 +317,13 @@ function WindowStrip:padChipCount()
 end
 
 function WindowStrip:padChipAt(slot)
-    local leftCount = self.chipsLeft.count
-    if slot < leftCount then return self.chipsLeft:idAt(slot + 1) end
-    return self.chips:idAt(self.chips.count - (slot - leftCount))
+    local row, index = Chip.slotAcross(self.chipsLeft, self.chips, slot)
+    return row:idAt(index)
+end
+
+function WindowStrip:padChipRect(slot)
+    local row, index = Chip.slotAcross(self.chipsLeft, self.chips, slot)
+    return row:rectAt(index)
 end
 
 function WindowStrip:padActivateChip(slot)

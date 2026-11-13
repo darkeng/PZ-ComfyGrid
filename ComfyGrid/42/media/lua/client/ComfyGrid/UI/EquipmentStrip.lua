@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -198,7 +198,6 @@ function EquipmentStrip:new(x, y, playerNum)
     o.cols = MIN_COLS
     o.rows = 1
     o.layout = "flow"
-    o.padRagged = false
     o.groups = {}
     o.groupCount = 0
     o.tilePos = {}
@@ -220,8 +219,6 @@ end
 
 function EquipmentStrip:setLayout(mode)
     self.layout = mode == "anchors" and "anchors" or "flow"
-
-    self.padRagged = self.layout == "anchors"
 end
 
 function EquipmentStrip:setFigureBox(x, y, w, h)

@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -11,6 +11,8 @@ require "ComfyGrid/Core/Util"
 require "ComfyGrid/Core/Input"
 require "ComfyGrid/UI/Style"
 require "ComfyGrid/Interact/Pad/PadMove"
+require "ComfyGrid/Interact/Pad/PadBeam"
+require "ComfyGrid/Interact/Pad/PadTargets"
 ComfyGrid = ComfyGrid or {}
 ComfyGrid.Interact = ComfyGrid.Interact or {}
 local PadFocus = {}
@@ -20,8 +22,11 @@ local Util = ComfyGrid.Core.Util
 local Input = ComfyGrid.Core.Input
 local Style = ComfyGrid.UI.Style
 local PadMove = ComfyGrid.Interact.PadMove
+local PadBeam = ComfyGrid.Interact.PadBeam
+local PadTargets = ComfyGrid.Interact.PadTargets
 
 local states = {}
+local SLOT_MEMORY = 64
 
 local function stateFor(playerNum)
     local seatState = states[playerNum]
@@ -32,13 +37,34 @@ local function stateFor(playerNum)
     return seatState
 end
 
+local function handFocus(seatState, playerNum, page)
+    if not Input.padOwns(playerNum) then return end
+    seatState.handoff = page
+    setJoypadFocus(playerNum, page)
+end
+
 local function winState(seatState, page)
     local windowCursor = seatState.win[page]
     if windowCursor == nil then
-        windowCursor = { el = nil, kind = nil, slot = 0 }
+        windowCursor = { el = nil, kind = nil, slot = 0, slotIn = {}, remembered = 0 }
         seatState.win[page] = windowCursor
     end
     return windowCursor
+end
+
+local function rememberSlot(windowCursor, node, slot)
+    if node.kind ~= "grid" and node.kind ~= "pocket" then return end
+    local model = node.el.model
+    local container = model ~= nil and model.inventory or nil
+    if container == nil then return end
+    if windowCursor.slotIn[container] == nil then
+        if windowCursor.remembered >= SLOT_MEMORY then
+            windowCursor.slotIn = {}
+            windowCursor.remembered = 0
+        end
+        windowCursor.remembered = windowCursor.remembered + 1
+    end
+    windowCursor.slotIn[container] = slot
 end
 
 local function hostOf(page)
@@ -105,16 +131,16 @@ local function addEquipWindowNodes(nodes, page)
     local win = EquipWindow ~= nil and EquipWindow.windowFor ~= nil
         and EquipWindow.windowFor(page.player) or nil
 
-    local neighbour = win ~= nil
-        and (page.onCharacter == true or win.dockSide == "centre")
-    if neighbour and win:getIsVisible() and win.content ~= nil then
+    if page.onCharacter == true and win ~= nil and win:getIsVisible()
+            and win.content ~= nil then
+        local floating = win.docked == false
 
         if win.strip ~= nil and win.strip.padChipCount ~= nil then
             nodes[#nodes + 1] = { kind = "chip", el = win.strip,
-                panel = win, side = true }
+                panel = win, side = true, floating = floating }
         end
         nodes[#nodes + 1] = { kind = "equip", el = win.content,
-            panel = win, side = true }
+            panel = win, side = true, floating = floating }
     end
 end
 
@@ -126,9 +152,8 @@ local function addBagWindowNode(nodes, page)
         and ContainerWindow.gridFor(page.player) or nil
     if page.onCharacter == true and win ~= nil and grid ~= nil
             and win:getIsVisible() then
-
-        nodes[#nodes + 1] = { kind = "grid", el = grid, panel = win,
-            side = true, bubble = true }
+        nodes[#nodes + 1] = { kind = "grid", el = grid, panel = win, side = true,
+            floating = true }
     end
 end
 
@@ -161,13 +186,6 @@ local function countOf(node)
     return cols * rows
 end
 
-local function shapeOf(node, count)
-    if node.kind == "chip" then
-        return count > 0 and count or 1, 1
-    end
-    return node.el.cols or 1, node.el.rows or 1
-end
-
 local function indexOfEl(nodes, el)
     if el == nil then return nil end
     for i = 1, #nodes do
@@ -180,6 +198,10 @@ local function isLandable(node)
     return node ~= nil and not node.side and countOf(node) >= 1
 end
 
+local function isColdLanding(node)
+    return isLandable(node) and node.kind ~= "chip"
+end
+
 local function defaultIndex(nodes, page)
     local host = hostOf(page)
     local mainGrid = host ~= nil and host.panels[1] ~= nil
@@ -187,13 +209,18 @@ local function defaultIndex(nodes, page)
     local idx = indexOfEl(nodes, mainGrid)
     if idx ~= nil and countOf(nodes[idx]) > 0 then return idx end
     for i = 1, #nodes do
-
-        if not nodes[i].side and nodes[i].kind ~= "chip"
-                and countOf(nodes[i]) > 0 then
-            return i
-        end
+        if isColdLanding(nodes[i]) then return i end
     end
     return nil
+end
+
+local function isShown(page)
+    return page ~= nil and page:getIsVisible() and not page.isCollapsed
+end
+
+local function viewportOf(host)
+    if host.viewportHeight ~= nil then return host:viewportHeight() end
+    return host.height or 0
 end
 
 local function stampNode(windowCursor, node, slot)
@@ -203,6 +230,7 @@ local function stampNode(windowCursor, node, slot)
     windowCursor.el = node.el
     windowCursor.kind = node.kind
     windowCursor.slot = slot
+    rememberSlot(windowCursor, node, slot)
 
     local el = node.el
     if el.padFocusChanged ~= nil then el:padFocusChanged(slot) end
@@ -228,9 +256,7 @@ local function ensureVisible(host, node, slot)
     local top = (node.panel.y or 0) + (host.yOffset or 0)
         + gy + row * stride
     local bottom = top + cell
-
-    local view = host.viewportHeight ~= nil and host:viewportHeight()
-        or (host.height or 0)
+    local view = viewportOf(host)
     local offset = host.yOffset or 0
     if top < offset then
         offset = top
@@ -241,16 +267,24 @@ local function ensureVisible(host, node, slot)
     host.yOffset = offset
 end
 
+local function placeCursor(windowCursor, host, node, slot)
+    stampNode(windowCursor, node, slot)
+    ensureVisible(host, node, windowCursor.slot)
+end
+
 function PadFocus.onGain(page, _joypadData)
     local seatState = stateFor(page.player)
     seatState.page = page
     seatState.active = true
+
+    local placed = seatState.handoff == page
+    seatState.handoff = nil
+    if placed then return end
     local windowCursor = winState(seatState, page)
     local nodes = nodesFor(page)
     local cur = nodes ~= nil and indexOfEl(nodes, windowCursor.el) or nil
 
-    if nodes ~= nil and (cur == nil or not isLandable(nodes[cur])
-            or nodes[cur].kind == "chip") then
+    if nodes ~= nil and (cur == nil or not isColdLanding(nodes[cur])) then
         local idx = defaultIndex(nodes, page)
         if idx ~= nil then
             stampNode(windowCursor, nodes[idx], windowCursor.slot or 0)
@@ -279,14 +313,28 @@ function PadFocus.focusWindow(page, target)
     if nodes == nil then return false end
     local cur = indexOfEl(nodes, windowCursor.el)
 
-    if cur == nil or not isLandable(nodes[cur]) then
+    if cur == nil or not isColdLanding(nodes[cur]) then
         cur = defaultIndex(nodes, target)
         if cur == nil then return false end
     end
 
-    stampNode(windowCursor, nodes[cur], windowCursor.slot or 0)
-    ensureVisible(host, nodes[cur], windowCursor.slot)
-    setJoypadFocus(page.player, target)
+    placeCursor(windowCursor, host, nodes[cur], windowCursor.slot or 0)
+    handFocus(seatState, page.player, target)
+    return true
+end
+
+function PadFocus.enterBagWindow(page)
+    local owner = getPlayerInventory(page.player)
+    if not isShown(owner) then return false end
+    local ContainerWindow = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
+    local grid = ContainerWindow ~= nil and ContainerWindow.gridFor ~= nil
+        and ContainerWindow.gridFor(page.player) or nil
+    local nodes = nodesFor(owner)
+    local index = nodes ~= nil and indexOfEl(nodes, grid) or nil
+    if index == nil then return false end
+    local seatState = stateFor(page.player)
+    stampNode(winState(seatState, owner), nodes[index], 0)
+    if owner ~= page then handFocus(seatState, page.player, owner) end
     return true
 end
 
@@ -310,13 +358,40 @@ function PadFocus.focusInventory(page, inv)
         if node.kind == "grid" or node.kind == "pocket" then
             local model = node.el.model
             if model ~= nil and model.inventory == inv then
-                stampNode(windowCursor, node, windowCursor.slot or 0)
-                ensureVisible(host, node, windowCursor.slot)
+                placeCursor(windowCursor, host, node, windowCursor.slot or 0)
                 return true
             end
         end
     end
     return false
+end
+
+function PadFocus.followSelection(page)
+    local seatState = stateFor(page.player)
+    if seatState.page ~= page then return false end
+    local container = page.inventoryPane ~= nil and page.inventoryPane.inventory or nil
+    if container == nil then return false end
+    local host = hostOf(page)
+
+    if host ~= nil and host.refreshLayout ~= nil then host:refreshLayout() end
+    local nodes = nodesFor(page)
+    if nodes == nil then return false end
+    local windowCursor = winState(seatState, page)
+    local header = nil
+    for i = 1, #nodes do
+        local node = nodes[i]
+        local model = node.el.model
+        if not node.side and model ~= nil and model.inventory == container then
+            if node.kind == "grid" or node.kind == "pocket" then
+                placeCursor(windowCursor, host, node, windowCursor.slotIn[container] or 0)
+                return true
+            end
+            if node.kind == "chip" and header == nil then header = node end
+        end
+    end
+    if header == nil then return false end
+    placeCursor(windowCursor, host, header, 0)
+    return true
 end
 
 PadFocus.movingInv = PadMove.movingInv
@@ -342,6 +417,7 @@ function PadFocus.onLose(page)
 
     if getFocusForPlayer(page.player) ~= nil then return end
     seatState.active = false
+    seatState.handoff = nil
 
     PadFocus.endMove(page)
 
@@ -356,402 +432,104 @@ function PadFocus.onLose(page)
     end
 end
 
-local function crossWindow(seatState, page, dir, fromRow)
-    local other
-    if page.onCharacter then
-        other = getPlayerLoot(page.player)
-    else
-        other = getPlayerInventory(page.player)
-    end
-    if other == nil or other == page then return false end
-    local otherOnSide
-    if dir > 0 then
-        otherOnSide = other:getAbsoluteX() >= page:getAbsoluteX()
-    else
-        otherOnSide = other:getAbsoluteX() <= page:getAbsoluteX()
-    end
-    if not otherOnSide then return false end
-    local nodes, host = nodesFor(other)
-    if nodes == nil then return false end
-    local idx = defaultIndex(nodes, other)
-    if idx == nil then return false end
-    local node = nodes[idx]
-    local windowCursor = winState(seatState, other)
-    local cols = node.el.cols or 1
-    local rows = node.el.rows or 1
-    local row = fromRow
-    if row > rows - 1 then row = rows - 1 end
-    if row < 0 then row = 0 end
-    local col = dir > 0 and 0 or (cols - 1)
-    stampNode(windowCursor, node, row * cols + col)
-    ensureVisible(host, node, windowCursor.slot)
-
-    setJoypadFocus(page.player, other)
-    return true
-end
-
-local function verticalStep(nodes, cur, step, col)
-    local from = nodes[cur]
-    local fromPocket = from.kind == "pocket"
-
-    local sidePanel = from.side and from.panel or nil
-    local idx = cur + step
-    while nodes[idx] ~= nil do
-        local node = nodes[idx]
-        local skip = countOf(node) < 1
-            or (sidePanel == nil and node.side)
-            or (sidePanel ~= nil and node.panel ~= sidePanel)
-            or (fromPocket and node.kind == "pocket")
-        if not skip then
-            local cols, rows = shapeOf(node, countOf(node))
-            local nCol = col
-            if nCol > cols - 1 then nCol = cols - 1 end
-            local enterRow = step > 0 and 0 or (rows - 1)
-            return node, enterRow * cols + nCol
-        end
-        idx = idx + step
-    end
-    return nil
-end
-
-local function centreX(window)
-    return window:getAbsoluteX() + (window:getWidth() or 0) / 2
-end
-
-local function dirOf(node, page)
-    local window = node.panel
-    if window == nil then return 0, 0 end
-    if window.docked == true and window.dockSide == "above" then
-        return 0, -1
-    end
-    if window.getAbsoluteX == nil then return 0, 0 end
-
-    return centreX(window) < centreX(page) and -1 or 1, 0
-end
-
-local function sideSpan(node, page)
-    local window = node.panel
-    if window == nil or window.getAbsoluteX == nil then return 0 end
-    local centreDistance = centreX(window) - centreX(page)
-    return centreDistance < 0 and -centreDistance or centreDistance
-end
-
-local function sideNodeOn(nodes, page, dx, dy, after)
-    if dx == 0 and dy == 0 then return nil end
-    local minSpan = after ~= nil and sideSpan(after, page) or nil
-    local best, bestSpan = nil, nil
-    for i = 1, #nodes do
-        local node = nodes[i]
-
-        if node.side and not node.bubble and node.kind ~= "chip"
-                and countOf(node) > 0 and node ~= after then
-            local wx, wy = dirOf(node, page)
-            if wx == dx and wy == dy then
-                local span = sideSpan(node, page)
-                if minSpan == nil or span > minSpan then
-                    if bestSpan == nil or span < bestSpan then
-                        best, bestSpan = i, span
-                    end
-                end
-            end
-        end
-    end
-    return best
-end
-
-local function cursorAbs(node, slot, cols)
-    local el = node.el
-    if el.padRagged == true and el.padTileXY ~= nil then
-        local x, y = el:padTileXY(slot)
-        return el:getAbsoluteX() + x, el:getAbsoluteY() + y
-    end
-    if node.kind == "chip" then
-        return el:getAbsoluteX(), el:getAbsoluteY()
-    end
-    local x, y = Style.pixelForSlot(slot, cols)
-    return el:getAbsoluteX() + x, el:getAbsoluteY() + y
-end
-
-local function raggedStep(el, slot, dx, dy, count)
-    local cx, cy = el:padTileXY(slot)
-    local best, bestScore = nil, nil
-    for i = 0, count - 1 do
-        if i ~= slot then
-            local x, y = el:padTileXY(i)
-            local along, across
-            if dx ~= 0 then
-                along, across = (x - cx) * dx, y - cy
-            else
-                along, across = (y - cy) * dy, x - cx
-            end
-            if along > 0 then
-                if across < 0 then across = -across end
-                local score = along + across * 2
-                if bestScore == nil or score < bestScore then
-                    best, bestScore = i, score
-                end
-            end
-        end
-    end
-    return best
-end
-
-local function raggedEntry(el, count, fromAbsX, fromAbsY)
-    if count <= 0 then return 0 end
-
-    if el.padRagged ~= true or el.padTileXY == nil then
-        local cols = el.cols or 1
-        if cols < 1 then cols = 1 end
-        local rows = math.ceil(count / cols)
-        local ex0 = el.getAbsoluteX ~= nil and el:getAbsoluteX() or 0
-        local ey0 = el.getAbsoluteY ~= nil and el:getAbsoluteY() or 0
-        local width = el.getWidth ~= nil and el:getWidth() or 0
-        local height = el.getHeight ~= nil and el:getHeight() or 0
-        local col = width > 0
-            and math.floor((fromAbsX - ex0) / (width / cols)) or 0
-        local row = height > 0
-            and math.floor((fromAbsY - ey0) / (height / rows)) or 0
-        col = Util.clamp(col, 0, cols - 1)
-        row = Util.clamp(row, 0, rows - 1)
-        return Util.clamp(row * cols + col, 0, count - 1)
-    end
-    local ex, ey = el:getAbsoluteX(), el:getAbsoluteY()
-    local best, bestScore = 0, nil
-    for i = 0, count - 1 do
-        local x, y = el:padTileXY(i)
-        local ay = (ey + y) - fromAbsY
-        if ay < 0 then ay = -ay end
-        local ax = (ex + x) - fromAbsX
-        if ax < 0 then ax = -ax end
-        local score = ay * 2 + ax
-        if bestScore == nil or score < bestScore then
-            best, bestScore = i, score
-        end
-    end
-    return best
-end
-
 local function enterSide(node)
+    if not node.side then return end
     local window = node.panel
     if window ~= nil and window.isCollapsed and window.uncollapse ~= nil then
         window:uncollapse()
     end
 end
 
-local function leaveSide(page, nodes, windowCursor, host)
-    local idx = indexOfEl(nodes, windowCursor.homeEl)
-    if idx == nil or not isLandable(nodes[idx]) then
-        idx = defaultIndex(nodes, page)
-    end
-    if idx == nil then return end
-    stampNode(windowCursor, nodes[idx], windowCursor.homeSlot or 0)
-    ensureVisible(host, nodes[idx], windowCursor.slot)
-end
-
-local function leaveBubble(page, nodes, windowCursor, host, dx, dy)
-    local idx = indexOfEl(nodes, windowCursor.homeEl)
-    if idx == nil or not isLandable(nodes[idx]) then
-        idx = defaultIndex(nodes, page)
-    end
-    if idx == nil then return true end
-    local node = nodes[idx]
-    local count = countOf(node)
-    local cols = shapeOf(node, count)
-    local slot = Util.clamp(windowCursor.homeSlot or 0, 0, count - 1)
-    local col = Util.clamp(slot % cols + (dx or 0), 0, cols - 1)
-    local row = math.floor(slot / cols) + (dy or 0)
-    if row < 0 then row = 0 end
-    local nslot = Util.clamp(row * cols + col, 0, count - 1)
-    stampNode(windowCursor, node, nslot)
-    ensureVisible(host, node, windowCursor.slot)
-    if nslot == slot then windowCursor.bubbleSkip = true end
-    return true
-end
-
-local function sideEdge(seatState, node, page, nodes, windowCursor, host, dx, dy)
-
-    if node.bubble then
-        return leaveBubble(page, nodes, windowCursor, host, dx, dy)
-    end
-    local wx, wy = dirOf(node, page)
-    if dx == -wx and dy == -wy then
-        leaveSide(page, nodes, windowCursor, host)
-        return true
-    end
-
-    local idx = sideNodeOn(nodes, page, dx, dy, node)
-    if idx ~= nil then
-        local sideNode = nodes[idx]
-        enterSide(sideNode)
-        stampNode(windowCursor, sideNode, 0)
-        ensureVisible(host, sideNode, windowCursor.slot)
-        return true
-    end
-    if dx ~= 0 then crossWindow(seatState, page, dx, 0) end
-    return true
-end
-
-local function enterSideOn(nodes, page, windowCursor, node, slot, cols, dx, dy)
-    local idx = sideNodeOn(nodes, page, dx, dy)
-    if idx == nil then return false end
-    local sideNode = nodes[idx]
-    enterSide(sideNode)
-    local ax, ay = cursorAbs(node, slot, cols)
-    windowCursor.homeEl, windowCursor.homeSlot = node.el, slot
-    stampNode(windowCursor, sideNode,
-        raggedEntry(sideNode.el, countOf(sideNode), ax, ay))
-    return true
-end
-
-local function bubbleRedirect(page)
-    local ContainerWindow = ComfyGrid.UI and ComfyGrid.UI.ContainerWindow
-    local grid = ContainerWindow ~= nil and ContainerWindow.gridFor ~= nil
-        and ContainerWindow.gridFor(page.player) or nil
-    if grid == nil then return end
-    local windowCursor = winState(stateFor(page.player), page)
-    if windowCursor.bubbleSkip then
-        windowCursor.bubbleSkip = nil
-        return
-    end
-    if windowCursor.el == grid then return end
-    local kind, el, slot, occupant = PadFocus.peek(page)
-    if el == nil or occupant == nil then return end
-    if kind ~= "grid" and kind ~= "pocket" then return end
-    if occupant.itemIDs == nil then return end
-
-    local inv = grid.model ~= nil and grid.model.inventory or nil
-    if inv == nil then return end
-    local okItem, item = pcall(inv.getContainingItem, inv)
-    if not okItem or item == nil then return end
-    local id = item:getID()
-    local onTheDoor = false
-    for sid in pairs(occupant.itemIDs) do
-        if sid == id then onTheDoor = true break end
-    end
-    if not onTheDoor then return end
-
-    local nodes, host = nodesFor(page)
-    if nodes == nil then return end
-    local bagNodeIndex, fromNodeIndex = nil, indexOfEl(nodes, el)
-    for i = 1, #nodes do
-        if nodes[i].el == grid then bagNodeIndex = i break end
-    end
-    if bagNodeIndex == nil or countOf(nodes[bagNodeIndex]) < 1 then return end
-    local bagNode = nodes[bagNodeIndex]
-    local from = fromNodeIndex ~= nil and nodes[fromNodeIndex] or nil
-    local ax, ay = 0, 0
-    if from ~= nil then
-        ax, ay = cursorAbs(from, slot, shapeOf(from, countOf(from)))
-    end
-    enterSide(bagNode)
-
-    windowCursor.homeEl, windowCursor.homeSlot = el, slot
-    stampNode(windowCursor, bagNode, raggedEntry(bagNode.el,
-        countOf(bagNode), ax, ay))
-    ensureVisible(host, bagNode, windowCursor.slot)
-end
-
 local function relandStaleCursor(page, nodes, host, windowCursor)
     local cur = defaultIndex(nodes, page)
     if cur == nil then return false end
-    stampNode(windowCursor, nodes[cur], windowCursor.slot or 0)
-    ensureVisible(host, nodes[cur], windowCursor.slot)
+    placeCursor(windowCursor, host, nodes[cur], windowCursor.slot or 0)
     return true
 end
 
-local function walkRaggedBoard(press, dx, dy)
-    local node, windowCursor = press.node, press.windowCursor
-    local target = raggedStep(node.el, press.slot, dx, dy, press.count)
-    if target ~= nil then
-        stampNode(windowCursor, node, target)
-        return true
+local function otherPageOf(page)
+    local other
+    if page.onCharacter then other = getPlayerLoot(page.player)
+    else other = getPlayerInventory(page.player) end
+    if other == page or not isShown(other) then return nil end
+    return other
+end
+
+local function windowOf(node, page)
+    return node.side and node.panel or page
+end
+
+local function addWindowTarget(targets, page, node)
+    local window = node.panel
+    local x, y = window:getAbsoluteX(), window:getAbsoluteY()
+    targets[#targets + 1] = { page = page, node = node, wholeWindow = true, far = true,
+        x0 = x, y0 = y, x1 = x + window:getWidth(), y1 = y + window:getHeight() }
+end
+
+local scratchCell = {}
+
+local function addTargets(targets, page, nodes, host, covers, own, listed, from, dx, dy)
+    local viewTop, viewBottom = 0, 0
+    if host ~= nil then
+        viewTop = host:getAbsoluteY()
+        viewBottom = viewTop + viewportOf(host)
     end
+    for i = 1, #nodes do
+        local node = nodes[i]
+        if not listed[node.el] then
+            listed[node.el] = true
+            local window = windowOf(node, page)
+            if node.floating and window ~= own and from ~= nil then
 
-    if dy ~= 0 then
-
-        local nextNode, enterSlot = verticalStep(press.nodes, press.cur,
-            dy > 0 and 1 or -1, 0)
-        if nextNode ~= nil then
-            stampNode(windowCursor, nextNode, enterSlot)
-            ensureVisible(press.host, nextNode, windowCursor.slot)
-            return true
+                if node.kind ~= "chip" then addWindowTarget(targets, page, node) end
+            else
+                local far = window ~= own
+                local scrolls = host ~= nil and not node.side and not node.fixed
+                local el = node.el
+                local elX, elY = el:getAbsoluteX(), el:getAbsoluteY()
+                local cell = scratchCell
+                cell.far = far
+                for slot = 0, countOf(node) - 1 do
+                    if PadTargets.cellRect(node, slot, cell, elX, elY)
+                            and (from == nil or PadBeam.mayLand(from, cell, dx, dy)) then
+                        local onScreen = not scrolls
+                            or (cell.y1 > viewTop and cell.y0 < viewBottom)
+                        if not PadTargets.isCovered(cell, covers, node.side and window or nil, onScreen) then
+                            targets[#targets + 1] = { page = page, host = host, node = node,
+                                slot = slot, far = far, offScreen = not onScreen,
+                                x0 = cell.x0, y0 = cell.y0, x1 = cell.x1, y1 = cell.y1 }
+                        end
+                    end
+                end
+            end
         end
     end
-    if node.side then
-        return sideEdge(press.seatState, node, press.page, press.nodes,
-            windowCursor, press.host, dx, dy)
-    end
-    return true
 end
 
-local function walkHorizontal(press, dx)
-    local node, windowCursor, host = press.node, press.windowCursor, press.host
-    local cols, row = press.cols, press.row
-    local ncol = press.col + dx
-    local nslot = row * cols + ncol
-    if ncol >= 0 and ncol < cols and nslot < press.count then
-        stampNode(windowCursor, node, nslot)
-        ensureVisible(host, node, windowCursor.slot)
-        return true
+local function cellFacing(node, from, dx, dy)
+    local cells = {}
+    for slot = 0, countOf(node) - 1 do
+        local cell = { slot = slot }
+        if PadTargets.cellRect(node, slot, cell) then cells[#cells + 1] = cell end
     end
-
-    if node.kind == "pocket" then
-        local sib = press.nodes[press.cur + dx]
-        if sib ~= nil and sib.kind == "pocket" and countOf(sib) > 0 then
-            local sCols = sib.el.cols or 1
-            local sRows = sib.el.rows or 1
-            local sRow = row
-            if sRow > sRows - 1 then sRow = sRows - 1 end
-            local sCol = dx > 0 and 0 or (sCols - 1)
-            stampNode(windowCursor, sib, sRow * sCols + sCol)
-            ensureVisible(host, sib, windowCursor.slot)
-            return true
-        end
-    end
-
-    if node.side then
-        return sideEdge(press.seatState, node, press.page, press.nodes,
-            windowCursor, host, dx, 0)
-    end
-
-    if enterSideOn(press.nodes, press.page, windowCursor, node, press.slot,
-            cols, dx, 0) then
-        return true
-    end
-
-    crossWindow(press.seatState, press.page, dx, row)
-    return true
+    local picked = PadBeam.pick(from, cells, dx, dy)
+        or PadBeam.nearest(cells, (from.x0 + from.x1) / 2, (from.y0 + from.y1) / 2)
+    return picked ~= nil and cells[picked].slot or 0
 end
 
-local function walkVertical(press, dy)
-    local node, windowCursor, host = press.node, press.windowCursor, press.host
-    local cols, col = press.cols, press.col
-    local nrow = press.row + dy
-    local nslot = nrow * cols + col
-    if nrow >= 0 and nrow <= press.rows - 1 then
-        if nslot >= press.count then nslot = press.count - 1 end
-        stampNode(windowCursor, node, nslot)
-        ensureVisible(host, node, windowCursor.slot)
-        return true
-    end
-    local nextNode, enterSlot = verticalStep(press.nodes, press.cur,
-        dy > 0 and 1 or -1, col)
-    if nextNode ~= nil then
-        stampNode(windowCursor, nextNode, enterSlot)
-        ensureVisible(host, nextNode, windowCursor.slot)
-        return true
-    end
-    if node.side then
-        return sideEdge(press.seatState, node, press.page, press.nodes,
-            windowCursor, host, 0, dy)
-    end
-
-    enterSideOn(press.nodes, press.page, windowCursor, node, press.slot,
-        cols, 0, dy)
-    return true
+local function landAt(seatState, playerNum, focused, targetPage, host, node, slot, handOver)
+    enterSide(node)
+    placeCursor(winState(seatState, targetPage), host, node, slot)
+    if handOver and targetPage ~= focused then handFocus(seatState, playerNum, targetPage) end
 end
 
-local function onDirStep(page, dx, dy)
+local function landOn(seatState, page, target, from, dx, dy)
+    local slot = target.slot
+    if target.wholeWindow then slot = cellFacing(target.node, from, dx, dy) end
+    landAt(seatState, page.player, page, target.page, target.host, target.node, slot, true)
+end
+
+function PadFocus.onDir(page, dx, dy)
     local seatState = stateFor(page.player)
     seatState.page = page
 
@@ -764,28 +542,65 @@ local function onDirStep(page, dx, dy)
     if cur == nil or countOf(nodes[cur]) < 1 then
         return relandStaleCursor(page, nodes, host, windowCursor)
     end
-    local node = nodes[cur]
-    local count = countOf(node)
-    local cols, rows = shapeOf(node, count)
-    local slot = Util.clamp(windowCursor.slot or 0, 0, count - 1)
-
-    local press = {
-        seatState = seatState, page = page, nodes = nodes, host = host,
-        windowCursor = windowCursor, cur = cur, node = node, count = count,
-        cols = cols, rows = rows, slot = slot,
-        col = slot % cols, row = math.floor(slot / cols),
-    }
-    if node.el.padRagged == true and node.el.padTileXY ~= nil then
-        return walkRaggedBoard(press, dx, dy)
+    local slot = Util.clamp(windowCursor.slot or 0, 0, countOf(nodes[cur]) - 1)
+    local from = {}
+    if not PadTargets.cellRect(nodes[cur], slot, from) then return true end
+    local own = windowOf(nodes[cur], page)
+    local covers = PadTargets.covers(page.player)
+    local targets, listed = {}, {}
+    addTargets(targets, page, nodes, host, covers, own, listed, from, dx, dy)
+    local other = otherPageOf(page)
+    local otherNodes, otherHost = nil, nil
+    if other ~= nil then otherNodes, otherHost = nodesFor(other) end
+    if otherNodes ~= nil then
+        addTargets(targets, other, otherNodes, otherHost, covers, own, listed, from, dx, dy)
     end
-    if dx ~= 0 then return walkHorizontal(press, dx) end
-    return walkVertical(press, dy)
+    local landing = PadBeam.pick(from, targets, dx, dy)
+    if landing ~= nil then landOn(seatState, page, targets[landing], from, dx, dy) end
+    return true
 end
 
-function PadFocus.onDir(page, dx, dy)
-    local handled = onDirStep(page, dx, dy)
-    if handled then pcall(bubbleRedirect, page) end
-    return handled
+function PadFocus.cursorRectOn(playerNum, el)
+    if not Input.padOwns(playerNum) then return nil end
+    local seatState = states[playerNum]
+    if seatState == nil or not seatState.active or seatState.page == nil then return nil end
+    local windowCursor = seatState.win[seatState.page]
+    if windowCursor == nil or windowCursor.el ~= el then return nil end
+    local rect = {}
+    local node = { kind = windowCursor.kind, el = el }
+    if not PadTargets.cellRect(node, windowCursor.slot or 0, rect) then return nil end
+    return rect
+end
+
+function PadFocus.landBeneath(playerNum, rect, releasing)
+    local covers = PadTargets.covers(playerNum)
+    local targets, listed = {}, {}
+    local inventoryPage, lootPage = getPlayerInventory(playerNum), getPlayerLoot(playerNum)
+    for _, page in ipairs({ inventoryPage, lootPage }) do
+        local nodes, host = nil, nil
+        if isShown(page) then nodes, host = nodesFor(page) end
+        if nodes ~= nil then addTargets(targets, page, nodes, host, covers, nil, listed) end
+    end
+    local shown = {}
+    for i = 1, #targets do
+        if not targets[i].offScreen then shown[#shown + 1] = targets[i] end
+    end
+    local index = PadBeam.nearest(shown, (rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2)
+    if index == nil then return false end
+    local best = shown[index]
+    local focused = getFocusForPlayer(playerNum)
+    local ours = focused ~= nil and (focused == releasing or focused == inventoryPage
+        or focused == lootPage)
+    landAt(stateFor(playerNum), playerNum, focused, best.page, best.host, best.node,
+        best.slot, ours)
+    return true
+end
+
+local function shownSlotOf(el, slot)
+    if slot == nil or el.visibleSlots == nil then return slot end
+    local shown = el:visibleSlots()
+    if shown > 0 and slot > shown - 1 then return shown - 1 end
+    return slot
 end
 
 function PadFocus.cursorFor(el)
@@ -795,7 +610,7 @@ function PadFocus.cursorFor(el)
     if page == nil then return nil end
     local windowCursor = seatState.win[page]
     if windowCursor == nil or windowCursor.el ~= el then return nil end
-    return windowCursor.slot
+    return shownSlotOf(el, windowCursor.slot)
 end
 
 function PadFocus.peek(page)
@@ -825,6 +640,7 @@ function PadFocus.peek(page)
             and hotbar.attachedItems[slot + 1] or nil
         return kind, el, slot, item
     end
+    slot = shownSlotOf(el, slot)
     local model = el.model
     local stack = nil
     if model ~= nil and model.grid ~= nil then

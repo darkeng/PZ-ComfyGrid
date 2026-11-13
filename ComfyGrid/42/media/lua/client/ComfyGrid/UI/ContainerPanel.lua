@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -41,6 +41,8 @@ local Draw = ComfyGrid.UI.Draw
 local Chip = ComfyGrid.UI.Chrome.Chip
 local SectionRule = ComfyGrid.UI.Chrome.SectionRule
 local SectionCaret = ComfyGrid.UI.Chrome.SectionCaret
+
+local CARET = "caret"
 local GridView = ComfyGrid.UI.GridView
 
 local SECTION_TEXT = SectionRule.TEXT
@@ -490,7 +492,7 @@ local function resetChipRows(self)
     local padSlot = PadFocus ~= nil and PadFocus.cursorFor ~= nil
         and PadFocus.cursorFor(self) or nil
     local padId = padSlot ~= nil and self:padChipAt(padSlot) or nil
-    self._caretPadHot = padId == "caret"
+    self._caretPadHot = padId == CARET
     self.chips:clear()
     self.actions:clear()
     self.chips.padHot = padId
@@ -828,7 +830,7 @@ end
 
 function ContainerPanel:activateChip(id)
     if id == nil or self.model == nil then return end
-    if id == "caret" then
+    if id == CARET then
         self:toggleSectionCollapsed()
         return
     end
@@ -850,14 +852,26 @@ function ContainerPanel:padChipCount()
     return caretChips + self.actions.count + self.chips.count
 end
 
-function ContainerPanel:padChipAt(slot)
+local function chipSlotOf(self, slot)
     if caretShown(self) then
-        if slot == 0 then return "caret" end
+        if slot == 0 then return CARET end
         slot = slot - 1
     end
-    local actionCount = self.actions.count
-    if slot < actionCount then return self.actions:idAt(slot + 1) end
-    return self.chips:idAt(self.chips.count - (slot - actionCount))
+    return Chip.slotAcross(self.actions, self.chips, slot)
+end
+
+function ContainerPanel:padChipAt(slot)
+    local row, index = chipSlotOf(self, slot)
+    if row == CARET then return CARET end
+    return row:idAt(index)
+end
+
+function ContainerPanel:padChipRect(slot)
+    local row, index = chipSlotOf(self, slot)
+    if row == CARET then
+        return SectionCaret.rect(self._caretX, 0, self._selectZoneH)
+    end
+    return row:rectAt(index)
 end
 
 function ContainerPanel:padActivateChip(slot)

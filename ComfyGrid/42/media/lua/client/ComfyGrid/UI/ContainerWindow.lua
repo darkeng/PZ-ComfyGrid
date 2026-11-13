@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -232,9 +232,16 @@ function ContainerWindow.closeFor(playerNum)
 
     local board = win.content ~= nil and win.content.gridView or nil
     if board ~= nil then RangeSelect.drop(board) end
+
+    local PadFocus = ComfyGrid.Interact and ComfyGrid.Interact.PadFocus
+    local cursorRect = nil
+    if PadFocus ~= nil and board ~= nil and win:getIsVisible() then
+        cursorRect = PadFocus.cursorRectOn(playerNum or 0, board)
+    end
     win.item = nil
     win.ownerPage = nil
     win:setVisible(false)
+    if cursorRect ~= nil then PadFocus.landBeneath(playerNum or 0, cursorRect) end
 end
 
 function ContainerWindow:close()
@@ -297,6 +304,14 @@ function ContainerWindow.openFor(playerNum, item, anchorX, anchorY)
     win:setX(anchorX or win.x)
     win:setY(anchorY or win.y)
     win:clampToScreen()
+
+    pcall(win.prerender, win)
+    local panel = win.content
+    if panel ~= nil then
+        pcall(panel.prerender, panel)
+        local board = panel.gridView
+        if board ~= nil then pcall(board.prerender, board) end
+    end
     return true
 end
 

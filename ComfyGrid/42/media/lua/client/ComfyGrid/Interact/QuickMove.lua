@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -84,10 +84,13 @@ local isPlayerSide = ComfyGrid.Model.ContainerSide.isCarried
 QuickMove.isPlayerSide = isPlayerSide
 
 local function takes(container, item, playerObj)
-    if item == nil or ComfyGrid.Interact.Transfer.isFloor(container) then return true end
+    local Transfer = ComfyGrid.Interact.Transfer
+    if item == nil or Transfer.isFloor(container) then return true end
     local okAllowed, allowed = pcall(container.isItemAllowed, container, item)
     if not okAllowed or allowed ~= true then return false end
-    local okRoom, room = pcall(container.hasRoomFor, container, playerObj, item)
+    local okRoom, room = pcall(function()
+        return Transfer.weightBudget(container, playerObj, { item })(item)
+    end)
     return okRoom and room == true
 end
 

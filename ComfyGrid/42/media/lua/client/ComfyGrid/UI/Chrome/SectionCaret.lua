@@ -1,7 +1,7 @@
 --[[
     Comfy Grid - Tile Inventory [B42]
     Author:  Darkeng
-    Version: 1.10.0
+    Version: 1.10.1
     GitHub:  https://github.com/darkeng
     Steam:   https://steamcommunity.com/id/_darkeng_
 ]]
@@ -39,11 +39,15 @@ function SectionCaret.draw(element, x, y, band, collapsed, color)
     local texture = collapsed and Draw.caretClosedTexture()
         or Draw.caretOpenTexture()
     if texture == nil then return 0 end
-    local side = SectionCaret.size()
-    local top = y + math.floor((band - side) / 2)
-    element:drawTextureScaled(texture, x, top, side, side,
+    local left, top, side = SectionCaret.rect(x, y, band)
+    element:drawTextureScaled(texture, left, top, side, side,
         color.a, color.r, color.g, color.b)
     return SectionCaret.advance()
+end
+
+function SectionCaret.rect(x, y, band)
+    local side = SectionCaret.size()
+    return x, y + math.floor((band - side) / 2), side, side
 end
 
 function SectionCaret.contains(pointX, pointY, x, y, band)
